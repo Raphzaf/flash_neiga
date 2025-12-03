@@ -1,0 +1,168 @@
+{
+  "meta": {
+    "app_name": "Flash Neiga",
+    "version": "1.0",
+    "designer": "E1",
+    "theme_strategy": "Road Mode (Day) / Night Drive (Dark)",
+    "core_philosophy": "Clarity, Motion, Confidence. Not a game, but a journey."
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Manrope, sans-serif",
+      "body": "Outfit, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "weights": {
+      "headings": "font-bold (700) or font-extrabold (800)",
+      "body": "font-normal (400) or font-medium (500)"
+    },
+    "usage_rules": [
+      "Headings must be tight: tracking-tight for all text-2xl and above.",
+      "Labels and overlines must be uppercase and wide: tracking-widest text-xs font-bold.",
+      "Body text should have relaxed leading: leading-relaxed for readability.",
+      "Do not use Inter for headings. Use Manrope for that geometric, traffic-sign clarity."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Electric Indigo",
+        "hex": "#4F46E5",
+        "tailwind": "bg-indigo-600 text-white hover:bg-indigo-700"
+      },
+      "secondary": {
+        "name": "Asphalt",
+        "hex": "#1E293B",
+        "tailwind": "bg-slate-800 text-white"
+      },
+      "accent": {
+        "name": "Signal Amber",
+        "hex": "#F59E0B",
+        "tailwind": "text-amber-500 bg-amber-500/10"
+      },
+      "success": {
+        "name": "Go Green",
+        "hex": "#10B981",
+        "tailwind": "text-emerald-500 bg-emerald-500/10"
+      },
+      "error": {
+        "name": "Stop Red",
+        "hex": "#EF4444",
+        "tailwind": "text-red-500 bg-red-500/10"
+      },
+      "background": {
+        "light": "#F8FAFC",
+        "dark": "#0F172A"
+      }
+    },
+    "gradients": {
+      "night_drive": "bg-gradient-to-b from-slate-900 to-slate-950",
+      "hero_glow": "bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-3xl"
+    },
+    "rules": [
+      "Never use pure black (#000000). Use Slate-950 (#020617) for darkest elements.",
+      "Primary color is for Actions (Start Test, Next Question).",
+      "Success/Error colors are for Feedback only.",
+      "Dark mode should feel like a car dashboard at night: deep greys, glowing accents."
+    ]
+  },
+  "layout": {
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6 p-6",
+      "mobile_stack": "flex flex-col gap-4 p-4"
+    },
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "section_gap": "gap-8 md:gap-12",
+      "internal_card_padding": "p-6"
+    },
+    "border_radius": {
+      "cards": "rounded-2xl",
+      "buttons": "rounded-full",
+      "inputs": "rounded-xl"
+    },
+    "z_index": {
+      "sticky_nav": "z-40",
+      "modal": "z-50",
+      "toast": "z-60"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "h-12 px-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95",
+      "secondary": "h-12 px-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-all",
+      "ghost": "h-10 px-4 rounded-full text-slate-600 dark:text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+    },
+    "cards": {
+      "base": "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300",
+      "interactive": "cursor-pointer hover:border-indigo-500/50 hover:ring-2 hover:ring-indigo-500/20 transition-all"
+    },
+    "inputs": {
+      "base": "h-12 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+    },
+    "progress_bar": {
+      "style": "h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden",
+      "indicator": "h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-white/70 dark:bg-slate-900/70 border-b border-white/20 dark:border-white/5",
+    "shadows": {
+      "soft": "shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+      "glow": "shadow-[0_0_20px_rgba(79,70,229,0.3)]"
+    },
+    "textures": "Use subtle noise overlays on solid backgrounds to reduce digital flatness.",
+    "motion": {
+      "hover_lift": "hover:-translate-y-1 transition-transform duration-300 ease-out",
+      "page_transition": "animate-in fade-in slide-in-from-bottom-4 duration-500"
+    }
+  },
+  "image_urls": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1598885493158-f3a9ec4df725?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHwyfHxtaW5pbWFsaXN0JTIwd2luZGluZyUyMHJvYWQlMjB0b3AlMjB2aWV3fGVufDB8fHx8MTc2NDcyMDY3M3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Curved road with mountain view. Use for Hero Section background with overlay.",
+      "category": "background"
+    },
+    "success_modal": {
+      "url": "https://images.unsplash.com/photo-1758521961632-24056f441db8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwyfHxoYXBweSUyMGNvbmZpZGVudCUyMGRyaXZlciUyMGluc2lkZSUyMGNhcnxlbnwwfHx8fDE3NjQ3MjA2NzZ8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Happy confident driver. Use for 'Test Passed' or 'Achievement Unlocked' modals.",
+      "category": "illustration"
+    },
+    "abstract_texture": {
+      "url": "https://images.unsplash.com/photo-1755811717097-23fba595025d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHRyYWZmaWMlMjBsaWdodHMlMjBuZW9ufGVufDB8fHx8MTc2NDcyMDY3N3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Light trails at night. Use for 'Night Drive' mode headers or abstract accents.",
+      "category": "texture"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Implement the 'Road Mode' theme: High contrast, clear typography, traffic-sign colors for functional elements.",
+    "Use 'Manrope' for all headings to give it a modern, geometric, automotive feel.",
+    "Use 'Outfit' for body text for maximum legibility.",
+    "Ensure all interactive elements have hover states and micro-interactions (scale, color shift).",
+    "Use the provided image URLs for specific sections. Do not use placeholders.",
+    "Follow the mobile-first layout strategy: Stacked cards, bottom navigation, thumb-friendly buttons.",
+    "Use Shadcn components but customize them heavily using the provided Tailwind classes in 'components' section.",
+    "Add 'data-testid' to all interactive elements."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Examine existing components to understand the project's component patterns before creating new ones",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use 'sonner' for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx"
+  ]
+}
