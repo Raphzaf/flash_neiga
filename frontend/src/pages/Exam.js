@@ -53,10 +53,17 @@ export default function Exam() {
     const handleAnswer = async (optionId) => {
         if (!examSession) return;
 
+        // Handle both id and _id for robustness
+        const sessionId = examSession.id || examSession._id;
+        if (!sessionId) {
+            toast.error("Erreur de session: ID manquant");
+            return;
+        }
+
         const question = examSession.questions[currentQIndex];
         
         try {
-            // Update local state immediately for UI responsiveness
+            // Update local state immediately
             const updatedAnswers = [...examSession.answers.filter(a => a.question_id !== question.question_id)];
             updatedAnswers.push({
                 question_id: question.question_id,
@@ -69,12 +76,12 @@ export default function Exam() {
             }));
 
             // Send to backend
-            await axios.post(`${BACKEND_URL}/api/exam/${examSession.id}/answer`, {
+            await axios.post(`${BACKEND_URL}/api/exam/${sessionId}/answer`, {
                 question_id: question.question_id,
                 selected_option_id: optionId
             });
 
-            // Auto advance after short delay
+            // Auto advance
             setTimeout(() => {
                 if (currentQIndex < examSession.questions.length - 1) {
                     setCurrentQIndex(prev => prev + 1);
@@ -82,17 +89,21 @@ export default function Exam() {
             }, 300);
 
         } catch (e) {
+            console.error(e);
             toast.error("Erreur lors de l'enregistrement de la réponse");
         }
     };
 
     const finishExam = async () => {
         if (!examSession) return;
+        const sessionId = examSession.id || examSession._id;
+        
         try {
-            const res = await axios.post(`${BACKEND_URL}/api/exam/${examSession.id}/finish`);
+            const res = await axios.post(`${BACKEND_URL}/api/exam/${sessionId}/finish`);
             setResult(res.data);
             setIsFinished(true);
         } catch (e) {
+            console.error(e);
             toast.error("Erreur lors de la finalisation");
         }
     };
