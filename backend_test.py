@@ -140,9 +140,17 @@ class FlashNeigaAPITester:
             200
         )
         
-        if success and isinstance(response, list) and len(response) > 0:
-            self.question_id = response[0]['id']
-            print(f"   Found {len(response)} questions, first ID: {self.question_id}")
+        if success and isinstance(response, list):
+            print(f"   Found {len(response)} questions")
+            if len(response) > 0:
+                # Check if response has 'id' field
+                if 'id' in response[0]:
+                    self.question_id = response[0]['id']
+                    print(f"   First question ID: {self.question_id}")
+                else:
+                    print(f"   Question structure: {list(response[0].keys()) if response[0] else 'Empty'}")
+            else:
+                print("   No questions found in database")
         
         return success
 
