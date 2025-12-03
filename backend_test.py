@@ -78,18 +78,38 @@ class FlashNeigaAPITester:
     def test_login(self, email, password):
         """Test login and get token"""
         # FastAPI OAuth2PasswordRequestForm expects form data, not JSON
-        login_data = {
-            "username": email,  # OAuth2 uses 'username' field for email
-            "password": password
-        }
+        url = f"{self.base_url}/api/auth/login"
         
-        success, response = self.run_test(
-            "User Login",
-            "POST", 
-            "auth/login",
-            200,
-            data=login_data
-        )
+        self.tests_run += 1
+        print(f"\n🔍 Testing User Login...")
+        print(f"   URL: {url}")
+        
+        try:
+            # Use form data instead of JSON for OAuth2PasswordRequestForm
+            form_data = {
+                "username": email,  # OAuth2 uses 'username' field for email
+                "password": password
+            }
+            
+            response = requests.post(url, data=form_data, timeout=10)
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                if 'access_token' in response_data:
+                    self.token = response_data['access_token']
+                    print(f"   Token received: {self.token[:20]}...")
+                    return True
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                print(f"   Response: {response.text[:200]}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
         
         if success and 'access_token' in response:
             self.token = response['access_token']
