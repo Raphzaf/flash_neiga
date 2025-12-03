@@ -217,10 +217,18 @@ class FlashNeigaAPITester:
             200
         )
         
-        if success and 'id' in response:
-            self.exam_id = response['id']
-            print(f"   Started exam ID: {self.exam_id}")
-            print(f"   Questions count: {len(response.get('questions', []))}")
+        if success:
+            # Check for 'id' or '_id' field
+            if 'id' in response:
+                self.exam_id = response['id']
+            elif '_id' in response:
+                self.exam_id = response['_id']
+            
+            if self.exam_id:
+                print(f"   Started exam ID: {self.exam_id}")
+                print(f"   Questions count: {len(response.get('questions', []))}")
+            else:
+                print(f"   Response structure: {list(response.keys()) if response else 'Empty'}")
         
         return success
 
