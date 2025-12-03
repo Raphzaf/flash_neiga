@@ -143,9 +143,12 @@ class FlashNeigaAPITester:
         if success and isinstance(response, list):
             print(f"   Found {len(response)} questions")
             if len(response) > 0:
-                # Check if response has 'id' field
+                # Check if response has 'id' or '_id' field
                 if 'id' in response[0]:
                     self.question_id = response[0]['id']
+                    print(f"   First question ID: {self.question_id}")
+                elif '_id' in response[0]:
+                    self.question_id = response[0]['_id']
                     print(f"   First question ID: {self.question_id}")
                 else:
                     print(f"   Question structure: {list(response[0].keys()) if response[0] else 'Empty'}")
