@@ -4,6 +4,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide "Made with Emergent" badge if injected dynamically */
+[class*="emergent" i],
+[class*="made-with" i],
+[data-emergent],
+a[href*="emergent.sh"],
+div:has(> a[href*="emergent.sh"]) {
+  display: none !important;
+}
+
 @layer base {
   :root {
     --background: 210 40% 98%;

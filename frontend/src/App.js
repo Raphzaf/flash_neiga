@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Exam from "./pages/Exam";
+import ExamDetails from "./pages/ExamDetails";
 import Training from "./pages/Training";
 import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
@@ -32,6 +33,7 @@ function App() {
                 <Route element={<ProtectedRoute />}>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/exam" element={<Exam />} />
+                  <Route path="/exam/:id" element={<ExamDetails />} />
                     <Route path="/training" element={<Training />} />
                     <Route path="/signs" element={<Signs />} />
                     <Route path="/stats" element={<Stats />} />

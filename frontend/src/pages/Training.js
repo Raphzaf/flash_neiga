@@ -3,13 +3,14 @@ import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Badge } from '../components/ui/badge';
 import { CheckCircle, XCircle, Info, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function Training() {
-    const [category, setCategory] = useState('all');
+    const [categories, setCategories] = useState(['all']);
     const [questions, setQuestions] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -19,7 +20,12 @@ export default function Training() {
     const fetchQuestions = async () => {
         setLoading(true);
         try {
-            const url = category === 'all' ? `${BACKEND_URL}/api/questions` : `${BACKEND_URL}/api/questions?category=${category}`;
+            let url = `${BACKEND_URL}/api/questions`;
+            if (!(categories.length === 1 && categories[0] === 'all')) {
+                const params = new URLSearchParams();
+                categories.forEach(c => params.append('category', c));
+                url = `${url}?${params.toString()}`;
+            }
             const res = await axios.get(url);
             // Shuffle client side for variety
             const shuffled = res.data.sort(() => 0.5 - Math.random());
@@ -36,7 +42,7 @@ export default function Training() {
 
     useEffect(() => {
         fetchQuestions();
-    }, [category]);
+    }, [categories.join(',')]);
 
     const handleAnswer = async (optionId) => {
         if (feedback) return; // Already answered
@@ -82,10 +88,22 @@ export default function Training() {
             {/* Top Bar */}
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-heading font-bold">Entraînement</h1>
-                <div className="w-48">
-                    <Select value={category} onValueChange={setCategory}>
+                <div className="w-full max-w-md">
+                    <Select
+                        value=""
+                        onValueChange={(val) => {
+                            if (val === 'all') {
+                                setCategories(['all']);
+                            } else {
+                                setCategories((prev) => {
+                                    const base = prev.includes('all') ? [] : [...prev];
+                                    return base.includes(val) ? base : [...base, val];
+                                });
+                            }
+                        }}
+                    >
                         <SelectTrigger>
-                            <SelectValue placeholder="Catégorie" />
+                            <SelectValue placeholder="Ajouter une catégorie" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">Toutes catégories</SelectItem>
@@ -95,6 +113,18 @@ export default function Training() {
                             <SelectItem value="Mécanique">Mécanique</SelectItem>
                         </SelectContent>
                     </Select>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {categories.map((c) => (
+                            <Badge key={c} variant="secondary" className="cursor-pointer" onClick={() => {
+                                setCategories((prev) => {
+                                    const next = prev.filter(x => x !== c);
+                                    return next.length ? next : ['all'];
+                                });
+                            }}>
+                                {c}
+                            </Badge>
+                        ))}
+                    </div>
                 </div>
             </div>
 

@@ -98,11 +98,24 @@ export default function Dashboard() {
                                     Statistiques
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="space-y-3">
                                 <div className="flex justify-between items-center">
                                     <div className="text-sm text-muted-foreground">Erreurs totales</div>
-                                    <div className="font-bold text-xl">{stats?.total_errors || 0}</div>
+                                    <div className="font-bold text-xl">{stats?.total_errors ?? 0}</div>
                                 </div>
+                                <div className="flex justify-between items-center">
+                                    <div className="text-sm text-muted-foreground">Meilleure catégorie</div>
+                                    <div className="font-medium truncate max-w-[140px]">{stats?.best_category ?? '—'}</div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <div className="text-sm text-muted-foreground">Pire catégorie</div>
+                                    <div className="font-medium truncate max-w-[140px]">{stats?.worst_category ?? '—'}</div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <div className="text-sm text-muted-foreground">Derniers examens</div>
+                                    <div className="font-medium">{stats?.recent_exams?.length ?? 0}/5</div>
+                                </div>
+                                <div className="text-xs text-primary/80">Cliquez pour voir les statistiques détaillées</div>
                             </CardContent>
                         </Card>
                     </Link>
@@ -119,16 +132,18 @@ export default function Dashboard() {
                     
                     <div className="space-y-3">
                         {stats?.recent_exams?.length > 0 ? (
-                            stats.recent_exams.map((exam) => (
-                                <div key={exam.id} className="bg-white dark:bg-slate-900 border rounded-xl p-4 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                                    <div>
-                                        <div className="font-bold">Examen Blanc</div>
-                                        <div className="text-xs text-muted-foreground">{new Date(exam.date).toLocaleDateString()} à {new Date(exam.date).toLocaleTimeString()}</div>
+                            stats.recent_exams.slice(0, 6).map((exam) => (
+                                <Link to={`/exam/${exam.id}`} key={exam.id} className="block">
+                                    <div className="bg-white dark:bg-slate-900 border rounded-xl p-4 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                        <div>
+                                            <div className="font-bold">Examen Blanc</div>
+                                            <div className="text-xs text-muted-foreground">{new Date(exam.date).toLocaleDateString()} à {new Date(exam.date).toLocaleTimeString()}</div>
+                                        </div>
+                                        <div className={`text-lg font-bold ${exam.score >= 25 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                            {exam.score}/{exam.total}
+                                        </div>
                                     </div>
-                                    <div className={`text-lg font-bold ${exam.score >= 25 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                        {exam.score}/{exam.total}
-                                    </div>
-                                </div>
+                                </Link>
                             ))
                         ) : (
                             <div className="text-center p-8 border-2 border-dashed rounded-xl text-muted-foreground">

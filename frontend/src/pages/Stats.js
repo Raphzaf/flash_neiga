@@ -78,7 +78,8 @@ export default function Stats() {
                     <div className="bg-white dark:bg-slate-900 rounded-xl border shadow-sm overflow-hidden">
                         {activity.length > 0 ? (
                             activity.map((item, idx) => (
-                                <div key={item.id} className={`p-4 flex justify-between items-center ${idx !== activity.length - 1 ? 'border-b' : ''}`}>
+                                <a href={`/exam/${item.id}`} key={item.id} className={`block p-4 ${idx !== activity.length - 1 ? 'border-b' : ''}`}>
+                                    <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3">
                                         <div className={`p-2 rounded-full ${item.score >= 25 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
                                             {item.score >= 25 ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
@@ -97,7 +98,8 @@ export default function Stats() {
                                             <span className="text-xs px-2 py-1 bg-slate-100 rounded-full text-slate-600">Abandonné</span>
                                         )}
                                     </div>
-                                </div>
+                                    </div>
+                                </a>
                             ))
                         ) : (
                             <div className="p-8 text-center text-muted-foreground">Aucune donnée disponible.</div>

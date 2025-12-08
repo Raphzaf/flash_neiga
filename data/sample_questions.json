@@ -1,0 +1,132 @@
+[
+  {
+    "number": "0001",
+    "text": "Qui a le devoir de connaître le code de la route et de s'y conformer?",
+    "category": "Les règles de conduite",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "Uniquement les conducteurs professionnels", "is_correct": false},
+      {"id": "opt2", "text": "Tous les usagers de la route", "is_correct": true},
+      {"id": "opt3", "text": "Seulement les propriétaires de véhicules", "is_correct": false},
+      {"id": "opt4", "text": "Uniquement les nouveaux conducteurs", "is_correct": false}
+    ],
+    "explanation": "Tous les usagers de la route (conducteurs, piétons, cyclistes) ont le devoir de connaître et respecter le code de la route."
+  },
+  {
+    "number": "0002",
+    "text": "Dans quelles conditions un conducteur a-t-il le droit de conduire un véhicule motorisé?",
+    "category": "Les règles de conduite",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "Avec un permis de conduire valide et approprié", "is_correct": true},
+      {"id": "opt2", "text": "Seulement pendant la journée", "is_correct": false},
+      {"id": "opt3", "text": "Uniquement sur les routes principales", "is_correct": false},
+      {"id": "opt4", "text": "Sans restriction particulière", "is_correct": false}
+    ],
+    "explanation": "Un conducteur doit posséder un permis de conduire valide correspondant à la catégorie du véhicule qu'il conduit."
+  },
+  {
+    "number": "0003",
+    "text": "Quelle est l'obligation du propriétaire de véhicule?",
+    "category": "Responsabilités",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "S'assurer que le véhicule est en bon état", "is_correct": true},
+      {"id": "opt2", "text": "Nettoyer le véhicule chaque semaine", "is_correct": false},
+      {"id": "opt3", "text": "Changer l'huile tous les mois", "is_correct": false},
+      {"id": "opt4", "text": "Repeindre le véhicule chaque année", "is_correct": false}
+    ],
+    "explanation": "Le propriétaire doit s'assurer que le véhicule est en bon état de fonctionnement et conforme aux normes de sécurité."
+  },
+  {
+    "number": "0004",
+    "text": "À quelle distance minimale d'un passage piéton est-il interdit de stationner?",
+    "category": "Stationnement",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "3 mètres", "is_correct": false},
+      {"id": "opt2", "text": "5 mètres", "is_correct": false},
+      {"id": "opt3", "text": "12 mètres", "is_correct": true},
+      {"id": "opt4", "text": "Aucune restriction", "is_correct": false}
+    ],
+    "explanation": "Il est interdit de stationner à moins de 12 mètres avant un passage piéton pour garantir une bonne visibilité."
+  },
+  {
+    "number": "0005",
+    "text": "Quelle est la vitesse maximale autorisée en zone urbaine?",
+    "category": "Limitations de vitesse",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "40 km/h", "is_correct": false},
+      {"id": "opt2", "text": "50 km/h", "is_correct": true},
+      {"id": "opt3", "text": "60 km/h", "is_correct": false},
+      {"id": "opt4", "text": "70 km/h", "is_correct": false}
+    ],
+    "explanation": "En zone urbaine, la vitesse maximale est généralement de 50 km/h sauf indication contraire."
+  },
+  {
+    "number": "0006",
+    "text": "Que signifie un feu orange clignotant?",
+    "category": "Signalisation lumineuse",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "Arrêt obligatoire", "is_correct": false},
+      {"id": "opt2", "text": "Prudence, traverser avec précaution", "is_correct": true},
+      {"id": "opt3", "text": "Passage interdit", "is_correct": false},
+      {"id": "opt4", "text": "Priorité absolue", "is_correct": false}
+    ],
+    "explanation": "Un feu orange clignotant indique de traverser avec prudence en cédant la priorité."
+  },
+  {
+    "number": "0007",
+    "text": "Quelle est la distance de sécurité minimale à respecter?",
+    "category": "Sécurité routière",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "1 seconde", "is_correct": false},
+      {"id": "opt2", "text": "2 secondes", "is_correct": true},
+      {"id": "opt3", "text": "5 secondes", "is_correct": false},
+      {"id": "opt4", "text": "Aucune distance fixe", "is_correct": false}
+    ],
+    "explanation": "La règle des 2 secondes permet de maintenir une distance de sécurité suffisante."
+  },
+  {
+    "number": "0008",
+    "text": "Quand doit-on allumer les feux de croisement?",
+    "category": "Éclairage",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "Uniquement la nuit", "is_correct": false},
+      {"id": "opt2", "text": "Dès que la visibilité est réduite", "is_correct": true},
+      {"id": "opt3", "text": "Seulement en cas de pluie", "is_correct": false},
+      {"id": "opt4", "text": "Jamais en ville", "is_correct": false}
+    ],
+    "explanation": "Les feux de croisement doivent être allumés dès que la visibilité est réduite (nuit, brouillard, pluie)."
+  },
+  {
+    "number": "0009",
+    "text": "Que faire en cas de panne sur l'autoroute?",
+    "category": "Situations d'urgence",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "Rester dans le véhicule", "is_correct": false},
+      {"id": "opt2", "text": "Se placer derrière la barrière de sécurité", "is_correct": true},
+      {"id": "opt3", "text": "Réparer immédiatement", "is_correct": false},
+      {"id": "opt4", "text": "Continuer à rouler lentement", "is_correct": false}
+    ],
+    "explanation": "En cas de panne, il faut se placer derrière la barrière de sécurité et appeler les secours."
+  },
+  {
+    "number": "0010",
+    "text": "Le port de la ceinture de sécurité est-il obligatoire?",
+    "category": "Équipements de sécurité",
+    "image_url": null,
+    "options": [
+      {"id": "opt1", "text": "Seulement sur autoroute", "is_correct": false},
+      {"id": "opt2", "text": "Oui, pour tous les occupants", "is_correct": true},
+      {"id": "opt3", "text": "Seulement pour le conducteur", "is_correct": false},
+      {"id": "opt4", "text": "Non, c'est optionnel", "is_correct": false}
+    ],
+    "explanation": "Le port de la ceinture de sécurité est obligatoire pour tous les occupants du véhicule."
+  }
+]

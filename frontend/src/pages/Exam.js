@@ -152,6 +152,9 @@ export default function Exam() {
                     <div className="flex gap-4 justify-center pt-4">
                         <Button variant="outline" onClick={() => navigate('/')}>Retour au menu</Button>
                         <Button onClick={() => window.location.reload()}>Nouvel Examen</Button>
+                        {examSession?.id && (
+                            <Button variant="secondary" onClick={() => navigate(`/exam/${examSession.id}`)}>Voir les détails</Button>
+                        )}
                     </div>
                 </Card>
             </div>

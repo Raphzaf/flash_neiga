@@ -1,99 +1,141 @@
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import List, Optional, Literal
-from datetime import datetime, timezone
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON
+from sqlalchemy.orm import declarative_base
+from datetime import datetime
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
 import uuid
 
-# Helpers
-def get_utc_now():
-    return datetime.now(timezone.utc)
+# Import Base from database module to ensure all models use the same Base
+from database import Base
 
-class UserBase(BaseModel):
-    email: EmailStr
-    full_name: str
 
-class UserCreate(UserBase):
-    password: str
+# ===== SQLAlchemy DB Models =====
+class UserDB(Base):
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-class UserInDB(UserBase):
-    hashed_password: str
-    created_at: datetime = Field(default_factory=get_utc_now)
-    role: str = "student" # student, admin
 
-class User(UserBase):
-    id: str = Field(alias="_id")
-    role: str
+class QuestionDB(Base):
+    __tablename__ = "questions"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    text = Column(String)
+    category = Column(String, index=True)
+    options = Column(JSON)  # List of {"id": str, "text": str, "is_correct": bool}
+    explanation = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-# Question Models
+
+class TrafficSignDB(Base):
+    __tablename__ = "traffic_signs"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    number = Column(String, unique=True)
+    name = Column(String)
+    description = Column(String)
+    image_url = Column(String, nullable=True)
+    category = Column(String)
+
+
+class ExamSessionDB(Base):
+    __tablename__ = "exam_sessions"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True)
+    status = Column(String, default="in_progress")  # in_progress, completed
+    answers = Column(JSON, default={})  # {question_id: selected_option_id}
+    score = Column(Integer, nullable=True)
+    passed = Column(Boolean, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
+# ===== Pydantic Models =====
 class QuestionOption(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str
     text: str
     is_correct: bool
 
-class QuestionBase(BaseModel):
+
+class QuestionCreate(BaseModel):
     text: str
     category: str
-    image_url: Optional[str] = None
     options: List[QuestionOption]
-    explanation: str
+    explanation: Optional[str] = None
 
-class QuestionCreate(QuestionBase):
-    pass
 
-class Question(QuestionBase):
-    id: str = Field(alias="_id")
+class Question(QuestionCreate):
+    id: str
     created_at: datetime
 
-# Traffic Sign Models
-class TrafficSignBase(BaseModel):
+
+class TrafficSignCreate(BaseModel):
+    number: str
     name: str
-    category: str
     description: str
-    image_url: str
-
-class TrafficSignCreate(TrafficSignBase):
-    pass
-
-class TrafficSign(TrafficSignBase):
-    id: str = Field(alias="_id")
-
-# Exam Models
-class ExamRequest(BaseModel):
-    pass # Just triggers creation
-
-class ExamQuestion(BaseModel):
-    question_id: str
-    text: str
+    image_url: Optional[str] = None
     category: str
-    image_url: Optional[str]
-    options: List[QuestionOption] # Options might be shuffled in future, but simple for now
+
+
+class TrafficSign(TrafficSignCreate):
+    id: str
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserInDB(UserCreate):
+    id: str
+
+
+class User(BaseModel):
+    id: str
+    email: str
+
 
 class ExamSession(BaseModel):
-    id: str = Field(alias="_id")
+    id: str
     user_id: str
-    questions: List[ExamQuestion]
-    start_time: datetime
-    end_time: Optional[datetime] = None
+    status: str
+    answers: dict
     score: Optional[int] = None
-    status: str = "in_progress" # in_progress, completed
-    answers: List[dict] = [] # {question_id: str, selected_option_id: str, is_correct: bool}
+    passed: Optional[bool] = None
+    created_at: datetime
+
 
 class SubmitAnswerRequest(BaseModel):
     question_id: str
     selected_option_id: str
 
-class ExamResult(BaseModel):
-    total_questions: int
-    correct_answers: int
-    score_percentage: float
-    passed: bool # e.g., > 35/40 or similar logic, user said 30 questions. Let's say 25/30 pass.
-    details: List[dict] # Detailed breakdown
 
-# Training Mode
+class ExamResult(BaseModel):
+    id: str
+    user_id: str
+    status: str
+    score: int
+    passed: bool
+    answers: dict
+    created_at: datetime
+    completed_at: datetime
+
+
 class TrainingAnswerRequest(BaseModel):
     question_id: str
     selected_option_id: str
 
+
 class TrainingResponse(BaseModel):
     is_correct: bool
-    explanation: str
-    correct_option_id: str
+    explanation: Optional[str] = None
+    correct_option_id: Optional[str] = None
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
