@@ -46,12 +46,31 @@ export default function Dashboard() {
                     <div className="relative z-10">
                         <h2 className="text-3xl md:text-4xl font-bold mb-2">Prêt à prendre la route ?</h2>
                         <p className="text-indigo-100 mb-6 max-w-xl">Entraînez-vous, suivez vos progrès et obtenez votre code de la route avec Flash Neiga.</p>
-                        <Link to="/exam">
-                            <Button size="lg" className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold rounded-full px-8 shadow-lg transition-transform hover:scale-105" data-testid="start-exam-hero-btn">
-                                <Play className="mr-2 h-5 w-5" /> Lancer un Examen
-                            </Button>
-                        </Link>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <Link to="/exam">
+                                <Button size="lg" className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold rounded-full px-8 shadow-lg transition-transform hover:scale-105" data-testid="start-exam-hero-btn">
+                                    <Play className="mr-2 h-5 w-5" /> Lancer un Examen
+                                </Button>
+                            </Link>
+                            <Link to="/pricing">
+                                <Button size="lg" variant="outline" className="rounded-full px-8" data-testid="view-pricing-hero-btn">
+                                    Voir les abonnements
+                                </Button>
+                            </Link>
+                            <Link to="/register">
+                                <Button size="lg" variant="secondary" className="rounded-full px-8" data-testid="register-hero-btn">
+                                    S'inscrire
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
+                </div>
+
+                {/* Pricing quick link */}
+                <div>
+                    <Link to="/pricing" className="inline-block rounded-md border px-4 py-2 hover:bg-muted">
+                        Voir les abonnements
+                    </Link>
                 </div>
 
                 {/* Main Actions Grid */}

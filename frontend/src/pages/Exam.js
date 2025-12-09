@@ -7,7 +7,8 @@ import { Progress } from '../components/ui/progress';
 import { toast } from 'sonner';
 import { Clock, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// In dev, use CRA proxy by calling relative API paths
+const BACKEND_URL = '';
 
 export default function Exam() {
     const [examSession, setExamSession] = useState(null);
@@ -22,7 +23,7 @@ export default function Exam() {
     useEffect(() => {
         const startExam = async () => {
             try {
-                const res = await axios.post(`${BACKEND_URL}/api/exam/start`);
+                const res = await axios.post(`/api/exam/start`);
                 setExamSession(res.data);
                 setLoading(false);
             } catch (e) {
@@ -76,7 +77,7 @@ export default function Exam() {
             }));
 
             // Send to backend
-            await axios.post(`${BACKEND_URL}/api/exam/${sessionId}/answer`, {
+            await axios.post(`/api/exam/${sessionId}/answer`, {
                 question_id: question.question_id,
                 selected_option_id: optionId
             });
@@ -99,7 +100,7 @@ export default function Exam() {
         const sessionId = examSession.id || examSession._id;
         
         try {
-            const res = await axios.post(`${BACKEND_URL}/api/exam/${sessionId}/finish`);
+            const res = await axios.post(`/api/exam/${sessionId}/finish`);
             setResult(res.data);
             setIsFinished(true);
         } catch (e) {
@@ -139,7 +140,7 @@ export default function Exam() {
                     <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-900 p-4 rounded-xl">
                         <div>
                             <div className="text-sm text-muted-foreground">Score</div>
-                            <div className="font-bold">{result.score_percentage.toFixed(1)}%</div>
+                            <div className="font-bold">{(result.score ?? Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
                         </div>
                         <div>
                             <div className="text-sm text-muted-foreground">Résultat</div>
@@ -162,14 +163,15 @@ export default function Exam() {
     }
 
     // EXAM RUNNER
-    const currentQuestion = examSession.questions[currentQIndex];
-    const currentAnswer = examSession.answers.find(a => a.question_id === currentQuestion.question_id);
+    const questions = Array.isArray(examSession?.questions) ? examSession.questions : [];
+    const currentQuestion = questions[currentQIndex] || { options: [] };
+    const currentAnswer = (Array.isArray(examSession?.answers) ? examSession.answers : []).find(a => a.question_id === currentQuestion.question_id);
 
     return (
         <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
             {/* Header */}
             <div className="bg-white dark:bg-slate-900 p-4 border-b shadow-sm flex justify-between items-center sticky top-0 z-20">
-                <div className="font-bold text-lg">Question {currentQIndex + 1}/{examSession.questions.length}</div>
+                <div className="font-bold text-lg">Question {currentQIndex + 1}/{questions.length}</div>
                 <div className={`font-mono font-medium px-3 py-1 rounded-full ${timeLeft < 300 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-700'} flex items-center`}>
                     <Clock className="w-4 h-4 mr-2" />
                     {formatTime(timeLeft)}
@@ -180,7 +182,7 @@ export default function Exam() {
             </div>
 
             {/* Progress Bar */}
-            <Progress value={((currentQIndex + 1) / examSession.questions.length) * 100} className="h-1 rounded-none" />
+            <Progress value={questions.length ? (((currentQIndex + 1) / questions.length) * 100) : 0} className="h-1 rounded-none" />
 
             {/* Content */}
             <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center">
@@ -196,7 +198,7 @@ export default function Exam() {
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {currentQuestion.options.map((option) => {
+                    {(Array.isArray(currentQuestion.options) ? currentQuestion.options : []).map((option) => {
                         const isSelected = currentAnswer?.selected_option_id === option.id;
                         return (
                             <div 
@@ -232,7 +234,7 @@ export default function Exam() {
                 </Button>
 
                 <div className="flex gap-1">
-                   {examSession.questions.map((_, idx) => (
+                   {questions.map((_, idx) => (
                        <div 
                             key={idx} 
                             className={`w-2 h-2 rounded-full ${idx === currentQIndex ? 'bg-primary' : idx < currentQIndex ? 'bg-slate-300' : 'bg-slate-100'}`}
@@ -241,8 +243,8 @@ export default function Exam() {
                 </div>
 
                 <Button 
-                    onClick={() => setCurrentQIndex(prev => Math.min(examSession.questions.length - 1, prev + 1))}
-                    disabled={currentQIndex === examSession.questions.length - 1}
+                    onClick={() => setCurrentQIndex(prev => Math.min(Math.max(0, questions.length - 1), prev + 1))}
+                    disabled={currentQIndex === Math.max(0, questions.length - 1)}
                 >
                     Suivant <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>

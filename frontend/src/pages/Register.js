@@ -35,6 +35,11 @@ export default function Register() {
                 <CardHeader className="space-y-1 text-center">
                     <h1 className="text-3xl font-heading font-bold text-primary">Flash Neiga</h1>
                     <p className="text-muted-foreground">Créez un compte pour commencer</p>
+                    <div className="mt-3">
+                        <Link to="/pricing" className="text-primary hover:underline" data-testid="register-view-pricing-link">
+                            Voir les abonnements
+                        </Link>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">

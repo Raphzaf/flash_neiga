@@ -12,6 +12,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 import uuid
 import json
+import stripe
 
 from database import engine, SessionLocal, Base, get_db
 from models import (
@@ -42,12 +43,21 @@ app = FastAPI(title="Flash Neiga API")
 # CORS - must be first middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
+
+# Extra safety: always attach CORS headers
+@app.middleware("http")
+async def add_cors_headers(request, call_next):
+    response = await call_next(request)
+    # If not already set by CORSMiddleware, attach permissive headers
+    response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    response.headers.setdefault("Access-Control-Allow-Methods", "*")
+    response.headers.setdefault("Access-Control-Allow-Headers", "*")
+    return response
 
 
 # ===== Init Tables =====
@@ -151,6 +161,171 @@ async def startup():
     init_sample_data(db)
     db.close()
     logger.info("Application startup complete")
+
+    # ===== Admin Import Official =====
+    def _map_official_question(raw: dict):
+        text = raw.get("Question") or raw.get("question") or ""
+        category = raw.get("Sujet") or raw.get("Category") or "Autre"
+        explanation = raw.get("Explication") or raw.get("explanation") or None
+        # L’API officielle ne fournit pas d'options QCM
+        options = []
+        return text, category, explanation, options
+
+
+    @app.post("/api/admin/import_official")
+    async def import_official(db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):
+        # Simple protection: require a token header if configured (optional for now)
+        # In production, integrate proper auth/roles.
+        if os.environ.get("ADMIN_TOKEN") and x_admin_token != os.environ.get("ADMIN_TOKEN"):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        API_URL = "https://www.gov.il/fr/departments/dynamiccollectors/theoryexamhe_data"
+        page_size = 1000
+        skip = 0
+        imported = 0
+        skipped = 0
+
+        try:
+            while True:
+                url = f"{API_URL}?skip={skip}"
+                import requests
+                r = requests.get(url, timeout=20)
+                r.raise_for_status()
+                body = r.json()
+                chunk = body.get("data", [])
+                if not chunk:
+                    break
+
+                for raw in chunk:
+                    text, category, explanation, options = _map_official_question(raw)
+                    if not text:
+                        skipped += 1
+                        continue
+                    # Deduplicate on text+category
+                    existing = db.query(QuestionDB).filter(
+                        and_(QuestionDB.text == text, QuestionDB.category == category)
+                    ).first()
+                    if existing:
+                        skipped += 1
+                        continue
+                    q = QuestionDB(
+                        text=text,
+                        category=category,
+                        options=options,
+                        explanation=explanation,
+                    )
+                    db.add(q)
+                    imported += 1
+                db.commit()
+
+                if len(chunk) < page_size:
+                    break
+                skip += page_size
+
+            return {"status": "ok", "imported": imported, "skipped": skipped}
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ===== Payments (Stripe) =====
+    STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
+    STRIPE_PRICE_LOOKUP = {
+        # Map plan keys to Stripe Price lookup_keys configured in your Stripe Dashboard
+        # e.g., "code_14d": "code_14d",
+        # Update these to match your actual Stripe Price lookup keys
+        "code_14d": "code_14d",
+        "code_30d": "code_30d",
+        "code_week": "code_week",
+        "video_1m": "video_1m",
+        "video_2m": "video_2m",
+        "video_3m": "video_3m",
+    }
+
+    if STRIPE_SECRET_KEY:
+        stripe.api_key = STRIPE_SECRET_KEY
+
+    @app.post("/api/payments/create-checkout-session")
+    async def create_checkout_session(payload: dict):
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(status_code=500, detail="Stripe not configured: set STRIPE_SECRET_KEY env var")
+        plan_key = payload.get("plan_key")
+        explicit_price_id = payload.get("price_id")
+        if not explicit_price_id and (not plan_key or plan_key not in STRIPE_PRICE_LOOKUP):
+            raise HTTPException(status_code=400, detail=f"Provide 'price_id' or a valid 'plan_key'. Received plan_key='{plan_key}'.")
+        try:
+            price_id = explicit_price_id
+            if not price_id:
+                price_list = stripe.Price.list(
+                    lookup_keys=[STRIPE_PRICE_LOOKUP[plan_key]], expand=["data.product"]
+                )
+                if not price_list.data:
+                    raise HTTPException(status_code=400, detail="Stripe price not found for lookup_key")
+                price_id = price_list.data[0].id
+            session = stripe.checkout.Session.create(
+                mode="subscription",
+                line_items=[{"quantity": 1, "price": price_id}],
+                success_url="http://localhost:3000/pricing/success?session_id={CHECKOUT_SESSION_ID}",
+                cancel_url="http://localhost:3000/pricing/cancel",
+            )
+            return {"url": session.url}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/payments/create-portal-session")
+    async def create_portal_session(payload: dict):
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(status_code=500, detail="Stripe not configured")
+        checkout_session_id = payload.get("session_id")
+        if not checkout_session_id:
+            raise HTTPException(status_code=400, detail="Missing session_id")
+        try:
+            checkout_session = stripe.checkout.Session.retrieve(checkout_session_id)
+            session = stripe.billing_portal.Session.create(
+                customer=checkout_session.customer,
+                return_url="http://localhost:3000/pricing",
+            )
+            return {"url": session.url}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/payments/health")
+    async def payments_health():
+        return {
+            "stripe_configured": bool(STRIPE_SECRET_KEY),
+            "configured_lookup_keys": list(STRIPE_PRICE_LOOKUP.values()),
+        }
+
+# ===== Dev seed endpoint (optional) =====
+@app.post("/api/dev/seed")
+async def dev_seed(db: Session = Depends(get_db)):
+    try:
+        count = db.query(QuestionDB).count()
+        if count >= 30:
+            return {"status": "ok", "message": "DB already seeded", "count": count}
+        import random
+        # Simple seed: create 40 demo questions
+        for i in range(40):
+            opts = []
+            correct_idx = random.randint(0, 3)
+            for j in range(4):
+                opts.append({
+                    "id": str(uuid.uuid4()),
+                    "text": f"Option {j+1}",
+                    "is_correct": j == correct_idx
+                })
+            q = QuestionDB(
+                id=str(uuid.uuid4()),
+                text=f"Question de démonstration {i+1}",
+                category=random.choice(["Priorité", "Signalisation", "Vitesse", "Conduite"]),
+                options=opts,
+                explanation="Explication de démonstration."
+            )
+            db.add(q)
+        db.commit()
+        return {"status": "ok", "message": "Seeded demo questions", "count": db.query(QuestionDB).count()}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===== Auth Endpoints =====
@@ -265,25 +440,45 @@ async def get_signs(db: Session = Depends(get_db)):
 
 
 # ===== Exam Endpoints =====
-@app.post("/api/exam/start", response_model=ExamSession)
+@app.post("/api/exam/start")
 async def start_exam(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    # Get 10 random questions
-    all_questions = db.query(QuestionDB).limit(10).all()
-    
-    if len(all_questions) < 10:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Not enough questions in database"
-        )
+    import random
+    # Fetch all questions and filter for playable ones (>=2 options, at least one correct)
+    all_questions = db.query(QuestionDB).all()
+
+    def is_playable(q: QuestionDB) -> bool:
+        try:
+            opts = q.options or []
+            if not isinstance(opts, list):
+                return False
+            if len(opts) < 2:
+                return False
+            return any(bool(o.get("is_correct")) for o in opts if isinstance(o, dict))
+        except Exception:
+            return False
+
+    playable = [q for q in all_questions if is_playable(q)]
+
+    # Fallback: seed demo questions if not enough playable
+    if len(playable) < 30:
+        try:
+            await dev_seed(db)  # seed demo questions
+            all_questions = db.query(QuestionDB).all()
+            playable = [q for q in all_questions if is_playable(q)]
+        except Exception:
+            pass
+
+    selected_pool = playable if len(playable) > 0 else all_questions
+    selected_count = min(30, len(selected_pool))
+    selected = random.sample(selected_pool, selected_count) if selected_count > 0 else []
     
     # Create exam session
     exam_id = str(uuid.uuid4())
     exam = ExamSessionDB(
         id=exam_id,
-        user_id=current_user.id,
+        user_id="guest",
         status="in_progress",
         answers={}
     )
@@ -291,27 +486,31 @@ async def start_exam(
     db.commit()
     db.refresh(exam)
     
-    return ExamSession(
-        id=exam.id,
-        user_id=exam.user_id,
-        status=exam.status,
-        answers=exam.answers,
-        created_at=exam.created_at
-    )
+    # Return session with questions embedded for the client runner
+    return {
+        "id": exam.id,
+        "user_id": exam.user_id,
+        "status": exam.status,
+        "answers": [],
+        "created_at": exam.created_at,
+        "questions": [
+            {
+                "question_id": q.id,
+                "text": q.text,
+                "category": q.category,
+                "options": q.options,
+                "image_url": None,
+            } for q in selected
+        ]
+    }
 
 
 @app.get("/api/exam/{exam_id}", response_model=ExamSession)
 async def get_exam(
     exam_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    exam = db.query(ExamSessionDB).filter(
-        and_(
-            ExamSessionDB.id == exam_id,
-            ExamSessionDB.user_id == current_user.id
-        )
-    ).first()
+    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
     if not exam:
         raise HTTPException(
@@ -335,14 +534,8 @@ async def submit_answer(
     exam_id: str,
     answer: SubmitAnswerRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    exam = db.query(ExamSessionDB).filter(
-        and_(
-            ExamSessionDB.id == exam_id,
-            ExamSessionDB.user_id == current_user.id
-        )
-    ).first()
+    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
     if not exam:
         raise HTTPException(
@@ -363,14 +556,8 @@ async def submit_answer(
 async def finish_exam(
     exam_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    exam = db.query(ExamSessionDB).filter(
-        and_(
-            ExamSessionDB.id == exam_id,
-            ExamSessionDB.user_id == current_user.id
-        )
-    ).first()
+    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
     if not exam:
         raise HTTPException(

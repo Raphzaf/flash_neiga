@@ -10,6 +10,7 @@ import Training from "./pages/Training";
 import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
+import Pricing from "./pages/Pricing";
 import { Toaster } from "sonner";
 
 // Protected Route Component
@@ -32,6 +33,9 @@ function App() {
                 
                 <Route element={<ProtectedRoute />}>
                     <Route path="/" element={<Dashboard />} />
+                    <Route path="/pricing" element={<Pricing />} />
+                    <Route path="/pricing/success" element={<div className='p-6'>Paiement réussi. Merci ! Vous pouvez gérer votre abonnement ci-dessous.</div>} />
+                    <Route path="/pricing/cancel" element={<div className='p-6'>Paiement annulé. Réessayez quand vous êtes prêt.</div>} />
                     <Route path="/exam" element={<Exam />} />
                   <Route path="/exam/:id" element={<ExamDetails />} />
                     <Route path="/training" element={<Training />} />
