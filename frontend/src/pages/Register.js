@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
@@ -36,9 +37,9 @@ export default function Register() {
                     <h1 className="text-3xl font-heading font-bold text-primary">Flash Neiga</h1>
                     <p className="text-muted-foreground">Créez un compte pour commencer</p>
                     <div className="mt-3">
-                        <Link to="/pricing" className="text-primary hover:underline" data-testid="register-view-pricing-link">
-                            Voir les abonnements
-                        </Link>
+                    <Link to="/pricing" className="text-primary hover:underline" data-testid="register-view-pricing-link">
+                        Voir les abonnements
+                    </Link>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -93,6 +94,36 @@ export default function Register() {
                         Déjà un compte ? <Link to="/login" className="text-primary hover:underline">Se connecter</Link>
                     </p>
                 </CardFooter>
+            {/* Abonnements highlight */}
+            <div className="mt-8">
+                <div className="rounded-2xl p-5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-white shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="h-5 w-5" />
+                        <span className="text-sm uppercase tracking-wide opacity-90">Abonnements</span>
+                    </div>
+                    <div className="text-lg font-bold mb-2">Passez à la vitesse supérieure</div>
+                    <div className="text-sm opacity-90 mb-4">Accédez aux examens illimités, suivi détaillé, et bien plus.</div>
+                    <div className="flex gap-3">
+                        <Link to="/pricing">
+                            <Button variant="secondary" className="bg-white/90 text-indigo-700 hover:bg-white font-bold">Voir les abonnements</Button>
+                        </Link>
+                        <Link to="/pricing">
+                            <Button variant="outline" className="border-white/60 text-white hover:bg-white/10">Comparer les offres</Button>
+                        </Link>
+                    </div>
+                </div>
+            </div>
+
+            {/* Optional: embedded pricing table if configured */}
+            {process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY && process.env.REACT_APP_STRIPE_PRICING_TABLE_ID && (
+                <div className="mt-6">
+                    <stripe-pricing-table
+                        pricing-table-id={process.env.REACT_APP_STRIPE_PRICING_TABLE_ID}
+                        publishable-key={process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY}
+                    >
+                    </stripe-pricing-table>
+                </div>
+            )}
             </Card>
         </div>
     );

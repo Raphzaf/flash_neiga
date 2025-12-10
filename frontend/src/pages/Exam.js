@@ -97,6 +97,13 @@ export default function Exam() {
 
     const finishExam = async () => {
         if (!examSession) return;
+        // Guard: allow early finish only if all questions answered
+        const total = Array.isArray(examSession?.questions) ? examSession.questions.length : 0;
+        const answered = Array.isArray(examSession?.answers) ? examSession.answers.length : 0;
+        if (timeLeft > 0 && answered < total) {
+            toast.info(`Répondez à toutes les questions (${answered}/${total}) pour terminer.`);
+            return;
+        }
         const sessionId = examSession.id || examSession._id;
         
         try {
@@ -165,7 +172,9 @@ export default function Exam() {
     // EXAM RUNNER
     const questions = Array.isArray(examSession?.questions) ? examSession.questions : [];
     const currentQuestion = questions[currentQIndex] || { options: [] };
-    const currentAnswer = (Array.isArray(examSession?.answers) ? examSession.answers : []).find(a => a.question_id === currentQuestion.question_id);
+    const answersArr = Array.isArray(examSession?.answers) ? examSession.answers : [];
+    const currentAnswer = answersArr.find(a => a.question_id === currentQuestion.question_id);
+    const allAnswered = questions.length > 0 && answersArr.length >= questions.length;
 
     return (
         <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -176,7 +185,14 @@ export default function Exam() {
                     <Clock className="w-4 h-4 mr-2" />
                     {formatTime(timeLeft)}
                 </div>
-                <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={finishExam}>
+                <Button 
+                    variant={allAnswered ? "default" : "ghost"}
+                    size="sm"
+                    className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50'}`}
+                    onClick={finishExam}
+                    disabled={!allAnswered && timeLeft > 0}
+                    title={allAnswered ? 'Terminer l\'examen' : 'Répondez à toutes les questions pour terminer'}
+                >
                     Terminer
                 </Button>
             </div>

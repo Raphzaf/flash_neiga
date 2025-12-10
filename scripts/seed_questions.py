@@ -1,3 +1,64 @@
+import json
+from pathlib import Path
+from sqlalchemy.orm import Session
+import sys
+
+# Ensure repo root is on sys.path so `backend` is importable when running from project root
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from backend.database import SessionLocal, engine
+from backend.models import QuestionDB
+from backend.database import Base
+
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "data_v3.json"
+
+def is_playable(opts):
+    return isinstance(opts, list) and len(opts) >= 2 and any(o.get("is_correct") for o in opts if isinstance(o, dict))
+
+def main():
+    if not DATA_PATH.exists():
+        print(f"File not found: {DATA_PATH}")
+        return
+    data = json.loads(DATA_PATH.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "questions" in data:
+        data = data["questions"]
+    if not isinstance(data, list):
+        print("Invalid format: expected list of questions")
+        return
+    # Ensure tables exist before inserting
+    Base.metadata.create_all(bind=engine)
+    db: Session = SessionLocal()
+    imported = 0
+    skipped = 0
+    try:
+        for q in data:
+            text = q.get("text")
+            category = q.get("category") or "Autre"
+            options = q.get("options") or []
+            explanation = q.get("explanation")
+            if not text:
+                skipped += 1
+                continue
+            # Dedupe
+            exists = db.query(QuestionDB).filter(QuestionDB.text == text, QuestionDB.category == category).first()
+            if exists:
+                skipped += 1
+                continue
+            question = QuestionDB(text=text, category=category, options=options, explanation=explanation)
+            db.add(question)
+            imported += 1
+        db.commit()
+        print(f"Imported: {imported}, Skipped: {skipped}")
+    except Exception as e:
+        db.rollback()
+        print(f"Error: {e}")
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    main()
 """
 Script pour convertir les questions scrapées en documents MongoDB
 et les insérer dans la base de données

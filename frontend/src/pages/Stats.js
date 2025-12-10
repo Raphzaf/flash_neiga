@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { BarChart3, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Use CRA proxy (relative paths)
 
 export default function Stats() {
     const [activity, setActivity] = useState([]);
@@ -12,12 +12,12 @@ export default function Stats() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [sumRes, actRes] = await Promise.all([
-                    axios.get(`${BACKEND_URL}/api/stats/summary`),
-                    axios.get(`${BACKEND_URL}/api/stats/activity`)
+                const [sumRes, detailRes] = await Promise.all([
+                    axios.get(`/api/stats/summary`),
+                    axios.get(`/api/stats/details`)
                 ]);
                 setSummary(sumRes.data);
-                setActivity(actRes.data);
+                setActivity(detailRes.data?.exams || []);
             } catch (e) {
                 console.error(e);
             }
@@ -26,8 +26,8 @@ export default function Stats() {
     }, []);
 
     // Calculate pass rate from last 5 exams
-    const passRate = summary?.recent_exams 
-        ? Math.round((summary.recent_exams.filter(e => e.score >= 25).length / summary.recent_exams.length) * 100) || 0
+    const passRate = summary?.last_exams 
+        ? Math.round((summary.last_exams.filter(e => e?.score >= 83).length / (summary.last_exams.length || 1)) * 100) || 0
         : 0;
 
     return (
@@ -81,22 +81,18 @@ export default function Stats() {
                                 <a href={`/exam/${item.id}`} key={item.id} className={`block p-4 ${idx !== activity.length - 1 ? 'border-b' : ''}`}>
                                     <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-full ${item.score >= 25 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                                            {item.score >= 25 ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                                        <div className={`p-2 rounded-full ${(item.passed || (item.correct_answers >= Math.ceil((item.total_questions||30)*0.83))) ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                                            {(item.passed || (item.correct_answers >= Math.ceil((item.total_questions||30)*0.83))) ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
                                         </div>
                                         <div>
                                             <div className="font-medium">Examen Blanc</div>
-                                            <div className="text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString()} • {new Date(item.date).toLocaleTimeString()}</div>
+                                            <div className="text-xs text-muted-foreground">{item.completed_at ? new Date(item.completed_at).toLocaleDateString() : '—'} • {item.completed_at ? new Date(item.completed_at).toLocaleTimeString() : ''}</div>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        {item.status === 'completed' ? (
-                                            <div className={`font-bold text-lg ${item.score >= 25 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                {item.score}/30
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs px-2 py-1 bg-slate-100 rounded-full text-slate-600">Abandonné</span>
-                                        )}
+                                        <div className={`font-bold text-lg ${(item.passed || (item.correct_answers >= Math.ceil((item.total_questions||30)*0.83))) ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {item.correct_answers}/{item.total_questions || 30}
+                                        </div>
                                     </div>
                                     </div>
                                 </a>
@@ -115,21 +111,21 @@ export default function Stats() {
                     <Card>
                         <CardContent className="p-6 flex flex-col items-center justify-center min-h-[300px] text-center">
                             <div className="w-full space-y-2">
-                                {summary?.recent_exams?.map((exam, i) => (
+                                {summary?.last_exams?.map((exam, i) => (
                                     <div key={i} className="space-y-1">
                                         <div className="flex justify-between text-xs text-muted-foreground">
-                                            <span>{new Date(exam.date).toLocaleDateString()}</span>
-                                            <span>{exam.score}/30</span>
+                                            <span>{exam.completed_at ? new Date(exam.completed_at).toLocaleDateString() : '—'}</span>
+                                            <span>{exam.score ?? '—'}/100</span>
                                         </div>
                                         <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                                             <div 
-                                                className={`h-full rounded-full ${exam.score >= 25 ? 'bg-emerald-500' : 'bg-red-500'}`} 
-                                                style={{ width: `${(exam.score / 30) * 100}%` }}
+                                                className={`h-full rounded-full ${(exam.score ?? 0) >= 83 ? 'bg-emerald-500' : 'bg-red-500'}`} 
+                                                style={{ width: `${(exam.score ?? 0)}%` }}
                                             ></div>
                                         </div>
                                     </div>
                                 ))}
-                                {(!summary?.recent_exams || summary.recent_exams.length === 0) && (
+                                {(!summary?.last_exams || summary.last_exams.length === 0) && (
                                     <p className="text-muted-foreground">Pas assez de données pour afficher le graphique.</p>
                                 )}
                             </div>

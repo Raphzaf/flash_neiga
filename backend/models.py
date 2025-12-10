@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 from pydantic import BaseModel, EmailStr
@@ -6,7 +7,12 @@ from typing import Optional, List
 import uuid
 
 # Import Base from database module to ensure all models use the same Base
-from database import Base
+# Support imports both when running from backend/ and from repo root
+try:
+    from database import Base
+except ImportError:
+    # When imported as a package from repo root
+    from backend.database import Base
 
 
 # ===== SQLAlchemy DB Models =====
@@ -47,7 +53,10 @@ class ExamSessionDB(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, index=True)
     status = Column(String, default="in_progress")  # in_progress, completed
-    answers = Column(JSON, default={})  # {question_id: selected_option_id}
+    # Track in-place JSON mutations and avoid shared mutable defaults
+    answers = Column(MutableDict.as_mutable(JSON), default=dict)  # {question_id: selected_option_id}
+    # Persist the set of questions used in this exam session (order preserved)
+    question_ids = Column(MutableList.as_mutable(JSON), default=list)
     score = Column(Integer, nullable=True)
     passed = Column(Boolean, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

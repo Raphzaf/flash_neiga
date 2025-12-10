@@ -1,5 +1,6 @@
 import React from "react";
 import axios from "axios";
+import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
@@ -32,6 +33,8 @@ function Pricing() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Abonnements</h1>
+
+      {/* Removed free account banner to avoid suggesting free sign-up */}
 
       <section className="space-y-6">
         <div className="rounded-lg border p-4">

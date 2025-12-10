@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Header
 from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from datetime import datetime, timedelta, timezone
 import os
 import logging
@@ -48,6 +48,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Lightweight runtime migration to add missing columns if needed (SQLite)
+try:
+    with engine.connect() as conn:
+        # Add question_ids column to exam_sessions if it doesn't exist
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS __schema_probe__ (id TEXT);
+        """))
+        conn.execute(text("ALTER TABLE exam_sessions ADD COLUMN question_ids JSON"))
+except Exception:
+    # Ignore if column already exists or table missing; created by seed scripts
+    pass
 
 # Extra safety: always attach CORS headers
 @app.middleware("http")
@@ -295,6 +307,60 @@ async def startup():
             "configured_lookup_keys": list(STRIPE_PRICE_LOOKUP.values()),
         }
 
+    @app.get("/api/payments/validate-session")
+    async def validate_checkout_session(session_id: str):
+        if not STRIPE_SECRET_KEY:
+            return {"valid": False, "reason": "stripe_not_configured"}
+        if not session_id:
+            return {"valid": False, "reason": "missing_session_id"}
+        try:
+            cs = stripe.checkout.Session.retrieve(session_id)
+            valid = (cs.get("payment_status") == "paid") or (cs.get("status") == "complete")
+            customer_email = (cs.get("customer_details") or {}).get("email")
+            return {
+                "valid": bool(valid),
+                "status": cs.get("status"),
+                "payment_status": cs.get("payment_status"),
+                "customer_email": customer_email
+            }
+        except Exception as e:
+            return {"valid": False, "reason": "error", "error": str(e)}
+
+    @app.post("/api/admin/import_file")
+    async def import_file(payload: dict, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):
+        if os.environ.get("ADMIN_TOKEN") and x_admin_token != os.environ.get("ADMIN_TOKEN"):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        rel_path = payload.get("path") or "data/data_v3.json"
+        file_path = ROOT_DIR.parent / rel_path
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "questions" in data:
+                data = data["questions"]
+            imported = 0
+            skipped = 0
+            for q in data:
+                text = q.get("text")
+                category = q.get("category") or "Autre"
+                explanation = q.get("explanation")
+                options = q.get("options") or []
+                if not text:
+                    skipped += 1
+                    continue
+                exists = db.query(QuestionDB).filter(and_(QuestionDB.text == text, QuestionDB.category == category)).first()
+                if exists:
+                    skipped += 1
+                    continue
+                db.add(QuestionDB(text=text, category=category, options=options, explanation=explanation))
+                imported += 1
+            db.commit()
+            return {"status": "ok", "imported": imported, "skipped": skipped}
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+
 # ===== Dev seed endpoint (optional) =====
 @app.post("/api/dev/seed")
 async def dev_seed(db: Session = Depends(get_db)):
@@ -480,7 +546,8 @@ async def start_exam(
         id=exam_id,
         user_id="guest",
         status="in_progress",
-        answers={}
+        answers={},
+        question_ids=[q.id for q in selected]
     )
     db.add(exam)
     db.commit()
@@ -567,7 +634,13 @@ async def finish_exam(
     
     # Calculate score
     correct_count = 0
+    # Use stored question_ids count when available, fallback to 30
     total_count = 30
+    try:
+        if isinstance(exam.question_ids, list) and len(exam.question_ids) > 0:
+            total_count = len(exam.question_ids)
+    except Exception:
+        pass
     
     for question_id, selected_option_id in exam.answers.items():
         question = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
@@ -593,6 +666,60 @@ async def finish_exam(
         "passed": passed,
         "correct_answers": correct_count,
         "total_questions": total_count
+    }
+
+
+@app.get("/api/exam/{exam_id}/details")
+async def get_exam_details(
+    exam_id: str,
+    db: Session = Depends(get_db),
+):
+    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+
+    # Build detailed question list based on stored question_ids
+    detailed_questions = []
+    question_ids = exam.question_ids or []
+    answers = exam.answers or {}
+    correct_count = 0
+
+    for qid in question_ids:
+        q = db.query(QuestionDB).filter(QuestionDB.id == qid).first()
+        if not q:
+            continue
+        selected_option_id = answers.get(qid)
+        correct_option_id = None
+        is_correct = False
+        for opt in (q.options or []):
+            if opt.get("is_correct"):
+                correct_option_id = opt.get("id")
+            if selected_option_id and opt.get("id") == selected_option_id and opt.get("is_correct"):
+                is_correct = True
+        if is_correct:
+            correct_count += 1
+        detailed_questions.append({
+            "question_id": q.id,
+            "text": q.text,
+            "category": q.category,
+            "options": q.options,
+            "selected_option_id": selected_option_id,
+            "correct_option_id": correct_option_id,
+            "is_correct": is_correct
+        })
+
+    total_questions = len(question_ids) if question_ids else 30
+    return {
+        "id": exam.id,
+        "user_id": exam.user_id,
+        "status": exam.status,
+        "score": exam.score,
+        "passed": exam.passed,
+        "created_at": exam.created_at,
+        "completed_at": exam.completed_at,
+        "correct_answers": correct_count,
+        "total_questions": total_questions,
+        "questions": detailed_questions
     }
 
 
@@ -631,12 +758,12 @@ async def check_training_answer(
 @app.get("/api/stats/summary")
 async def get_stats_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    # Get last 5 completed exams
+    # For now, use guest user
+    user_id = "guest"
     exams = db.query(ExamSessionDB).filter(
         and_(
-            ExamSessionDB.user_id == current_user.id,
+            ExamSessionDB.user_id == user_id,
             ExamSessionDB.status == "completed"
         )
     ).order_by(ExamSessionDB.completed_at.desc()).limit(5).all()
@@ -644,7 +771,7 @@ async def get_stats_summary(
     total_errors = 0
     best_category = None
     worst_category = None
-    category_stats = {}
+    category_errors = {}
     
     for exam in exams:
         for question_id, selected_option_id in exam.answers.items():
@@ -654,53 +781,79 @@ async def get_stats_summary(
                 for opt in question.options:
                     if opt["id"] == selected_option_id and opt["is_correct"]:
                         is_correct = True
-                        break
-                
-                if not is_correct:
-                    total_errors += 1
-                
-                cat = question.category
-                if cat not in category_stats:
-                    category_stats[cat] = {"correct": 0, "total": 0}
-                category_stats[cat]["total"] += 1
-                if is_correct:
-                    category_stats[cat]["correct"] += 1
-    
-    if category_stats:
-        best_category = max(category_stats.items(), key=lambda x: x[1]["correct"] / max(x[1]["total"], 1))[0]
-        worst_category = min(category_stats.items(), key=lambda x: x[1]["correct"] / max(x[1]["total"], 1))[0]
-    
+
+    if category_errors:
+        best_category = min(category_errors, key=lambda k: category_errors[k])
+        worst_category = max(category_errors, key=lambda k: category_errors[k])
+
     return {
+        "last_exams": [
+            {
+                "id": e.id,
+                "score": e.score,
+                "passed": e.passed,
+                "completed_at": e.completed_at
+            } for e in exams
+        ],
         "total_errors": total_errors,
         "best_category": best_category,
-        "worst_category": worst_category,
-        "recent_exams_count": len(exams),
-        "average_score": int(sum(e.score for e in exams if e.score) / len(exams)) if exams else 0
+        "worst_category": worst_category
     }
 
 
-@app.get("/api/stats/activity")
-async def get_activity(
+@app.get("/api/stats/details")
+async def get_stats_details(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
+    # For now, use guest user
+    user_id = "guest"
     exams = db.query(ExamSessionDB).filter(
         and_(
-            ExamSessionDB.user_id == current_user.id,
+            ExamSessionDB.user_id == user_id,
             ExamSessionDB.status == "completed"
         )
-    ).order_by(ExamSessionDB.completed_at.desc()).limit(20).all()
-    
-    return [
-        {
+    ).order_by(ExamSessionDB.completed_at.desc()).limit(5).all()
+
+    exams_detail = []
+    for e in exams:
+        total_q = len(e.question_ids or []) or 30
+        correct = 0
+        q_details = []
+        for qid in (e.question_ids or []):
+            q = db.query(QuestionDB).filter(QuestionDB.id == qid).first()
+            if not q:
+                continue
+            selected = (e.answers or {}).get(qid)
+            correct_opt = None
+            is_correct = False
+            for opt in (q.options or []):
+                if opt.get("is_correct"):
+                    correct_opt = opt.get("id")
+                if opt.get("id") == selected and opt.get("is_correct"):
+                    is_correct = True
+            if is_correct:
+                correct += 1
+            q_details.append({
+                "question_id": q.id,
+                "text": q.text,
+                "category": q.category,
+                "selected_option_id": selected,
+                "correct_option_id": correct_opt,
+                "is_correct": is_correct
+            })
+        exams_detail.append({
             "id": e.id,
             "score": e.score,
             "passed": e.passed,
-            "created_at": e.created_at,
-            "completed_at": e.completed_at
-        }
-        for e in exams
-    ]
+            "completed_at": e.completed_at,
+            "total_questions": total_q,
+            "correct_answers": correct,
+            "questions": q_details
+        })
+
+    return {
+        "exams": exams_detail
+    }
 
 
 if __name__ == "__main__":

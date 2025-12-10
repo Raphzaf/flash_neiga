@@ -9,19 +9,24 @@ import axios from 'axios';
 export default function Dashboard() {
     const { user, logout } = useAuth();
     const [stats, setStats] = useState(null);
+    const [recent, setRecent] = useState([]);
     const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await axios.get(`${BACKEND_URL}/api/stats/summary`);
-                setStats(res.data);
+                const [sumRes, detailsRes] = await Promise.all([
+                    axios.get(`/api/stats/summary`),
+                    axios.get(`/api/stats/details`)
+                ]);
+                setStats(sumRes.data);
+                setRecent((detailsRes.data?.exams || []).slice(0, 6));
             } catch (e) {
                 console.error("Failed to fetch stats");
             }
         };
         fetchStats();
-    }, [BACKEND_URL]);
+    }, []);
 
     return (
         <div className="min-h-screen pb-20 md:pb-0">
@@ -52,26 +57,11 @@ export default function Dashboard() {
                                     <Play className="mr-2 h-5 w-5" /> Lancer un Examen
                                 </Button>
                             </Link>
-                            <Link to="/pricing">
-                                <Button size="lg" variant="outline" className="rounded-full px-8" data-testid="view-pricing-hero-btn">
-                                    Voir les abonnements
-                                </Button>
-                            </Link>
-                            <Link to="/register">
-                                <Button size="lg" variant="secondary" className="rounded-full px-8" data-testid="register-hero-btn">
-                                    S'inscrire
-                                </Button>
-                            </Link>
                         </div>
                     </div>
                 </div>
 
-                {/* Pricing quick link */}
-                <div>
-                    <Link to="/pricing" className="inline-block rounded-md border px-4 py-2 hover:bg-muted">
-                        Voir les abonnements
-                    </Link>
-                </div>
+                {/* Removed pricing quick link and register CTA for base dashboard */}
 
                 {/* Main Actions Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
@@ -132,7 +122,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <div className="text-sm text-muted-foreground">Derniers examens</div>
-                                    <div className="font-medium">{stats?.recent_exams?.length ?? 0}/5</div>
+                                    <div className="font-medium">{stats?.last_exams?.length ?? 0}/5</div>
                                 </div>
                                 <div className="text-xs text-primary/80">Cliquez pour voir les statistiques détaillées</div>
                             </CardContent>
@@ -150,16 +140,16 @@ export default function Dashboard() {
                     </div>
                     
                     <div className="space-y-3">
-                        {stats?.recent_exams?.length > 0 ? (
-                            stats.recent_exams.slice(0, 6).map((exam) => (
+                        {recent.length > 0 ? (
+                            recent.map((exam) => (
                                 <Link to={`/exam/${exam.id}`} key={exam.id} className="block">
                                     <div className="bg-white dark:bg-slate-900 border rounded-xl p-4 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                                         <div>
                                             <div className="font-bold">Examen Blanc</div>
-                                            <div className="text-xs text-muted-foreground">{new Date(exam.date).toLocaleDateString()} à {new Date(exam.date).toLocaleTimeString()}</div>
+                                            <div className="text-xs text-muted-foreground">{exam.completed_at ? new Date(exam.completed_at).toLocaleDateString() : '—'} à {exam.completed_at ? new Date(exam.completed_at).toLocaleTimeString() : ''}</div>
                                         </div>
-                                        <div className={`text-lg font-bold ${exam.score >= 25 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                            {exam.score}/{exam.total}
+                                        <div className={`text-lg font-bold ${(exam.passed || (exam.correct_answers >= Math.ceil((exam.total_questions||30)*0.83))) ? 'text-emerald-600' : 'text-red-500'}`}>
+                                            {exam.correct_answers}/{exam.total_questions || 30}
                                         </div>
                                     </div>
                                 </Link>

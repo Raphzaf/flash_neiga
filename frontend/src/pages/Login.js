@@ -72,7 +72,7 @@ export default function Login() {
                 </CardContent>
                 <CardFooter className="justify-center">
                     <p className="text-sm text-muted-foreground">
-                        Pas encore de compte ? <Link to="/register" className="text-primary hover:underline">S'inscrire</Link>
+                        Pas encore de compte ? <Link to="/pricing" className="text-primary hover:underline">Voir les abonnements</Link>
                     </p>
                 </CardFooter>
             </Card>
