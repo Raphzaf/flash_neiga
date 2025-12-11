@@ -86,3 +86,6 @@ android-sdk/ -e
 *.env
 *.env.*
 !frontend/.env
+frontend/build/
+backend/__pycache__/
+backend/flash_neiga.db
