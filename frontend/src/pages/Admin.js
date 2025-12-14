@@ -8,8 +8,6 @@ import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-
 export default function Admin() {
     const [qText, setQText] = useState('');
     const [qCategory, setQCategory] = useState('Priorités');
@@ -42,7 +40,7 @@ export default function Admin() {
     const submitQuestion = async (e) => {
         e.preventDefault();
         try {
-            await axios.post(`${BACKEND_URL}/api/questions`, {
+            await axios.post('/api/questions', {
                 text: qText,
                 category: qCategory,
                 image_url: qImage || null,
@@ -64,7 +62,7 @@ export default function Admin() {
     const submitSign = async (e) => {
         e.preventDefault();
         try {
-            await axios.post(`${BACKEND_URL}/api/signs`, {
+            await axios.post('/api/signs', {
                 name: sName,
                 category: sCategory,
                 description: sDesc,

@@ -3,8 +3,6 @@ import axios from "axios";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
-
 async function startCheckout(plan_key) {
   try {
     // Allow direct price_id via env if mapping fails
@@ -17,7 +15,7 @@ async function startCheckout(plan_key) {
     };
     const price_id = priceEnvMap[plan_key];
     const payload = price_id ? { price_id } : { plan_key };
-    const res = await axios.post(`${BACKEND_URL}/api/payments/create-checkout-session`, payload);
+    const res = await axios.post('/api/payments/create-checkout-session', payload);
     if (res.data?.url) {
       window.location.href = res.data.url;
     }
@@ -109,7 +107,7 @@ function Pricing() {
             return;
           }
           try {
-            const res = await axios.post(`${BACKEND_URL}/api/payments/create-portal-session`, { session_id: sessionId });
+            const res = await axios.post('/api/payments/create-portal-session', { session_id: sessionId });
             if (res.data?.url) window.location.href = res.data.url;
           } catch (e) {
             console.error(e);

@@ -7,8 +7,6 @@ import { Badge } from '../components/ui/badge';
 import { CheckCircle, XCircle, Info, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-
 export default function Training() {
     const [categories, setCategories] = useState(['all']);
     const [questions, setQuestions] = useState([]);
@@ -20,7 +18,7 @@ export default function Training() {
     const fetchQuestions = async () => {
         setLoading(true);
         try {
-            let url = `${BACKEND_URL}/api/questions`;
+            let url = '/api/questions';
             if (!(categories.length === 1 && categories[0] === 'all')) {
                 const params = new URLSearchParams();
                 categories.forEach(c => params.append('category', c));
@@ -50,7 +48,7 @@ export default function Training() {
 
         try {
             const q = questions[currentIndex];
-            const res = await axios.post(`${BACKEND_URL}/api/training/check`, {
+            const res = await axios.post('/api/training/check', {
                 question_id: q.id,
                 selected_option_id: optionId
             });

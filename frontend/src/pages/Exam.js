@@ -7,9 +7,6 @@ import { Progress } from '../components/ui/progress';
 import { toast } from 'sonner';
 import { Clock, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 
-// In dev, use CRA proxy by calling relative API paths
-const BACKEND_URL = '';
-
 export default function Exam() {
     const [examSession, setExamSession] = useState(null);
     const [currentQIndex, setCurrentQIndex] = useState(0);

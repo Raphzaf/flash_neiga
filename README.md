@@ -90,11 +90,70 @@ The backend automatically detects the environment and uses the appropriate datab
 
 The frontend can be deployed on Netlify or any static hosting service.
 
-#### Environment Variables for Frontend
+#### Prerequisites
 
-Set the following environment variable in your Netlify deployment:
+1. A Netlify account ([sign up here](https://www.netlify.com))
+2. Your backend deployed on Render and accessible via HTTPS
+3. GitHub repository connected to Netlify
 
-- `REACT_APP_API_URL` - Your backend API URL (e.g., `https://flash-neiga-backend.onrender.com`)
+#### Deployment Steps
+
+1. **Connect Repository to Netlify**
+   - Go to [Netlify Dashboard](https://app.netlify.com)
+   - Click "Add new site" → "Import an existing project"
+   - Connect your GitHub repository
+   - Select the `flash_neiga` repository
+
+2. **Configure Build Settings**
+   - Build command: `cd frontend && npm run build`
+   - Publish directory: `frontend/build`
+   - Base directory: (leave empty)
+
+3. **Set Environment Variables**
+   
+   In Netlify Dashboard → Site settings → Environment variables, add:
+   
+   **Required:**
+   - `REACT_APP_BACKEND_URL` - Your backend API URL (e.g., `https://flash-neiga-backend.onrender.com`)
+     - **Important**: This should be your Render backend URL, NOT localhost
+     - Example: `https://your-service-name.onrender.com`
+   
+   **Optional (for Stripe payments):**
+   - `REACT_APP_STRIPE_PUBLISHABLE_KEY` - Your Stripe publishable key (starts with `pk_test_` or `pk_live_`)
+   - `REACT_APP_STRIPE_PRICE_CODE_14D` - Stripe Price ID for 14-day code access
+   - `REACT_APP_STRIPE_PRICE_CODE_30D` - Stripe Price ID for 30-day code access
+   - `REACT_APP_STRIPE_PRICE_VIDEO_1M` - Stripe Price ID for 1-month video access
+   - `REACT_APP_STRIPE_PRICE_VIDEO_2M` - Stripe Price ID for 2-month video access
+   - `REACT_APP_STRIPE_PRICE_VIDEO_3M` - Stripe Price ID for 3-month video access
+   - `REACT_APP_STRIPE_PRICING_TABLE_ID` - Stripe Pricing Table ID (starts with `prctbl_`)
+
+4. **Deploy**
+   - Click "Deploy site"
+   - Wait for build and deployment to complete
+   - Your application will be available at: `https://your-site-name.netlify.app`
+
+5. **Update Backend CORS Settings**
+   
+   After deployment, update your Render backend environment variables:
+   - Add your Netlify URL to `ALLOWED_ORIGINS`: `https://your-site-name.netlify.app,http://localhost:3000`
+
+#### Troubleshooting
+
+**Issue: "ERR_CONNECTION_REFUSED" or "Failed to fetch"**
+- ✅ Verify `REACT_APP_BACKEND_URL` is set correctly in Netlify environment variables
+- ✅ Ensure the backend URL uses HTTPS (not HTTP) for production
+- ✅ Check that the backend is running: visit `https://your-backend.onrender.com/health`
+- ✅ Verify CORS is configured: add your Netlify URL to backend's `ALLOWED_ORIGINS`
+- ✅ Redeploy the frontend after changing environment variables (they only apply on build)
+
+**Issue: Environment variables not working**
+- ✅ Make sure variable names start with `REACT_APP_` (required by Create React App)
+- ✅ Redeploy the site after adding/changing environment variables
+- ✅ Check browser console for the debug log: "🔗 Backend URL: ..." (only in development mode)
+
+**Issue: 401 Unauthorized errors**
+- ✅ Clear browser localStorage and login again
+- ✅ Check that JWT token is being sent in requests (visible in Network tab)
 
 ## 💻 Local Development
 
@@ -131,18 +190,31 @@ Set the following environment variable in your Netlify deployment:
    cd frontend
    ```
 
-2. **Install dependencies**
+2. **Create environment file** (optional for local development)
+   ```bash
+   cp .env.example .env
+   ```
+   
+   The default `.env` file includes:
+   ```env
+   REACT_APP_BACKEND_URL=http://localhost:8000
+   ```
+   
+   For local development, this is already configured. Only modify if your backend runs on a different port.
+
+3. **Install dependencies**
    ```bash
    npm install
    ```
 
-3. **Run development server**
+4. **Run development server**
    ```bash
    npm start
    ```
 
-4. **Access the application**
+5. **Access the application**
    - Frontend: http://localhost:3000
+   - The frontend will automatically proxy API requests to `http://localhost:8000` via the configured `REACT_APP_BACKEND_URL`
 
 ## 🔧 Configuration
 

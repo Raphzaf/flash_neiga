@@ -5,8 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '../components/ui/input';
 import { Search } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-
 export default function Signs() {
     const [signs, setSigns] = useState([]);
     const [search, setSearch] = useState('');
@@ -15,7 +13,7 @@ export default function Signs() {
     useEffect(() => {
         const fetchSigns = async () => {
             try {
-                const res = await axios.get(`${BACKEND_URL}/api/signs`);
+                const res = await axios.get('/api/signs');
                 setSigns(res.data);
             } catch (e) {
                 console.error(e);
