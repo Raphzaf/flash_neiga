@@ -86,6 +86,41 @@ The backend automatically detects the environment and uses the appropriate datab
 - When `DATABASE_URL` environment variable is set → PostgreSQL
 - When `DATABASE_URL` is not set → SQLite (local development)
 
+#### Creating Admin User on Render
+
+After your backend is deployed on Render, you need to create an admin user to access administrative features.
+
+**Steps:**
+
+1. **Open Render Shell**
+   - Go to your [Render Dashboard](https://dashboard.render.com)
+   - Click on your `flash-neiga-backend` service
+   - Click the "Shell" tab at the top
+   - Wait for the shell to connect
+
+2. **Run the admin creation script**
+   ```bash
+   cd /opt/render/project/src/backend
+   python create_admin.py
+   ```
+
+3. **Login to your application**
+   - Navigate to your frontend URL (e.g., `https://your-site.netlify.app`)
+   - Login with:
+     - Email: `admin@gmail.com`
+     - Password: `admin`
+   
+4. **Change the password** (recommended)
+   - After logging in, change the password through your profile settings
+   
+**Resetting Admin Password:**
+
+If you need to reset the admin password, run this in the Render Shell:
+```bash
+cd /opt/render/project/src/backend
+python reset_admin.py
+```
+
 ### Frontend Deployment on Netlify
 
 The frontend is deployed on Netlify using a **dual approach** (CORS + Proxy) for maximum reliability and security.
@@ -231,7 +266,23 @@ Production:   https://app.netlify.app → /api/* → Netlify Proxy → https://b
    pip install -r requirements.txt
    ```
 
-3. **Run the server**
+3. **Create admin user**
+   ```bash
+   python create_admin.py
+   ```
+   
+   This creates an admin user with:
+   - Email: `admin@gmail.com`
+   - Password: `admin`
+   
+   **⚠️ IMPORTANT:** Change the password after first login!
+   
+   If you need to reset the admin password later:
+   ```bash
+   python reset_admin.py
+   ```
+
+4. **Run the server**
    ```bash
    # Development
    python server.py
@@ -240,7 +291,7 @@ Production:   https://app.netlify.app → /api/* → Netlify Proxy → https://b
    uvicorn server:app --reload --host 0.0.0.0 --port 8000
    ```
 
-4. **Access the API**
+5. **Access the API**
    - API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
    - Health Check: http://localhost:8000/health
