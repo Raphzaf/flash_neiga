@@ -12,11 +12,13 @@ if not DATABASE_URL:
     BACKEND_DIR = Path(__file__).parent
     DB_PATH = BACKEND_DIR / "flash_neiga.db"
     DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
-
-# SQLite-specific configuration
-connect_args = {}
-if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
+else:
+    # Production - PostgreSQL
+    # Render provides postgres:// but SQLAlchemy needs postgresql://
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    connect_args = {}
 
 engine = create_engine(
     DATABASE_URL,
