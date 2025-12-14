@@ -252,7 +252,7 @@ async def startup():
             print("⚠️  IMPORTANT: Change the admin password after first login!")
             
     except Exception as e:
-        print(f"❌ Error during startup: {e}")
+        logger.error(f"❌ Error during startup: {e}", exc_info=True)
         db.rollback()
     finally:
         db.close()
