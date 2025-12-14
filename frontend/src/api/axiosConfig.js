@@ -6,7 +6,6 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'
 
 // Configure axios defaults
 axios.defaults.baseURL = BACKEND_URL;
-axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 // Log the backend URL in development
 if (process.env.NODE_ENV === 'development') {
@@ -30,8 +29,9 @@ axios.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid - could trigger logout here
-      console.warn('Unauthorized request - token may be invalid');
+      // Token expired or invalid - remove it to prevent retry with bad token
+      console.warn('Unauthorized request - token may be invalid or expired');
+      localStorage.removeItem('token');
     }
     return Promise.reject(error);
   }
