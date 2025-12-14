@@ -82,13 +82,26 @@ async def add_cors_headers(request, call_next):
     # Only add fallback headers if not already set by CORSMiddleware
     # Note: When allow_credentials=True, we can't use wildcard origins
     if "Access-Control-Allow-Origin" not in response.headers:
-        origin = request.headers.get("origin", "*")
+        origin = request.headers.get("origin", "")
         # Check if origin matches allowed patterns
-        if origin != "*":
+        if origin:
             for allowed in origins:
-                if allowed == "*" or origin == allowed or (allowed.endswith("*") and origin.endswith(allowed[:-1])):
+                # Exact match
+                if origin == allowed:
                     response.headers["Access-Control-Allow-Origin"] = origin
                     response.headers["Access-Control-Allow-Credentials"] = "true"
+                    break
+                # Wildcard subdomain match (e.g., https://*.netlify.app)
+                elif allowed.startswith("https://*."):
+                    domain_suffix = allowed[10:]  # Remove "https://*."
+                    # Check if origin ends with the domain and has proper structure
+                    if origin.startswith("https://") and origin.endswith("." + domain_suffix):
+                        response.headers["Access-Control-Allow-Origin"] = origin
+                        response.headers["Access-Control-Allow-Credentials"] = "true"
+                        break
+                # Full wildcard (not recommended with credentials but supported)
+                elif allowed == "*":
+                    response.headers["Access-Control-Allow-Origin"] = origin
                     break
     response.headers.setdefault("Access-Control-Allow-Methods", "*")
     response.headers.setdefault("Access-Control-Allow-Headers", "*")

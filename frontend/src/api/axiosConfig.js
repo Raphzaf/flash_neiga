@@ -40,6 +40,8 @@ axios.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
+      // Force full page reload to /login to clear all app state
+      // This is intentional for security - ensures clean logout on auth failure
       window.location.href = '/login';
     }
     return Promise.reject(error);
