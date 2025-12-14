@@ -215,10 +215,48 @@ def init_sample_data(db: Session):
 
 @app.on_event("startup")
 async def startup():
+    """Initialize database and create admin user on first startup"""
+    
+    print("🔧 Initializing database...")
     init_db()
+    print("✅ Database tables created")
+    
     db = SessionLocal()
-    init_sample_data(db)
-    db.close()
+    try:
+        # Initialize sample data if needed
+        init_sample_data(db)
+        
+        # Create admin user if it doesn't exist
+        admin_email = "admin@gmail.com"
+        existing_admin = db.query(UserDB).filter(UserDB.email == admin_email).first()
+        
+        if existing_admin:
+            print(f"ℹ️  Admin user already exists: {admin_email}")
+        else:
+            print(f"📝 Creating admin user: {admin_email}")
+            
+            admin_user = UserDB(
+                id=str(uuid.uuid4()),
+                email=admin_email,
+                hashed_password=pwd_context.hash("admin")
+            )
+            
+            db.add(admin_user)
+            db.commit()
+            db.refresh(admin_user)
+            
+            print(f"✅ Admin user created successfully!")
+            print(f"   Email: {admin_email}")
+            print(f"   Password: admin")
+            print(f"   User ID: {admin_user.id}")
+            print("⚠️  IMPORTANT: Change the admin password after first login!")
+            
+    except Exception as e:
+        logger.error(f"❌ Error during startup: {e}", exc_info=True)
+        db.rollback()
+    finally:
+        db.close()
+    
     logger.info("Application startup complete")
 
     # ===== Admin Import Official =====
