@@ -136,10 +136,10 @@ export default function Admin() {
         <div className="max-w-4xl mx-auto p-6 min-h-screen">
             <h1 className="text-3xl font-bold mb-8">Administration (CMS)</h1>
 
-            <Tabs defaultValue="database">
+            <Tabs defaultValue="question">
                 <TabsList className="grid w-full grid-cols-3 mb-8">
-                    <TabsTrigger value="database">Base de données</TabsTrigger>
                     <TabsTrigger value="question">Ajouter Question</TabsTrigger>
+                    <TabsTrigger value="database">Base de données</TabsTrigger>
                     <TabsTrigger value="sign">Ajouter Panneau</TabsTrigger>
                 </TabsList>
 

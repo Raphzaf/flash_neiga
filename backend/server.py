@@ -603,7 +603,7 @@ async def get_question_stats(current_user: User = Depends(get_current_user), db:
             "total_questions": total,
             "by_category": by_category,
             "database_type": db_type,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -611,12 +611,14 @@ async def get_question_stats(current_user: User = Depends(get_current_user), db:
 
 @app.post("/api/admin/import-questions")
 async def import_questions(
-    source: str = "data_v3",
-    force: bool = False,
+    payload: dict = {},
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Manually import questions from data_v3.json"""
+    source = payload.get("source", "data_v3")
+    force = payload.get("force", False)
+    
     try:
         if force:
             # Clear existing questions if force=true
@@ -635,11 +637,10 @@ async def import_questions(
         }
     except Exception as e:
         db.rollback()
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"❌ Error importing questions: {str(e)}"
-        }
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error importing questions: {str(e)}"
+        )
 
 
 @app.delete("/api/admin/questions/clear")
