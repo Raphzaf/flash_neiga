@@ -10,7 +10,6 @@ export default function Dashboard() {
     const { user, logout } = useAuth();
     const [stats, setStats] = useState(null);
     const [recent, setRecent] = useState([]);
-    const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
     useEffect(() => {
         const fetchStats = async () => {
