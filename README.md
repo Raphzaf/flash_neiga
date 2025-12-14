@@ -75,6 +75,24 @@ Expected response:
 }
 ```
 
+#### Optional: Switching to PostgreSQL
+
+For better production reliability, you can switch from SQLite to PostgreSQL:
+
+1. **Update render.yaml**:
+   - Uncomment the `databases` section at the bottom
+   - Comment out the `disk` section
+   - Update the `DATABASE_URL` environment variable to use `fromDatabase`
+
+2. **Update requirements.txt**:
+   - Uncomment `psycopg2-binary>=2.9.9`
+
+3. **Redeploy**:
+   - Push changes to trigger a new deployment
+   - The database will be automatically provisioned
+
+The backend will automatically use PostgreSQL when `DATABASE_URL` is set, falling back to SQLite for local development.
+
 ### Frontend Deployment on Netlify
 
 The frontend can be deployed on Netlify or any static hosting service.

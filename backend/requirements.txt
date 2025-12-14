@@ -16,3 +16,5 @@ typer>=0.9.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 stripe>=10.0.0
+# Optional: PostgreSQL driver (uncomment if using PostgreSQL instead of SQLite)
+# psycopg2-binary>=2.9.9

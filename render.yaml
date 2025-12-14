@@ -11,9 +11,23 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: "3.11"
+      # For SQLite (default - requires persistent disk below)
       - key: DATABASE_URL
         value: sqlite:///./flash_neiga.db
+      # For PostgreSQL (uncomment and use the database below instead)
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: flash-neiga-db
+      #     property: connectionString
     disk:
       name: sqlite-data
       mountPath: /opt/render/project/src/backend
       sizeGB: 1
+
+# Optional: PostgreSQL database for better production reliability
+# Uncomment the section below and comment out the disk section above if using PostgreSQL
+# databases:
+#   - name: flash-neiga-db
+#     databaseName: flash_neiga
+#     user: flash_neiga_user
+#     plan: free
