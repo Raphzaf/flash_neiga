@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Header
 from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, text
+from sqlalchemy import and_, text, func
 from datetime import datetime, timedelta, timezone
 import os
 import logging
@@ -27,6 +27,7 @@ from models import (
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
 SAMPLE_QUESTIONS_PATH = ROOT_DIR.parent / "data" / "sample_questions.json"
+DATA_V3_PATH = ROOT_DIR.parent / "data" / "data_v3.json"
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "demo-secret-key-flash-neiga-sqlite")
 ALGORITHM = "HS256"
@@ -213,9 +214,56 @@ def init_sample_data(db: Session):
         db.rollback()
 
 
+def load_questions_from_data_v3(db: Session):
+    """Load questions from data_v3.json into database"""
+    
+    # Find data_v3.json in the data directory
+    file_path = DATA_V3_PATH
+    
+    if not file_path.exists():
+        print(f"⚠️  data_v3.json not found at {file_path}")
+        return 0
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    # Handle both list and dict with "questions" key
+    questions_list = data if isinstance(data, list) else data.get("questions", [])
+    
+    imported = 0
+    
+    for idx, item in enumerate(questions_list, 1):
+        try:
+            # Check if question already exists (by text)
+            existing = db.query(QuestionDB).filter(
+                QuestionDB.text == item['text']
+            ).first()
+            
+            if not existing:
+                question = QuestionDB(
+                    id=str(uuid.uuid4()),
+                    text=item['text'],
+                    category=item.get('category', 'general'),
+                    options=item.get('options', []),
+                    explanation=item.get('explanation', '')
+                )
+                db.add(question)
+                imported += 1
+                
+                if imported % 50 == 0:
+                    print(f"   ⏳ Imported {imported} questions...")
+        
+        except Exception as e:
+            print(f"⚠️  Error importing question {idx}: {e}")
+            continue
+    
+    db.commit()
+    return imported
+
+
 @app.on_event("startup")
 async def startup():
-    """Initialize database and create admin user on first startup"""
+    """Initialize database, create admin, and load questions on first startup"""
     
     print("🔧 Initializing database...")
     init_db()
@@ -223,9 +271,6 @@ async def startup():
     
     db = SessionLocal()
     try:
-        # Initialize sample data if needed
-        init_sample_data(db)
-        
         # Create admin user if it doesn't exist
         admin_email = "admin@gmail.com"
         existing_admin = db.query(UserDB).filter(UserDB.email == admin_email).first()
@@ -250,6 +295,17 @@ async def startup():
             print(f"   Password: admin")
             print(f"   User ID: {admin_user.id}")
             print("⚠️  IMPORTANT: Change the admin password after first login!")
+        
+        # Load questions from data_v3.json if database is empty
+        question_count = db.query(QuestionDB).count()
+        
+        if question_count == 0:
+            print("📚 Database is empty, loading questions from data_v3.json...")
+            imported = load_questions_from_data_v3(db)
+            new_count = db.query(QuestionDB).count()
+            print(f"✅ Successfully loaded {new_count} questions from data_v3.json!")
+        else:
+            print(f"ℹ️  Database already contains {question_count} questions")
             
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
@@ -257,6 +313,7 @@ async def startup():
     finally:
         db.close()
     
+    print("🚀 Application startup complete!")
     logger.info("Application startup complete")
 
     # ===== Admin Import Official =====
@@ -522,6 +579,92 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 @app.get("/api/auth/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+# ===== Admin Endpoints =====
+@app.get("/api/admin/questions/stats")
+async def get_question_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get statistics about questions in the database"""
+    try:
+        total = db.query(QuestionDB).count()
+        
+        # Count by category
+        categories = db.query(
+            QuestionDB.category, 
+            func.count(QuestionDB.id)
+        ).group_by(QuestionDB.category).all()
+        
+        by_category = {cat: count for cat, count in categories}
+        
+        # Get database type from connection string
+        db_type = "postgresql" if "postgresql" in str(engine.url) else "sqlite"
+        
+        return {
+            "total_questions": total,
+            "by_category": by_category,
+            "database_type": db_type,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/import-questions")
+async def import_questions(
+    source: str = "data_v3",
+    force: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Manually import questions from data_v3.json"""
+    try:
+        if force:
+            # Clear existing questions if force=true
+            db.query(QuestionDB).delete()
+            db.commit()
+            print("🗑️  Cleared existing questions")
+        
+        imported = load_questions_from_data_v3(db)
+        total = db.query(QuestionDB).count()
+        
+        return {
+            "success": True,
+            "imported": imported,
+            "total": total,
+            "message": f"✅ Successfully imported {imported} questions from {source}.json"
+        }
+    except Exception as e:
+        db.rollback()
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"❌ Error importing questions: {str(e)}"
+        }
+
+
+@app.delete("/api/admin/questions/clear")
+async def clear_questions(
+    confirm: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Clear all questions from database (requires confirmation)"""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Confirmation required")
+    
+    try:
+        count = db.query(QuestionDB).count()
+        db.query(QuestionDB).delete()
+        db.commit()
+        
+        return {
+            "success": True,
+            "deleted": count,
+            "message": f"✅ Deleted {count} questions"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===== Question Endpoints =====

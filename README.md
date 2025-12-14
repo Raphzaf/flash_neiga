@@ -349,6 +349,88 @@ This dual approach ensures maximum reliability and compatibility.
 ### Health
 - `GET /health` - Health check endpoint
 
+## 📚 Question Management
+
+### Automatic Import on First Startup
+
+The backend automatically loads questions from `data_v3.json` when it starts for the first time with an empty database.
+
+**Check Render logs to confirm:**
+```
+📚 Database is empty, loading questions from data_v3.json...
+   ⏳ Imported 50 questions...
+   ⏳ Imported 100 questions...
+   ...
+✅ Successfully loaded 1802 questions from data_v3.json!
+```
+
+**What happens on startup:**
+1. Database tables are created if they don't exist
+2. Admin user is created if it doesn't exist
+3. If the database has 0 questions, `data_v3.json` is automatically imported
+4. Progress is logged every 50 questions
+
+### Admin Panel Management
+
+The admin panel provides a complete database management interface:
+
+1. **Login as admin**: `admin@gmail.com` / `admin`
+2. **Navigate to** `/admin`
+3. **Select** "Base de données" (Database) tab
+
+**Features:**
+- **View Statistics**: See total questions and breakdown by category
+- **Import Questions**: Manually import questions from `data_v3.json`
+- **Refresh Statistics**: Update the statistics display
+- **Clear Database**: Delete all questions (with confirmation)
+
+### API Endpoints
+
+Admin endpoints for programmatic access (requires authentication):
+
+- `GET /api/admin/questions/stats` - Get database statistics
+  ```json
+  {
+    "total_questions": 1802,
+    "by_category": {
+      "Code de la route": 450,
+      "Signalisation": 320,
+      "...": "..."
+    },
+    "database_type": "postgresql",
+    "timestamp": "2025-12-14T00:00:00.000000"
+  }
+  ```
+
+- `POST /api/admin/import-questions` - Manually import questions
+  ```bash
+  curl -X POST https://your-backend.onrender.com/api/admin/import-questions \
+    -H "Authorization: Bearer YOUR_TOKEN" \
+    -d '{"source": "data_v3", "force": false}'
+  ```
+
+- `DELETE /api/admin/questions/clear` - Clear all questions (requires confirmation)
+  ```bash
+  curl -X DELETE "https://your-backend.onrender.com/api/admin/questions/clear?confirm=true" \
+    -H "Authorization: Bearer YOUR_TOKEN"
+  ```
+
+- `GET /api/questions?category=code` - Get questions by category (public endpoint)
+
+### Troubleshooting
+
+**No questions showing in exam/training mode:**
+1. Check Render logs for import confirmation
+2. Use admin panel to view statistics
+3. Manually trigger import via admin panel
+4. Verify `data_v3.json` exists in the repository
+
+**Import not working:**
+1. Ensure you're logged in as admin
+2. Check browser console for errors
+3. Verify backend logs in Render dashboard
+4. Try clearing and re-importing
+
 ## 🔐 Security
 
 - Passwords are hashed using bcrypt

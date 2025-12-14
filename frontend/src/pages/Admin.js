@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -24,6 +24,61 @@ export default function Admin() {
     const [sCategory, setSCategory] = useState('Danger');
     const [sDesc, setSDesc] = useState('');
     const [sImage, setSImage] = useState('');
+
+    // Database management state
+    const [stats, setStats] = useState({
+        total_questions: 0,
+        by_category: {},
+        database_type: ''
+    });
+    const [isLoadingStats, setIsLoadingStats] = useState(false);
+
+    // Fetch stats on component mount
+    useEffect(() => {
+        fetchStats();
+    }, []);
+
+    const fetchStats = async () => {
+        setIsLoadingStats(true);
+        try {
+            const response = await axios.get('/api/admin/questions/stats');
+            setStats(response.data);
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+            toast.error('Error fetching statistics');
+        } finally {
+            setIsLoadingStats(false);
+        }
+    };
+
+    const handleImportQuestions = async () => {
+        if (!window.confirm('Import questions from data_v3.json?')) return;
+        
+        try {
+            const response = await axios.post('/api/admin/import-questions', {
+                source: 'data_v3',
+                force: false
+            });
+            toast.success(response.data.message);
+            fetchStats();
+        } catch (error) {
+            toast.error('Error importing questions: ' + (error.response?.data?.message || error.message));
+        }
+    };
+
+    const handleClearDatabase = async () => {
+        if (!window.confirm('⚠️  Are you sure you want to delete ALL questions? This cannot be undone!')) return;
+        
+        try {
+            const response = await axios.delete('/api/admin/questions/clear', {
+                params: { confirm: true }
+            });
+            toast.success(response.data.message);
+            fetchStats();
+        } catch (error) {
+            toast.error('Error clearing database: ' + (error.response?.data?.detail || error.message));
+        }
+    };
 
     const handleOptionChange = (index, field, value) => {
         const newOptions = [...options];
@@ -81,11 +136,70 @@ export default function Admin() {
         <div className="max-w-4xl mx-auto p-6 min-h-screen">
             <h1 className="text-3xl font-bold mb-8">Administration (CMS)</h1>
 
-            <Tabs defaultValue="question">
-                <TabsList className="grid w-full grid-cols-2 mb-8">
+            <Tabs defaultValue="database">
+                <TabsList className="grid w-full grid-cols-3 mb-8">
+                    <TabsTrigger value="database">Base de données</TabsTrigger>
                     <TabsTrigger value="question">Ajouter Question</TabsTrigger>
                     <TabsTrigger value="sign">Ajouter Panneau</TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="database">
+                    <Card>
+                        <CardHeader><CardTitle>📊 Gestion de la base de données</CardTitle></CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="border p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
+                                <h3 className="text-lg font-semibold mb-4">Statistiques des questions</h3>
+                                {isLoadingStats ? (
+                                    <p>Chargement...</p>
+                                ) : (
+                                    <>
+                                        <div className="space-y-2">
+                                            <p><strong>Total de questions:</strong> {stats.total_questions}</p>
+                                            <p><strong>Base de données:</strong> {stats.database_type}</p>
+                                        </div>
+                                        
+                                        {Object.keys(stats.by_category).length > 0 && (
+                                            <div className="mt-4">
+                                                <h4 className="font-medium mb-2">Par catégorie:</h4>
+                                                <ul className="space-y-1 pl-4">
+                                                    {Object.entries(stats.by_category).map(([category, count]) => (
+                                                        <li key={category}>
+                                                            <strong>{category}:</strong> {count} questions
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                            
+                            <div className="space-y-3">
+                                <Button 
+                                    onClick={handleImportQuestions} 
+                                    className="w-full"
+                                    variant="default"
+                                >
+                                    📥 Importer les questions depuis data_v3.json
+                                </Button>
+                                <Button 
+                                    onClick={fetchStats} 
+                                    className="w-full"
+                                    variant="outline"
+                                >
+                                    🔄 Actualiser les statistiques
+                                </Button>
+                                <Button 
+                                    onClick={handleClearDatabase} 
+                                    className="w-full"
+                                    variant="destructive"
+                                >
+                                    🗑️ Effacer toutes les questions
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                 <TabsContent value="question">
                     <Card>
