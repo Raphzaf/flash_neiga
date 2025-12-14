@@ -41,9 +41,16 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Flash Neiga API")
 
 # CORS - must be first middleware
+# Allow all origins for now, including Netlify frontend
+allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+if allowed_origins == "*":
+    origins = ["*"]
+else:
+    origins = [origin.strip() for origin in allowed_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,6 +77,17 @@ async def add_cors_headers(request, call_next):
     response.headers.setdefault("Access-Control-Allow-Methods", "*")
     response.headers.setdefault("Access-Control-Allow-Headers", "*")
     return response
+
+
+# ===== Health Check Endpoint =====
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render and monitoring services"""
+    return {
+        "status": "healthy",
+        "service": "flash-neiga-backend",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 
 # ===== Init Tables =====
@@ -858,4 +876,5 @@ async def get_stats_details(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
