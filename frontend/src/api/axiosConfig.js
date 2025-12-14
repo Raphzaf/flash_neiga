@@ -1,15 +1,25 @@
 import axios from 'axios';
 
-// Get backend URL from environment variable
-// Fallback to localhost for local development
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+// Determine backend URL based on environment
+const getBackendURL = () => {
+  // In production (Netlify), use relative paths (proxy handles it)
+  if (process.env.NODE_ENV === 'production') {
+    return ''; // Empty string = relative paths, proxy handles routing
+  }
+  
+  // In development, use env var or localhost
+  return process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+};
+
+const BACKEND_URL = getBackendURL();
 
 // Configure axios defaults
 axios.defaults.baseURL = BACKEND_URL;
+axios.defaults.withCredentials = true; // Important for cookies/auth
 
-// Log the backend URL in development
+// Log configuration in development
 if (process.env.NODE_ENV === 'development') {
-  console.log('🔗 Backend URL:', BACKEND_URL);
+  console.log('🔗 Backend URL:', BACKEND_URL || 'Using relative paths (proxy)');
 }
 
 // Add request interceptor to automatically include Authorization token
@@ -24,14 +34,13 @@ axios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Add response interceptor for better error handling
+// Better error handling
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid - remove it to prevent retry with bad token
-      console.warn('Unauthorized request - token may be invalid or expired');
       localStorage.removeItem('token');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
