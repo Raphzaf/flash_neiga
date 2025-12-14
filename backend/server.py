@@ -40,18 +40,25 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Flash Neiga API")
 
-# CORS - must be first middleware
-# Allow all origins for now, including Netlify frontend
-allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
-if allowed_origins == "*":
-    origins = ["*"]
+# CORS Configuration
+# Allow requests from Netlify and local development
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    # Use environment variable if set
+    origins = [origin.strip() for origin in allowed_origins_env.split(",")]
 else:
-    origins = [origin.strip() for origin in allowed_origins.split(",")]
+    # Default origins for development and Netlify deployments
+    origins = [
+        "http://localhost:3000",           # Local React dev server
+        "http://localhost:8000",           # Local backend
+        "https://*.netlify.app",           # All Netlify deployments (including previews)
+        "https://flash-neiga.netlify.app", # Production Netlify (update with actual URL)
+    ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=False,
+    allow_credentials=True,  # Important for cookies/auth tokens
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -68,12 +75,34 @@ except Exception:
     # Ignore if column already exists or table missing; created by seed scripts
     pass
 
-# Extra safety: always attach CORS headers
+# Extra safety: always attach CORS headers for wildcard support
 @app.middleware("http")
 async def add_cors_headers(request, call_next):
     response = await call_next(request)
-    # If not already set by CORSMiddleware, attach permissive headers
-    response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    # Only add fallback headers if not already set by CORSMiddleware
+    # Note: When allow_credentials=True, we can't use wildcard origins
+    if "Access-Control-Allow-Origin" not in response.headers:
+        origin = request.headers.get("origin", "")
+        # Check if origin matches allowed patterns
+        if origin:
+            for allowed in origins:
+                # Exact match
+                if origin == allowed:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                    break
+                # Wildcard subdomain match (e.g., https://*.netlify.app)
+                elif allowed.startswith("https://*."):
+                    domain_suffix = allowed[10:]  # Remove "https://*."
+                    # Check if origin ends with the domain and has proper structure
+                    if origin.startswith("https://") and origin.endswith("." + domain_suffix):
+                        response.headers["Access-Control-Allow-Origin"] = origin
+                        response.headers["Access-Control-Allow-Credentials"] = "true"
+                        break
+                # Full wildcard (not recommended with credentials but supported)
+                elif allowed == "*":
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    break
     response.headers.setdefault("Access-Control-Allow-Methods", "*")
     response.headers.setdefault("Access-Control-Allow-Headers", "*")
     return response

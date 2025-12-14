@@ -88,35 +88,70 @@ The backend automatically detects the environment and uses the appropriate datab
 
 ### Frontend Deployment on Netlify
 
-The frontend can be deployed on Netlify or any static hosting service.
+The frontend is deployed on Netlify using a **dual approach** (CORS + Proxy) for maximum reliability and security.
+
+#### How it Works
+
+This setup uses **two layers of connection handling**:
+
+1. **Netlify Proxy** (Primary): API requests to `/api/*` are proxied through Netlify to Render
+   - Avoids CORS issues entirely (same-origin requests)
+   - Configured in `netlify.toml`
+   - Frontend uses relative paths in production
+
+2. **CORS Headers** (Backup): Backend explicitly allows Netlify origins
+   - Configured in `backend/server.py`
+   - Provides fallback if proxy has issues
+   - Supports development with localhost
+
+**Request Flow:**
+```
+Development:  http://localhost:3000 → http://localhost:8000
+Production:   https://app.netlify.app → /api/* → Netlify Proxy → https://backend.onrender.com
+```
 
 #### Prerequisites
 
 1. A Netlify account ([sign up here](https://www.netlify.com))
 2. Your backend deployed on Render and accessible via HTTPS
 3. GitHub repository connected to Netlify
+4. **Your Render backend URL** (e.g., `https://flash-neiga-backend.onrender.com`)
 
 #### Deployment Steps
 
-1. **Connect Repository to Netlify**
+1. **Update `netlify.toml` with your Render Backend URL**
+   
+   Before deploying, edit the `netlify.toml` file at the root of the repository:
+   
+   ```toml
+   [[redirects]]
+     from = "/api/*"
+     to = "https://YOUR-SERVICE-NAME.onrender.com/api/:splat"  # ← Update this
+     status = 200
+     force = true
+   ```
+   
+   Replace `YOUR-SERVICE-NAME` with your actual Render service name.
+
+2. **Connect Repository to Netlify**
    - Go to [Netlify Dashboard](https://app.netlify.com)
    - Click "Add new site" → "Import an existing project"
    - Connect your GitHub repository
    - Select the `flash_neiga` repository
 
-2. **Configure Build Settings**
-   - Build command: `cd frontend && npm run build`
-   - Publish directory: `frontend/build`
-   - Base directory: (leave empty)
+3. **Configure Build Settings**
+   
+   Netlify should auto-detect settings from `netlify.toml`, but verify:
+   - Base directory: `frontend`
+   - Build command: `npm run build`
+   - Publish directory: `build`
 
-3. **Set Environment Variables**
+4. **Set Environment Variables** (Optional)
    
-   In Netlify Dashboard → Site settings → Environment variables, add:
+   In Netlify Dashboard → Site settings → Environment variables:
    
-   **Required:**
-   - `REACT_APP_BACKEND_URL` - Your backend API URL (e.g., `https://flash-neiga-backend.onrender.com`)
-     - **Important**: This should be your Render backend URL, NOT localhost
-     - Example: `https://your-service-name.onrender.com`
+   **Note:** `REACT_APP_BACKEND_URL` is **NOT needed** for production (proxy handles it).
+   Only set it if you want to override the proxy for testing.
    
    **Optional (for Stripe payments):**
    - `REACT_APP_STRIPE_PUBLISHABLE_KEY` - Your Stripe publishable key (starts with `pk_test_` or `pk_live_`)
@@ -127,33 +162,60 @@ The frontend can be deployed on Netlify or any static hosting service.
    - `REACT_APP_STRIPE_PRICE_VIDEO_3M` - Stripe Price ID for 3-month video access
    - `REACT_APP_STRIPE_PRICING_TABLE_ID` - Stripe Pricing Table ID (starts with `prctbl_`)
 
-4. **Deploy**
+5. **Deploy**
    - Click "Deploy site"
    - Wait for build and deployment to complete
    - Your application will be available at: `https://your-site-name.netlify.app`
 
-5. **Update Backend CORS Settings**
+6. **Update Backend CORS Settings** (Optional but recommended)
    
-   After deployment, update your Render backend environment variables:
-   - Add your Netlify URL to `ALLOWED_ORIGINS`: `https://your-site-name.netlify.app,http://localhost:3000`
+   For extra security, update your Render backend environment variables:
+   - Set `ALLOWED_ORIGINS`: `https://your-site-name.netlify.app,http://localhost:3000`
+   
+   This ensures the backend explicitly allows your Netlify domain.
+
+#### How to Get Your Render Backend URL
+
+1. Go to [Render Dashboard](https://dashboard.render.com)
+2. Click on your `flash-neiga-backend` service
+3. Copy the URL at the top (e.g., `https://flash-neiga-backend.onrender.com`)
+4. Use this URL in `netlify.toml`
 
 #### Troubleshooting
 
 **Issue: "ERR_CONNECTION_REFUSED" or "Failed to fetch"**
-- ✅ Verify `REACT_APP_BACKEND_URL` is set correctly in Netlify environment variables
-- ✅ Ensure the backend URL uses HTTPS (not HTTP) for production
+- ✅ Verify `netlify.toml` has correct Render backend URL
 - ✅ Check that the backend is running: visit `https://your-backend.onrender.com/health`
-- ✅ Verify CORS is configured: add your Netlify URL to backend's `ALLOWED_ORIGINS`
-- ✅ Redeploy the frontend after changing environment variables (they only apply on build)
+- ✅ Ensure backend URL in `netlify.toml` includes `/api/:splat` at the end
+- ✅ Redeploy Netlify after updating `netlify.toml`
+- ✅ Check browser DevTools → Network tab for failed requests
+
+**Issue: CORS errors in production**
+- ✅ Verify `ALLOWED_ORIGINS` includes your Netlify URL in Render environment variables
+- ✅ Make sure backend URL in `netlify.toml` is correct
+- ✅ Check that backend has `allow_credentials=True` in CORS config
+- ✅ Redeploy backend after changing CORS settings
+
+**Issue: API requests returning 404**
+- ✅ Ensure API calls use `/api/...` paths (e.g., `/api/auth/login`)
+- ✅ Verify `netlify.toml` redirect rule is correct (should include `:splat`)
+- ✅ Check that backend routes start with `/api/`
 
 **Issue: Environment variables not working**
-- ✅ Make sure variable names start with `REACT_APP_` (required by Create React App)
+- ✅ Only Stripe variables need to be set in Netlify (no need for `REACT_APP_BACKEND_URL`)
 - ✅ Redeploy the site after adding/changing environment variables
-- ✅ Check browser console for the debug log: "🔗 Backend URL: ..." (only in development mode)
+- ✅ Variable names must start with `REACT_APP_` (required by Create React App)
 
 **Issue: 401 Unauthorized errors**
 - ✅ Clear browser localStorage and login again
 - ✅ Check that JWT token is being sent in requests (visible in Network tab)
+- ✅ Verify `withCredentials: true` is set in axios config
+
+**Issue: Works locally but not in production**
+- ✅ Check browser console for errors
+- ✅ Verify `NODE_ENV=production` triggers proxy usage in `axiosConfig.js`
+- ✅ Test the backend health endpoint: `https://your-site.netlify.app/api/health` (should proxy)
+- ✅ Compare Network tab requests between local and production
 
 ## 💻 Local Development
 
@@ -236,11 +298,28 @@ The backend supports both PostgreSQL (production) and SQLite (local development)
 
 ### CORS Configuration
 
-CORS is configured to allow requests from any origin by default. For production, set the `ALLOWED_ORIGINS` environment variable:
+The backend uses a **dual approach** for handling cross-origin requests:
+
+**Default Behavior:**
+- Allows `localhost:3000`, `localhost:8000`, and `*.netlify.app` domains
+- Configured in `backend/server.py`
+- Supports credentials (cookies, auth tokens)
+
+**Custom Configuration (Production):**
+
+Set the `ALLOWED_ORIGINS` environment variable in Render to explicitly allow your domains:
 
 ```bash
-ALLOWED_ORIGINS=https://your-frontend.netlify.app,https://your-custom-domain.com
+ALLOWED_ORIGINS=https://your-site.netlify.app,https://custom-domain.com,http://localhost:3000
 ```
+
+**How CORS Works with Netlify Proxy:**
+
+1. **Primary**: Netlify proxy makes requests same-origin (no CORS needed)
+2. **Fallback**: CORS headers allow direct requests if proxy fails
+3. **Development**: CORS allows localhost connections for local testing
+
+This dual approach ensures maximum reliability and compatibility.
 
 ## 📋 API Endpoints
 

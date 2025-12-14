@@ -1,0 +1,25 @@
+# Netlify Configuration for Flash Neiga Frontend
+# This file configures build settings and API proxying to avoid CORS issues
+
+# Build configuration
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "build"
+
+# API Proxy - redirect /api/* to Render backend
+# This avoids CORS issues by making requests appear same-origin
+# IMPORTANT: Update the backend URL with your actual Render service URL
+[[redirects]]
+  from = "/api/*"
+  to = "https://flash-neiga-backend.onrender.com/api/:splat"
+  status = 200
+  force = true
+  headers = {X-From = "Netlify"}
+
+# SPA fallback - serve index.html for all non-API routes
+# This ensures React Router works correctly for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
