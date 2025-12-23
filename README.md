@@ -217,6 +217,59 @@ Production:   https://app.netlify.app → /api/* → Netlify Proxy → https://b
 - ✅ Test the backend health endpoint: `https://your-site.netlify.app/api/health` (should proxy)
 - ✅ Compare Network tab requests between local and production
 
+## 🔐 Initial Setup - Create Admin User
+
+After deploying the backend to Render (or setting it up locally), you need to create an admin user to access the admin panel.
+
+### On Render:
+
+1. Go to your [Render Dashboard](https://dashboard.render.com)
+2. Select your backend service (`flash-neiga-backend`)
+3. Click on **Shell** in the left menu
+4. Run the following command:
+   ```bash
+   python create_admin.py
+   ```
+
+### Locally:
+
+If running locally, simply execute:
+```bash
+cd backend
+python create_admin.py
+```
+
+### Admin Credentials:
+
+- **Email**: `admin@gmail.com`
+- **Password**: `admin`
+
+⚠️ **IMPORTANT**: Change the admin password after first login for security!
+
+### Accessing Admin Panel:
+
+1. Go to your frontend URL (Netlify or http://localhost:3000)
+2. Login with the admin credentials
+3. Navigate to `/admin` to manage questions and signs
+
+### Resetting Admin Password:
+
+If you forget the admin password, you can reset it using:
+
+**On Render:**
+```bash
+# In the Render Shell
+python reset_admin.py
+```
+
+**Locally:**
+```bash
+cd backend
+python reset_admin.py
+```
+
+This will reset the password back to `admin`.
+
 ## 💻 Local Development
 
 ### Backend Setup
