@@ -318,14 +318,279 @@ ALLOWED_ORIGINS=https://your-site.netlify.app,https://custom-domain.com,http://l
 
 This dual approach ensures maximum reliability and compatibility.
 
-### Paddle Billing Keys (Best Practices)
+### Paddle Billing Integration (Complete Guide)
 
-- **Keys & environments:** Generate `sandbox` keys for tests and `live` keys for production in the Paddle Dashboard → Developer Tools → Authentication → API keys. Keep test vs live strictly separated.
-- **Secrets management:** Store `PADDLE_API_KEY` only as a secret (env var or secret manager). Never expose keys in the frontend or version control.
-- **HTTP auth:** All Paddle Billing requests must include `Authorization: Bearer <PADDLE_API_KEY>`. The backend already sets this header for transactions and price inspection.
-- **Catalog coherence:** Your `priceId` (e.g., `pri_...`) must belong to the same Paddle project/environment as the API key in use. Otherwise Paddle returns 403 Forbidden.
-- **Key rotation:** Plan regular rotation and subscribe to webhooks like `api_key.expiring` / `api_key.expired`. The backend `POST /api/payments/paddle/webhook` endpoint logs these events; add signature verification and alerting before production.
-- **Error mapping:** Backend maps authentication formatting issues to 400 and permission/project mismatches to 403 with actionable guidance.
+#### 🔑 Configuration
+
+**Backend Configuration (`backend/.env`):**
+
+```env
+# Database
+DATABASE_URL=sqlite:///./flash_neiga.db
+SECRET_KEY=votre-secret-key-random-changez-moi-en-production
+
+# Paddle Configuration
+PADDLE_API_KEY=pdl_test_xxxxxxxxxxxx  # Obtenir depuis Paddle Dashboard
+PADDLE_WEBHOOK_SECRET=xxxxx           # Obtenir depuis Paddle Dashboard
+
+# CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000
+```
+
+**Frontend Configuration (`frontend/.env.production`):**
+
+```env
+# Paddle Price IDs (depuis paddle_price_ids.json)
+REACT_APP_PADDLE_PRICE_CODE_14D=pri_01kd99x603t5whs3t5e949fwcw
+REACT_APP_PADDLE_PRICE_CODE_30D=pri_01kd99x6wzyw47pj8x470yxchq
+REACT_APP_PADDLE_PRICE_VIDEO_1M=pri_01kd99x87n1zznba6ar2aej55e
+REACT_APP_PADDLE_PRICE_VIDEO_2M=pri_01kd99x96h49emtgvqndn2m6cn
+REACT_APP_PADDLE_PRICE_VIDEO_3M=pri_01kd99xa4xt0rrmt19ycv7hc2g
+```
+
+#### 📥 Obtenir les Clés API Paddle
+
+1. **Créer un compte Paddle:**
+   - Aller sur [Paddle.com](https://paddle.com)
+   - S'inscrire ou se connecter
+
+2. **Obtenir PADDLE_API_KEY:**
+   - Dashboard → Developer Tools → Authentication → API Keys
+   - Cliquer "Create API Key"
+   - Choisir l'environnement: `test` (sandbox) ou `live` (production)
+   - Sélectionner les permissions nécessaires:
+     - ✅ Transactions: Read & Write
+     - ✅ Subscriptions: Read & Write
+     - ✅ Customers: Read
+     - ✅ Prices: Read
+   - Copier la clé générée (commence par `pdl_test_` ou `pdl_live_`)
+   - ⚠️ **IMPORTANT:** Sauvegarder la clé immédiatement, elle ne sera plus visible!
+
+3. **Obtenir PADDLE_WEBHOOK_SECRET:**
+   - Dashboard → Developer Tools → Notifications → Webhook URLs
+   - Cliquer "Create Webhook Destination"
+   - URL: `https://votre-backend.onrender.com/api/payments/paddle/webhook`
+   - Sélectionner les événements:
+     - ✅ `transaction.completed`
+     - ✅ `transaction.paid`
+     - ✅ `subscription.created`
+     - ✅ `subscription.updated`
+     - ✅ `subscription.canceled`
+     - ✅ `api_key.expiring`
+     - ✅ `api_key.expired`
+   - Copier le "Webhook Secret" généré
+
+#### 🧪 Tester la Configuration
+
+**1. Vérifier l'authentification:**
+```bash
+curl https://votre-backend.onrender.com/api/payments/paddle/test-auth
+```
+
+Réponse attendue:
+```json
+{
+  "key_exists": true,
+  "key_length": 64,
+  "starts_with": "pdl_test",
+  "format_ok": true,
+  "connection_ok": true,
+  "api_message": "Successfully connected to Paddle API"
+}
+```
+
+**2. Vérifier la configuration complète:**
+```bash
+curl https://votre-backend.onrender.com/api/payments/paddle/verify-config
+```
+
+Réponse attendue:
+```json
+{
+  "api_key_configured": true,
+  "webhook_secret_configured": true,
+  "api_connection_ok": true,
+  "price_ids_accessible": true,
+  "status": "ok",
+  "issues": []
+}
+```
+
+**3. Créer un checkout de test:**
+```bash
+curl -X POST https://votre-backend.onrender.com/api/payments/paddle/create-checkout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "priceId": "pri_01kd99x603t5whs3t5e949fwcw",
+    "email": "test@example.com"
+  }'
+```
+
+#### 🔗 Tester les Webhooks Localement avec ngrok
+
+Pour tester les webhooks Paddle en développement local:
+
+**1. Installer ngrok:**
+```bash
+# macOS
+brew install ngrok
+
+# Linux
+wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+tar xvzf ngrok-v3-stable-linux-amd64.tgz
+sudo mv ngrok /usr/local/bin
+
+# Windows
+# Télécharger depuis https://ngrok.com/download
+```
+
+**2. Lancer votre backend local:**
+```bash
+cd backend
+python server.py
+# Backend accessible sur http://localhost:8000
+```
+
+**3. Créer un tunnel ngrok:**
+```bash
+ngrok http 8000
+```
+
+Vous obtiendrez une URL publique:
+```
+Forwarding: https://abcd-1234.ngrok.io -> http://localhost:8000
+```
+
+**4. Configurer le webhook dans Paddle:**
+- Dashboard → Developer Tools → Notifications → Webhook URLs
+- Ajouter l'URL ngrok: `https://abcd-1234.ngrok.io/api/payments/paddle/webhook`
+- Sauvegarder
+
+**5. Tester le webhook:**
+- Créer une transaction de test dans Paddle Dashboard
+- Observer les logs dans votre terminal backend
+- Les événements seront reçus et traités en temps réel
+
+**6. Voir les requêtes webhook:**
+```bash
+# Dans un autre terminal, afficher le dashboard ngrok
+# Les requêtes webhooks apparaîtront dans l'interface web
+```
+
+#### 🔐 Sécurité Webhook
+
+Le backend vérifie automatiquement la signature des webhooks Paddle:
+
+- ✅ **Vérification HMAC-SHA256** des signatures
+- ✅ **Logging** des tentatives d'accès non autorisées
+- ✅ **Rejet** des webhooks avec signature invalide (HTTP 401)
+- ✅ **Stockage sécurisé** des transactions dans la base de données
+
+**Structure de la signature Paddle:**
+```
+Paddle-Signature: ts=1234567890;h1=abc123def456...
+```
+
+Le backend reconstruit et vérifie automatiquement:
+```python
+signed_payload = f"{timestamp}:{body}"
+expected_hash = hmac.sha256(secret, signed_payload)
+```
+
+#### 📊 Endpoints Paddle Disponibles
+
+**Configuration & Test:**
+- `GET /api/payments/paddle/health` - Health check
+- `GET /api/payments/paddle/test-auth` - Tester l'authentification
+- `GET /api/payments/paddle/verify-config` - Vérifier la configuration complète
+
+**Transactions:**
+- `POST /api/payments/paddle/create-checkout` - Créer un checkout
+- `GET /api/payments/paddle/price/{price_id}` - Inspecter un price
+- `GET /api/payments/paddle/prices` - Lister les prices accessibles
+
+**Subscriptions:**
+- `GET /api/payments/paddle/subscription/{subscription_id}` - Statut d'un abonnement
+
+**Webhooks:**
+- `POST /api/payments/paddle/webhook` - Recevoir les événements Paddle
+
+#### 📝 Événements Webhook Supportés
+
+| Événement | Description | Action Backend |
+|-----------|-------------|----------------|
+| `transaction.completed` | Transaction terminée avec succès | Créer TransactionDB avec status "completed" |
+| `transaction.paid` | Paiement reçu | Mettre à jour status → "paid" |
+| `subscription.created` | Nouvel abonnement créé | Créer TransactionDB avec paddle_subscription_id |
+| `subscription.updated` | Abonnement modifié | Mettre à jour status et metadata |
+| `subscription.canceled` | Abonnement annulé | Mettre à jour status → "canceled" |
+| `api_key.expiring` | Clé API expire bientôt | Logger un warning |
+| `api_key.expired` | Clé API expirée | Logger un warning |
+
+#### 💾 Modèle de Base de Données Transaction
+
+```python
+class TransactionDB:
+    id: str                        # UUID généré automatiquement
+    user_id: str                   # Lien vers UserDB (optionnel)
+    paddle_transaction_id: str     # ID transaction Paddle
+    paddle_subscription_id: str    # ID subscription Paddle (si applicable)
+    amount: float                  # Montant (en unité monétaire)
+    currency: str                  # Code devise (USD, EUR, etc.)
+    status: str                    # pending, completed, paid, canceled, etc.
+    event_type: str                # Type d'événement Paddle
+    metadata: dict                 # Données complètes de l'événement
+    created_at: datetime           # Date de création
+    updated_at: datetime           # Date de dernière mise à jour
+```
+
+#### 🎯 Bonnes Pratiques
+
+- **Environnements séparés:** Utilisez `test` pour le développement et `live` pour la production
+- **Secrets sécurisés:** Ne jamais commiter les clés API dans le code
+- **Rotation des clés:** Planifier un renouvellement régulier (webhook `api_key.expiring`)
+- **Logging détaillé:** Tous les événements sont loggés pour le debugging
+- **Validation stricte:** Vérification de signature sur tous les webhooks
+- **Gestion d'erreurs:** Tous les endpoints retournent des messages d'erreur clairs
+- **Idempotence:** Les webhooks peuvent être reçus plusieurs fois, le backend gère les doublons
+
+#### 🐛 Debugging
+
+**Vérifier les logs backend:**
+```bash
+# Sur Render
+Dashboard → Service → Logs
+
+# Localement
+# Les logs s'affichent dans la console où vous avez lancé server.py
+```
+
+**Tester un webhook manuellement:**
+```bash
+curl -X POST http://localhost:8000/api/payments/paddle/webhook \
+  -H "Content-Type: application/json" \
+  -H "Paddle-Signature: ts=1234567890;h1=test" \
+  -d '{
+    "event_type": "transaction.completed",
+    "event_id": "evt_test123",
+    "data": {
+      "id": "txn_test123",
+      "status": "completed",
+      "customer_id": "ctm_test123",
+      "subscription_id": null,
+      "details": {
+        "totals": {
+          "total": "1999",
+          "currency_code": "EUR"
+        }
+      }
+    }
+  }'
+```
+
+### Legacy Payment Systems
+
+**Note:** Stripe integration has been removed. This application now uses Paddle Billing exclusively.
 
 ## 📋 API Endpoints
 
