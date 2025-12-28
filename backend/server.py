@@ -19,7 +19,7 @@ import json
 # Stripe integration removed
 from database import engine, SessionLocal, Base, get_db
 from models import (
-    UserDB, QuestionDB, TrafficSignDB, ExamSessionDB,
+    UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
     UserCreate, User, Question, QuestionCreate, QuestionOption,
     TrafficSign, TrafficSignCreate,
     ExamSession, SubmitAnswerRequest, ExamResult,

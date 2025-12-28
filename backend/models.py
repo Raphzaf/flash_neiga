@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
@@ -61,6 +61,23 @@ class ExamSessionDB(Base):
     passed = Column(Boolean, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+
+class TransactionDB(Base):
+    """Modèle pour enregistrer les transactions Paddle"""
+    __tablename__ = "transactions"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True, nullable=True)  # Lien vers UserDB
+    paddle_transaction_id = Column(String, unique=True, index=True, nullable=True)
+    paddle_subscription_id = Column(String, index=True, nullable=True)
+    amount = Column(Float, nullable=True)
+    currency = Column(String, nullable=True)
+    status = Column(String, index=True)  # pending, completed, failed, refunded, etc.
+    event_type = Column(String, nullable=True)  # transaction.completed, subscription.created, etc.
+    event_data = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # ===== Pydantic Models =====
@@ -148,3 +165,31 @@ class TrainingResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class Transaction(BaseModel):
+    """Modèle Pydantic pour les transactions"""
+    id: str
+    user_id: Optional[str] = None
+    paddle_transaction_id: Optional[str] = None
+    paddle_subscription_id: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    status: str
+    event_type: Optional[str] = None
+    event_data: Optional[dict] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TransactionCreate(BaseModel):
+    """Modèle pour créer une transaction"""
+    user_id: Optional[str] = None
+    paddle_transaction_id: Optional[str] = None
+    paddle_subscription_id: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    status: str
+    event_type: Optional[str] = None
+    event_data: Optional[dict] = None
+
