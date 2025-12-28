@@ -75,7 +75,7 @@ class TransactionDB(Base):
     currency = Column(String, nullable=True)
     status = Column(String, index=True)  # pending, completed, failed, refunded, etc.
     event_type = Column(String, nullable=True)  # transaction.completed, subscription.created, etc.
-    metadata = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
+    event_data = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -177,7 +177,7 @@ class Transaction(BaseModel):
     currency: Optional[str] = None
     status: str
     event_type: Optional[str] = None
-    metadata: Optional[dict] = None
+    event_data: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -191,5 +191,5 @@ class TransactionCreate(BaseModel):
     currency: Optional[str] = None
     status: str
     event_type: Optional[str] = None
-    metadata: Optional[dict] = None
+    event_data: Optional[dict] = None
 

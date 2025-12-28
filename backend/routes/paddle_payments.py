@@ -385,7 +385,7 @@ async def paddle_webhook(
                 currency=currency,
                 status="completed",
                 event_type=event_type,
-                metadata=data
+                event_data=data
             )
             db.add(transaction)
             db.commit()
@@ -412,7 +412,7 @@ async def paddle_webhook(
                     paddle_transaction_id=transaction_id,
                     status="paid",
                     event_type=event_type,
-                    metadata=data
+                    event_data=data
                 )
                 db.add(transaction)
                 db.commit()
@@ -432,7 +432,7 @@ async def paddle_webhook(
                 user_id=customer_id,
                 status=status,
                 event_type=event_type,
-                metadata=data
+                event_data=data
             )
             db.add(transaction)
             db.commit()
