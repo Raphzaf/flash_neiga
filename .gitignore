@@ -85,7 +85,9 @@ android-sdk/ -e
 # Environment files
 *.env
 *.env.*
+!*.env.example
 !frontend/.env
+!frontend/.env.production
 frontend/build/
 backend/__pycache__/
 backend/flash_neiga.db
