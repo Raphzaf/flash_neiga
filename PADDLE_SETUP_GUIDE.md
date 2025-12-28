@@ -10,6 +10,7 @@ Les price IDs actuels dans `paddle_price_ids.json` ne correspondent pas à la cl
 
 ### Étape 1: Vérifier la Configuration Actuelle
 
+**Windows (PowerShell):**
 ```powershell
 # Démarrer le backend
 cd backend
@@ -18,6 +19,17 @@ python server.py
 # Dans un autre terminal, tester la configuration
 cd ..
 .\test-paddle.ps1
+```
+
+**Linux/Mac (Bash):**
+```bash
+# Démarrer le backend
+cd backend
+python server.py
+
+# Dans un autre terminal, tester la configuration
+cd ..
+./test-paddle.sh
 ```
 
 **Résultat attendu:**
@@ -102,12 +114,22 @@ Suivez les instructions à l'écran pour entrer les nouveaux Price IDs.
 
 ### Étape 4: Tester les Checkouts
 
+**Windows (PowerShell):**
 ```powershell
 # Tester avec le premier prix
 .\test-paddle-checkout.ps1 pri_01xxxxxxxxxxxxx
 
 # Tester avec les autres prix
 .\test-paddle-checkout.ps1 pri_01yyyyyyyyyyyyy
+```
+
+**Linux/Mac (Bash):**
+```bash
+# Tester avec le premier prix
+./test-paddle-checkout.sh pri_01xxxxxxxxxxxxx
+
+# Tester avec les autres prix
+./test-paddle-checkout.sh pri_01yyyyyyyyyyyyy
 ```
 
 **Résultat attendu:**
@@ -140,17 +162,17 @@ Une fois les checkouts fonctionnels, configurez le webhook:
 ## 🧪 Tests de Bout en Bout
 
 ### Test 1: Configuration
-```powershell
-.\test-paddle.ps1
-```
+**Windows:** `.\test-paddle.ps1`  
+**Linux/Mac:** `./test-paddle.sh`
+
 - ✅ Configuration OK
 - ✅ Connexion API OK
 - ✅ Prix listés
 
 ### Test 2: Création de Checkout
-```powershell
-.\test-paddle-checkout.ps1 <PRICE_ID>
-```
+**Windows:** `.\test-paddle-checkout.ps1 <PRICE_ID>`  
+**Linux/Mac:** `./test-paddle-checkout.sh <PRICE_ID>`
+
 - ✅ Checkout créé
 - ✅ URL générée
 

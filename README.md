@@ -6,10 +6,16 @@ A comprehensive web application for preparing for driving theory exams, featurin
 
 **⚠️ Important:** Si vous avez des erreurs 403 avec Paddle, consultez le [Guide de Configuration Paddle](./PADDLE_SETUP_GUIDE.md) pour résoudre les problèmes de clés API et price IDs.
 
-**Scripts PowerShell disponibles:**
+**Scripts de test disponibles:**
+
+Windows (PowerShell):
 - `.\test-paddle.ps1` - Vérifier la configuration Paddle
 - `.\test-paddle-checkout.ps1 <PRICE_ID>` - Tester un checkout
 - `.\update-paddle-prices.ps1` - Mettre à jour les price IDs
+
+Linux/Mac (Bash):
+- `./test-paddle.sh` - Vérifier la configuration Paddle
+- `./test-paddle-checkout.sh <PRICE_ID>` - Tester un checkout
 
 ## 🏗️ Project Structure
 
