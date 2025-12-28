@@ -2,6 +2,15 @@
 
 A comprehensive web application for preparing for driving theory exams, featuring a React frontend and FastAPI backend.
 
+## 🔥 Quick Start - Paddle Integration
+
+**⚠️ Important:** Si vous avez des erreurs 403 avec Paddle, consultez le [Guide de Configuration Paddle](./PADDLE_SETUP_GUIDE.md) pour résoudre les problèmes de clés API et price IDs.
+
+**Scripts PowerShell disponibles:**
+- `.\test-paddle.ps1` - Vérifier la configuration Paddle
+- `.\test-paddle-checkout.ps1 <PRICE_ID>` - Tester un checkout
+- `.\update-paddle-prices.ps1` - Mettre à jour les price IDs
+
 ## 🏗️ Project Structure
 
 ```

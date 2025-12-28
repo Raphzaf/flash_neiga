@@ -403,7 +403,7 @@ async def paddle_webhook(
             
             if existing:
                 existing.status = "paid"
-                existing.metadata = data
+                existing.event_data = data
                 db.commit()
                 logger.info(f"Transaction status updated to 'paid': {existing.id}")
             else:
@@ -452,7 +452,7 @@ async def paddle_webhook(
             
             if existing:
                 existing.status = status
-                existing.metadata = data
+                existing.event_data = data
                 db.commit()
                 logger.info(f"Subscription updated in database: {existing.id}")
         
@@ -469,7 +469,7 @@ async def paddle_webhook(
             
             if existing:
                 existing.status = "canceled"
-                existing.metadata = data
+                existing.event_data = data
                 db.commit()
                 logger.info(f"Subscription marked as canceled: {existing.id}")
         
