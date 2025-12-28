@@ -1,10 +1,14 @@
+# backend/server.py
+
 from fastapi import FastAPI, HTTPException, Depends, status, Header
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, text, func
 from datetime import datetime, timedelta, timezone
 import os
+from dotenv import load_dotenv
 import logging
 from pathlib import Path
 from typing import List, Optional
@@ -12,8 +16,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 import uuid
 import json
-import stripe
-
+# Stripe integration removed
 from database import engine, SessionLocal, Base, get_db
 from models import (
     UserDB, QuestionDB, TrafficSignDB, ExamSessionDB,
@@ -23,6 +26,7 @@ from models import (
     TrainingAnswerRequest, TrainingResponse,
     TokenResponse
 )
+from routes.paddle_payments import router as paddle_router
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
@@ -39,74 +43,34 @@ security = HTTPBearer()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
 app = FastAPI(title="Flash Neiga API")
 
 # CORS Configuration
-# Allow requests from Netlify and local development
 allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "")
 if allowed_origins_env:
-    # Use environment variable if set
     origins = [origin.strip() for origin in allowed_origins_env.split(",")]
 else:
-    # Default origins for development and Netlify deployments
     origins = [
-        "http://localhost:3000",           # Local React dev server
-        "http://localhost:8000",           # Local backend
-        "https://*.netlify.app",           # All Netlify deployments (including previews)
-        "https://flash-neiga.netlify.app", # Production Netlify (update with actual URL)
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:8000",
+        "https://*.netlify.app",
+        "https://flash-neiga.netlify.app",
     ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,  # Important for cookies/auth tokens
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Lightweight runtime migration to add missing columns if needed (SQLite)
-try:
-    with engine.connect() as conn:
-        # Add question_ids column to exam_sessions if it doesn't exist
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS __schema_probe__ (id TEXT);
-        """))
-        conn.execute(text("ALTER TABLE exam_sessions ADD COLUMN question_ids JSON"))
-except Exception:
-    # Ignore if column already exists or table missing; created by seed scripts
-    pass
-
-# Extra safety: always attach CORS headers for wildcard support
-@app.middleware("http")
-async def add_cors_headers(request, call_next):
-    response = await call_next(request)
-    # Only add fallback headers if not already set by CORSMiddleware
-    # Note: When allow_credentials=True, we can't use wildcard origins
-    if "Access-Control-Allow-Origin" not in response.headers:
-        origin = request.headers.get("origin", "")
-        # Check if origin matches allowed patterns
-        if origin:
-            for allowed in origins:
-                # Exact match
-                if origin == allowed:
-                    response.headers["Access-Control-Allow-Origin"] = origin
-                    response.headers["Access-Control-Allow-Credentials"] = "true"
-                    break
-                # Wildcard subdomain match (e.g., https://*.netlify.app)
-                elif allowed.startswith("https://*."):
-                    domain_suffix = allowed[10:]  # Remove "https://*."
-                    # Check if origin ends with the domain and has proper structure
-                    if origin.startswith("https://") and origin.endswith("." + domain_suffix):
-                        response.headers["Access-Control-Allow-Origin"] = origin
-                        response.headers["Access-Control-Allow-Credentials"] = "true"
-                        break
-                # Full wildcard (not recommended with credentials but supported)
-                elif allowed == "*":
-                    response.headers["Access-Control-Allow-Origin"] = origin
-                    break
-    response.headers.setdefault("Access-Control-Allow-Methods", "*")
-    response.headers.setdefault("Access-Control-Allow-Headers", "*")
-    return response
+# Include external routers
+app.include_router(paddle_router)
 
 
 # ===== Health Check Endpoint =====
@@ -283,7 +247,7 @@ async def startup():
             admin_user = UserDB(
                 id=str(uuid.uuid4()),
                 email=admin_email,
-                hashed_password=pwd_context.hash("admin")
+                hashed_password=pwd_context.hash("admin.")
             )
             
             db.add(admin_user)
@@ -292,7 +256,7 @@ async def startup():
             
             print(f"✅ Admin user created successfully!")
             print(f"   Email: {admin_email}")
-            print(f"   Password: admin")
+            print(f"   Password: admin.")
             print(f"   User ID: {admin_user.id}")
             print("⚠️  IMPORTANT: Change the admin password after first login!")
         
@@ -381,92 +345,9 @@ async def startup():
             db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
 
-    # ===== Payments (Stripe) =====
-    STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
-    STRIPE_PRICE_LOOKUP = {
-        # Map plan keys to Stripe Price lookup_keys configured in your Stripe Dashboard
-        # e.g., "code_14d": "code_14d",
-        # Update these to match your actual Stripe Price lookup keys
-        "code_14d": "code_14d",
-        "code_30d": "code_30d",
-        "code_week": "code_week",
-        "video_1m": "video_1m",
-        "video_2m": "video_2m",
-        "video_3m": "video_3m",
-    }
+    # Stripe integration removed
 
-    if STRIPE_SECRET_KEY:
-        stripe.api_key = STRIPE_SECRET_KEY
-
-    @app.post("/api/payments/create-checkout-session")
-    async def create_checkout_session(payload: dict):
-        if not STRIPE_SECRET_KEY:
-            raise HTTPException(status_code=500, detail="Stripe not configured: set STRIPE_SECRET_KEY env var")
-        plan_key = payload.get("plan_key")
-        explicit_price_id = payload.get("price_id")
-        if not explicit_price_id and (not plan_key or plan_key not in STRIPE_PRICE_LOOKUP):
-            raise HTTPException(status_code=400, detail=f"Provide 'price_id' or a valid 'plan_key'. Received plan_key='{plan_key}'.")
-        try:
-            price_id = explicit_price_id
-            if not price_id:
-                price_list = stripe.Price.list(
-                    lookup_keys=[STRIPE_PRICE_LOOKUP[plan_key]], expand=["data.product"]
-                )
-                if not price_list.data:
-                    raise HTTPException(status_code=400, detail="Stripe price not found for lookup_key")
-                price_id = price_list.data[0].id
-            session = stripe.checkout.Session.create(
-                mode="subscription",
-                line_items=[{"quantity": 1, "price": price_id}],
-                success_url="http://localhost:3000/pricing/success?session_id={CHECKOUT_SESSION_ID}",
-                cancel_url="http://localhost:3000/pricing/cancel",
-            )
-            return {"url": session.url}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.post("/api/payments/create-portal-session")
-    async def create_portal_session(payload: dict):
-        if not STRIPE_SECRET_KEY:
-            raise HTTPException(status_code=500, detail="Stripe not configured")
-        checkout_session_id = payload.get("session_id")
-        if not checkout_session_id:
-            raise HTTPException(status_code=400, detail="Missing session_id")
-        try:
-            checkout_session = stripe.checkout.Session.retrieve(checkout_session_id)
-            session = stripe.billing_portal.Session.create(
-                customer=checkout_session.customer,
-                return_url="http://localhost:3000/pricing",
-            )
-            return {"url": session.url}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.get("/api/payments/health")
-    async def payments_health():
-        return {
-            "stripe_configured": bool(STRIPE_SECRET_KEY),
-            "configured_lookup_keys": list(STRIPE_PRICE_LOOKUP.values()),
-        }
-
-    @app.get("/api/payments/validate-session")
-    async def validate_checkout_session(session_id: str):
-        if not STRIPE_SECRET_KEY:
-            return {"valid": False, "reason": "stripe_not_configured"}
-        if not session_id:
-            return {"valid": False, "reason": "missing_session_id"}
-        try:
-            cs = stripe.checkout.Session.retrieve(session_id)
-            valid = (cs.get("payment_status") == "paid") or (cs.get("status") == "complete")
-            customer_email = (cs.get("customer_details") or {}).get("email")
-            return {
-                "valid": bool(valid),
-                "status": cs.get("status"),
-                "payment_status": cs.get("payment_status"),
-                "customer_email": customer_email
-            }
-        except Exception as e:
-            return {"valid": False, "reason": "error", "error": str(e)}
+    # Payments endpoints moved to routes.paddle_payments to avoid duplication
 
     @app.post("/api/admin/import_file")
     async def import_file(payload: dict, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):
@@ -607,6 +488,24 @@ async def get_question_stats(current_user: User = Depends(get_current_user), db:
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/reset-admin-password")
+async def reset_admin_password(payload: dict, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):
+    """Reset the admin password to a provided value (default 'admin').
+    Secured by ADMIN_TOKEN env var if set.
+    Payload: { "email": "admin@gmail.com", "new_password": "admin" }
+    """
+    if os.environ.get("ADMIN_TOKEN") and x_admin_token != os.environ.get("ADMIN_TOKEN"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    email = payload.get("email") or "admin@gmail.com"
+    new_password = payload.get("new_password") or "admin."
+    user = db.query(UserDB).filter(UserDB.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin user not found")
+    user.hashed_password = hash_password(new_password)
+    db.add(user)
+    db.commit()
+    return {"status": "ok", "email": email}
 
 
 @app.post("/api/admin/import-questions")

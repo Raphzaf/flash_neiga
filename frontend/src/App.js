@@ -11,6 +11,7 @@ import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
+import SubscriptionSuccess from './pages/SubscriptionSuccess';
 import { Toaster } from "sonner";
 import axios from 'axios';
 
@@ -28,19 +29,13 @@ function App() {
     const [allowed, setAllowed] = useState(null);
     useEffect(() => {
       const params = new URLSearchParams(window.location.search);
-      const sessionId = params.get('session_id');
-      if (!sessionId) {
+      const provider = params.get('provider');
+      // Allow only Paddle provider to proceed (Stripe removed)
+      if (provider === 'paddle') {
+        setAllowed(true);
+      } else {
         setAllowed(false);
-        return;
       }
-      (async () => {
-        try {
-          const res = await axios.get(`/api/payments/validate-session`, { params: { session_id: sessionId } });
-          setAllowed(Boolean(res.data?.valid));
-        } catch {
-          setAllowed(false);
-        }
-      })();
     }, []);
     if (allowed === null) return <div className="flex h-screen items-center justify-center">Vérification du paiement...</div>;
     return allowed ? <Register /> : <Navigate to="/pricing" />;
@@ -51,11 +46,12 @@ function App() {
         <BrowserRouter>
             <Routes>
                 <Route path="/login" element={<Login />} />
-                {/* Registration gated: requires valid Stripe session_id */}
+                {/* Registration gated: requires Paddle provider flag */}
                 <Route path="/register" element={<RegisterGate />} />
               {/* Public pricing routes so users can view plans before login */}
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/pricing/success" element={<div className='p-6'>Paiement réussi. Merci ! Vous pouvez gérer votre abonnement ci-dessous.</div>} />
+              <Route path="/subscription-success" element={<SubscriptionSuccess />} />
               <Route path="/pricing/cancel" element={<div className='p-6'>Paiement annulé. Réessayez quand vous êtes prêt.</div>} />
                 
                 <Route element={<ProtectedRoute />}>

@@ -8,6 +8,7 @@ const getBackendURL = () => {
   }
   
   // In development, use env var or localhost
+  // Default to 8000 to match your backend port
   return process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 };
 

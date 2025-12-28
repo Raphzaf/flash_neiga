@@ -51,7 +51,7 @@ The backend is configured to deploy on Render using the `render.yaml` configurat
    - `DATABASE_URL` - Auto-configured from PostgreSQL database
    - `ALLOWED_ORIGINS` - Comma-separated list of allowed frontend URLs (e.g., `https://your-frontend.netlify.app,http://localhost:3000`)
    - `ADMIN_TOKEN` - (Optional) Token for admin endpoints
-   - `STRIPE_SECRET_KEY` - (Optional) For payment integration
+   - `PADDLE_API_KEY` - (Optional) For Paddle Billing payment integration
 
 4. **Deploy**
    - Click "Apply" to start deployment
@@ -153,14 +153,12 @@ Production:   https://app.netlify.app → /api/* → Netlify Proxy → https://b
    **Note:** `REACT_APP_BACKEND_URL` is **NOT needed** for production (proxy handles it).
    Only set it if you want to override the proxy for testing.
    
-   **Optional (for Stripe payments):**
-   - `REACT_APP_STRIPE_PUBLISHABLE_KEY` - Your Stripe publishable key (starts with `pk_test_` or `pk_live_`)
-   - `REACT_APP_STRIPE_PRICE_CODE_14D` - Stripe Price ID for 14-day code access
-   - `REACT_APP_STRIPE_PRICE_CODE_30D` - Stripe Price ID for 30-day code access
-   - `REACT_APP_STRIPE_PRICE_VIDEO_1M` - Stripe Price ID for 1-month video access
-   - `REACT_APP_STRIPE_PRICE_VIDEO_2M` - Stripe Price ID for 2-month video access
-   - `REACT_APP_STRIPE_PRICE_VIDEO_3M` - Stripe Price ID for 3-month video access
-   - `REACT_APP_STRIPE_PRICING_TABLE_ID` - Stripe Pricing Table ID (starts with `prctbl_`)
+   **Optional (for Paddle payments):**
+   - `REACT_APP_PADDLE_PRICE_CODE_14D` - Paddle Price ID for 14-day code access
+   - `REACT_APP_PADDLE_PRICE_CODE_30D` - Paddle Price ID for 30-day code access
+   - `REACT_APP_PADDLE_PRICE_VIDEO_1M` - Paddle Price ID for 1-month video access
+   - `REACT_APP_PADDLE_PRICE_VIDEO_2M` - Paddle Price ID for 2-month video access
+   - `REACT_APP_PADDLE_PRICE_VIDEO_3M` - Paddle Price ID for 3-month video access
 
 5. **Deploy**
    - Click "Deploy site"
@@ -202,7 +200,6 @@ Production:   https://app.netlify.app → /api/* → Netlify Proxy → https://b
 - ✅ Check that backend routes start with `/api/`
 
 **Issue: Environment variables not working**
-- ✅ Only Stripe variables need to be set in Netlify (no need for `REACT_APP_BACKEND_URL`)
 - ✅ Redeploy the site after adding/changing environment variables
 - ✅ Variable names must start with `REACT_APP_` (required by Create React App)
 
@@ -320,6 +317,15 @@ ALLOWED_ORIGINS=https://your-site.netlify.app,https://custom-domain.com,http://l
 3. **Development**: CORS allows localhost connections for local testing
 
 This dual approach ensures maximum reliability and compatibility.
+
+### Paddle Billing Keys (Best Practices)
+
+- **Keys & environments:** Generate `sandbox` keys for tests and `live` keys for production in the Paddle Dashboard → Developer Tools → Authentication → API keys. Keep test vs live strictly separated.
+- **Secrets management:** Store `PADDLE_API_KEY` only as a secret (env var or secret manager). Never expose keys in the frontend or version control.
+- **HTTP auth:** All Paddle Billing requests must include `Authorization: Bearer <PADDLE_API_KEY>`. The backend already sets this header for transactions and price inspection.
+- **Catalog coherence:** Your `priceId` (e.g., `pri_...`) must belong to the same Paddle project/environment as the API key in use. Otherwise Paddle returns 403 Forbidden.
+- **Key rotation:** Plan regular rotation and subscribe to webhooks like `api_key.expiring` / `api_key.expired`. The backend `POST /api/payments/paddle/webhook` endpoint logs these events; add signature verification and alerting before production.
+- **Error mapping:** Backend maps authentication formatting issues to 400 and permission/project mismatches to 403 with actionable guidance.
 
 ## 📋 API Endpoints
 
@@ -442,8 +448,8 @@ Admin endpoints for programmatic access (requires authentication):
 
 The application automatically creates an admin user on first startup:
 
-- **Email**: `admin@gmail.com`
-- **Password**: `admin`
+- **Email**: admin@gmail.com
+- **Password**: admin.
 
 **Important Security Notes:**
 - The admin user is created automatically on first deployment
@@ -459,7 +465,7 @@ The application automatically creates an admin user on first startup:
    ```
    ✅ Admin user created successfully!
       Email: admin@gmail.com
-      Password: admin
+      Password: admin.
       User ID: [generated-id]
    ⚠️  IMPORTANT: Change the admin password after first login!
    ```

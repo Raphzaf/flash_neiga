@@ -114,16 +114,7 @@ export default function Register() {
                 </div>
             </div>
 
-            {/* Optional: embedded pricing table if configured */}
-            {process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY && process.env.REACT_APP_STRIPE_PRICING_TABLE_ID && (
-                <div className="mt-6">
-                    <stripe-pricing-table
-                        pricing-table-id={process.env.REACT_APP_STRIPE_PRICING_TABLE_ID}
-                        publishable-key={process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY}
-                    >
-                    </stripe-pricing-table>
-                </div>
-            )}
+            {/* Stripe pricing table removed */}
             </Card>
         </div>
     );
