@@ -10,6 +10,7 @@ import hmac
 import hashlib
 import json
 import logging
+from pathlib import Path
 
 # Import database dependencies
 try:
@@ -81,6 +82,112 @@ def verify_paddle_webhook_signature(payload_body: bytes, signature: str, secret:
     except Exception as e:
         logger.error(f"Error verifying webhook signature: {e}")
         return False
+
+
+def load_paddle_price_ids():
+    """Charge les price IDs depuis paddle_price_ids.json"""
+    try:
+        # Try multiple paths to find the config file
+        possible_paths = [
+            Path(__file__).parent.parent.parent / "paddle_price_ids.json",  # From backend/routes/
+            Path("paddle_price_ids.json"),  # Current directory
+            Path(__file__).parent / "paddle_price_ids.json",  # Same directory as this file
+        ]
+        
+        for path in possible_paths:
+            if path.exists():
+                with open(path, 'r') as f:
+                    return json.load(f)
+        
+        logger.warning("paddle_price_ids.json not found in any expected location")
+        return None
+    except Exception as e:
+        logger.error(f"Error loading paddle_price_ids.json: {e}")
+        return None
+
+
+def check_combo_offer_eligibility(price_id: str, user_id: str, db) -> dict:
+    """
+    Vérifie si un utilisateur est éligible à l'offre combinée (2 leçons offertes).
+    
+    Critères d'éligibilité:
+    - Utilisateur souscrit au Code ET Vidéos 3 mois
+    - OU utilisateur a déjà le code et souscrit aux Vidéos 3 mois
+    
+    Args:
+        price_id: Price ID de la transaction actuelle
+        user_id: ID utilisateur Paddle
+        db: Session de base de données
+    
+    Returns:
+        dict avec:
+        - eligible: bool
+        - reason: str (raison de l'éligibilité)
+        - bonus_description: str (description du bonus)
+    """
+    result = {
+        "eligible": False,
+        "reason": "",
+        "bonus_description": "2 leçons de conduite offertes (valeur 390₪-420₪)"
+    }
+    
+    # Charger les price IDs
+    price_ids = load_paddle_price_ids()
+    if not price_ids:
+        result["reason"] = "Cannot load price IDs configuration"
+        return result
+    
+    # Price ID pour Vidéos 3 mois
+    video_3months_id = price_ids.get("videos", {}).get("3months")
+    
+    if not video_3months_id:
+        result["reason"] = "Video 3 months price ID not configured"
+        return result
+    
+    # Vérifier si la transaction actuelle est pour Vidéos 3 mois
+    if price_id != video_3months_id:
+        result["reason"] = f"Transaction is not for Videos 3 months (current: {price_id})"
+        return result
+    
+    # Vérifier si l'utilisateur a déjà souscrit au Code
+    try:
+        code_14_id = price_ids.get("code", {}).get("14days")
+        code_30_id = price_ids.get("code", {}).get("30days")
+        
+        # Chercher des transactions Code précédentes pour cet utilisateur
+        existing_code = db.query(TransactionDB).filter(
+            TransactionDB.user_id == user_id,
+            TransactionDB.status.in_(["completed", "paid"])
+        ).all()
+        
+        has_code = False
+        for transaction in existing_code:
+            # Vérifier si la transaction contient un price_id de Code
+            event_data = transaction.event_data or {}
+            items = event_data.get("items", [])
+            
+            for item in items:
+                item_price_id = item.get("price_id") or (item.get("price") or {}).get("id")
+                if item_price_id in [code_14_id, code_30_id]:
+                    has_code = True
+                    break
+            
+            if has_code:
+                break
+        
+        if has_code:
+            result["eligible"] = True
+            result["reason"] = "User has Code subscription and purchased Videos 3 months"
+            logger.info(f"🎁 COMBO OFFER ELIGIBLE: User {user_id} qualifies for 2 free lessons")
+            return result
+        else:
+            result["reason"] = "User does not have Code subscription yet"
+            return result
+    
+    except Exception as e:
+        logger.error(f"Error checking combo eligibility: {e}")
+        result["reason"] = f"Error checking eligibility: {str(e)}"
+        return result
 
 
 class CheckoutRequest(BaseModel):
@@ -376,6 +483,22 @@ async def paddle_webhook(
             
             logger.info(f"Transaction completed: {transaction_id}, amount: {amount} {currency}")
             
+            # Vérifier l'éligibilité à l'offre combinée
+            items = data.get("items", [])
+            combo_eligible = False
+            combo_info = {}
+            
+            if items and customer_id:
+                for item in items:
+                    price_id = item.get("price_id") or (item.get("price") or {}).get("id")
+                    if price_id:
+                        combo_check = check_combo_offer_eligibility(price_id, customer_id, db)
+                        if combo_check.get("eligible"):
+                            combo_eligible = True
+                            combo_info = combo_check
+                            logger.info(f"🎁 COMBO OFFER: {combo_check.get('reason')}")
+                            break
+            
             # Enregistrer dans la base de données
             transaction = TransactionDB(
                 paddle_transaction_id=transaction_id,
@@ -385,11 +508,20 @@ async def paddle_webhook(
                 currency=currency,
                 status="completed",
                 event_type=event_type,
-                event_data=data
+                event_data={
+                    **data,
+                    "combo_offer": {
+                        "eligible": combo_eligible,
+                        "info": combo_info
+                    } if combo_eligible else None
+                }
             )
             db.add(transaction)
             db.commit()
             logger.info(f"Transaction saved to database: {transaction.id}")
+            
+            if combo_eligible:
+                logger.info(f"🎁 Transaction {transaction_id} marked with combo offer bonus")
         
         elif event_type == "transaction.paid":
             # Paiement reçu

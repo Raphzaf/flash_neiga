@@ -15,6 +15,12 @@ services:
         fromDatabase:
           name: flash-neiga-db
           property: connectionString
+      - key: PADDLE_API_KEY
+        sync: false  # Must be set manually in Render dashboard
+      - key: PADDLE_WEBHOOK_SECRET
+        sync: false  # Must be set manually in Render dashboard
+      - key: ALLOWED_ORIGINS
+        value: "https://appflashneiga.netlify.app,https://flash-neiga.netlify.app"
 
 databases:
   - name: flash-neiga-db

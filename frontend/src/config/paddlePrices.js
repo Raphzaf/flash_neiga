@@ -7,10 +7,12 @@ export const PADDLE_PRICES = {
   CODE: {
     DAYS_14: process.env.REACT_APP_PADDLE_PRICE_CODE_14D || 'pri_01kd99x603t5whs3t5e949fwcw',
     DAYS_30: process.env.REACT_APP_PADDLE_PRICE_CODE_30D || 'pri_01kd99x6wzyw47pj8x470yxchq',
+    WEEK_EXTENSION: process.env.REACT_APP_PADDLE_PRICE_CODE_EXT || 'TO_BE_CREATED',
   },
   VIDEOS: {
     MONTH_1: process.env.REACT_APP_PADDLE_PRICE_VIDEO_1M || 'pri_01kd99x87n1zznba6ar2aej55e',
     MONTH_2: process.env.REACT_APP_PADDLE_PRICE_VIDEO_2M || 'pri_01kd99x96h49emtgvqndn2m6cn',
     MONTH_3: process.env.REACT_APP_PADDLE_PRICE_VIDEO_3M || 'pri_01kd99xa4xt0rrmt19ycv7hc2g',
+    WEEK_EXTENSION: process.env.REACT_APP_PADDLE_PRICE_VIDEO_EXT || 'TO_BE_CREATED',
   }
 };
