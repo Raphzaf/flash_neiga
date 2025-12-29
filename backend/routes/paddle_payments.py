@@ -84,6 +84,23 @@ def verify_paddle_webhook_signature(payload_body: bytes, signature: str, secret:
         return False
 
 
+def _extract_price_id_from_item(item: dict) -> str | None:
+    """Extract price_id from a transaction item, handling nested structures."""
+    if not item:
+        return None
+    
+    # Direct price_id field
+    if "price_id" in item:
+        return item["price_id"]
+    
+    # Nested in price object
+    price_obj = item.get("price")
+    if price_obj and isinstance(price_obj, dict):
+        return price_obj.get("id")
+    
+    return None
+
+
 def load_paddle_price_ids():
     """Charge les price IDs depuis paddle_price_ids.json"""
     try:
@@ -167,7 +184,7 @@ def check_combo_offer_eligibility(price_id: str, user_id: str, db) -> dict:
             items = event_data.get("items", [])
             
             for item in items:
-                item_price_id = item.get("price_id") or (item.get("price") or {}).get("id")
+                item_price_id = _extract_price_id_from_item(item)
                 if item_price_id in [code_14_id, code_30_id]:
                     has_code = True
                     break
@@ -490,7 +507,7 @@ async def paddle_webhook(
             
             if items and customer_id:
                 for item in items:
-                    price_id = item.get("price_id") or (item.get("price") or {}).get("id")
+                    price_id = _extract_price_id_from_item(item)
                     if price_id:
                         combo_check = check_combo_offer_eligibility(price_id, customer_id, db)
                         if combo_check.get("eligible"):

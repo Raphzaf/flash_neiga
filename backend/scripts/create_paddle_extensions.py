@@ -16,7 +16,7 @@ PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
 PADDLE_URL = "https://api.paddle.com"
 
 if not PADDLE_API_KEY:
-    print("ERREUR: PADDLE_API_KEY non défini dans .env")
+    print("ERREUR: PADDLE_API_KEY environment variable not defined")
     sys.exit(1)
 
 headers = {

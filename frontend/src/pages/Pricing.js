@@ -4,9 +4,11 @@ import { PADDLE_PRICES } from '../config/paddlePrices';
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 
+const UNCONFIGURED_PRICE_ID = 'TO_BE_CREATED';
+
 async function startPaddleCheckout(priceId) {
   try {
-    if (!priceId || String(priceId).startsWith('pri_FILL_ME') || String(priceId) === 'TO_BE_CREATED') {
+    if (!priceId || String(priceId).startsWith('pri_FILL_ME') || String(priceId) === UNCONFIGURED_PRICE_ID) {
       alert('⚠️ Ce prix n\'est pas encore configuré. Veuillez créer les price IDs avec le script backend/scripts/create_paddle_extensions.py');
       return;
     }

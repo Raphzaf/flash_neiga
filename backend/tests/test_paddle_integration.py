@@ -19,6 +19,7 @@ from routes.paddle_payments import (
     verify_paddle_webhook_signature,
     load_paddle_price_ids,
     check_combo_offer_eligibility,
+    _extract_price_id_from_item,
 )
 
 
@@ -48,6 +49,35 @@ class TestNormalizeApiKey:
         """Teste la normalisation combinée"""
         assert _normalize_api_key('  "test_key"  ') == "test_key"
         assert _normalize_api_key("  'test_key'  ") == "test_key"
+
+
+class TestExtractPriceId:
+    """Tests pour l'extraction de price_id des items"""
+    
+    def test_extract_direct_price_id(self):
+        """Teste l'extraction d'un price_id direct"""
+        item = {"price_id": "pri_123"}
+        assert _extract_price_id_from_item(item) == "pri_123"
+    
+    def test_extract_nested_price_id(self):
+        """Teste l'extraction d'un price_id imbriqué"""
+        item = {"price": {"id": "pri_456"}}
+        assert _extract_price_id_from_item(item) == "pri_456"
+    
+    def test_extract_direct_takes_precedence(self):
+        """Teste que price_id direct a la priorité"""
+        item = {"price_id": "pri_123", "price": {"id": "pri_456"}}
+        assert _extract_price_id_from_item(item) == "pri_123"
+    
+    def test_extract_empty_item(self):
+        """Teste l'extraction d'un item vide"""
+        assert _extract_price_id_from_item({}) is None
+        assert _extract_price_id_from_item(None) is None
+    
+    def test_extract_invalid_nested_structure(self):
+        """Teste l'extraction avec structure invalide"""
+        item = {"price": "not_a_dict"}
+        assert _extract_price_id_from_item(item) is None
 
 
 class TestWebhookSignatureVerification:
