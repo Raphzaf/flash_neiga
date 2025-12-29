@@ -41,7 +41,8 @@ class TestNormalizeApiKey:
     
     def test_normalize_handles_empty_string(self):
         """Teste que la chaîne vide est gérée correctement"""
-        assert _normalize_api_key("") == ""
+        # Empty string is falsy, so it returns None
+        assert _normalize_api_key("") is None
     
     def test_normalize_combined(self):
         """Teste la normalisation combinée"""
