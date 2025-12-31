@@ -3,15 +3,24 @@ import axios from 'axios';
 // Determine backend URL based on environment, with robust fallbacks
 const getBackendURL = () => {
   const envUrl = process.env.REACT_APP_BACKEND_URL?.trim();
+  const isBrowser = typeof window !== 'undefined';
+  const isLocalHost = isBrowser && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+  const isEnvLocalhost = envUrl && /(^http:\/\/localhost|^http:\/\/127\.0\.0\.1)/i.test(envUrl);
 
-  // If explicitly set, always honor it
-  if (envUrl) return envUrl.replace(/\/$/, '');
+  // If explicitly set, honor it unless it's pointing to localhost while hosted remotely
+  if (envUrl) {
+    if (!isLocalHost && isEnvLocalhost) {
+      // Ignore a baked-in localhost URL on a remote host like Netlify
+      // and prefer proxy/relative path to avoid CORS issues.
+      return '';
+    }
+    return envUrl.replace(/\/$/, '');
+  }
 
   // Production: default to relative paths (Netlify proxy). If running locally
   // (serving build/ via a simple static server), fall back to localhost:8000.
   if (process.env.NODE_ENV === 'production') {
-    const isLocal = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
-    return isLocal ? 'http://localhost:8000' : '';
+    return isLocalHost ? 'http://localhost:8000' : '';
   }
 
   // Development: point directly to local backend
