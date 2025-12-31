@@ -106,6 +106,12 @@ export default function ExamDetails() {
                             Bonne réponse: <span className="font-medium">{correctOpt?.text || '—'}</span>
                           </div>
                         )}
+                        {q.explanation && (
+                          <div className="mt-3 p-3 rounded-lg bg-white/70 text-slate-800">
+                            <div className="font-semibold mb-1">Explication</div>
+                            <div className="opacity-90">{q.explanation}</div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

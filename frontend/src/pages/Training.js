@@ -12,6 +12,8 @@ export default function Training() {
     const [questions, setQuestions] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [feedback, setFeedback] = useState(null); // { is_correct, explanation, correct_option_id }
     const [selectedOption, setSelectedOption] = useState(null);
 
@@ -19,15 +21,20 @@ export default function Training() {
         setLoading(true);
         try {
             let url = '/api/questions';
+            const params = new URLSearchParams();
             if (!(categories.length === 1 && categories[0] === 'all')) {
-                const params = new URLSearchParams();
                 categories.forEach(c => params.append('category', c));
-                url = `${url}?${params.toString()}`;
             }
+            if (debouncedSearch && debouncedSearch.trim()) {
+                params.append('q', debouncedSearch.trim());
+            }
+            const qs = params.toString();
+            if (qs) url = `${url}?${qs}`;
             const res = await axios.get(url);
             // Shuffle client side for variety
-            const shuffled = res.data.sort(() => 0.5 - Math.random());
-            setQuestions(shuffled);
+            const shouldShuffle = !(debouncedSearch && debouncedSearch.trim());
+            const data = shouldShuffle ? res.data.sort(() => 0.5 - Math.random()) : res.data;
+            setQuestions(data);
             setCurrentIndex(0);
             setFeedback(null);
             setSelectedOption(null);
@@ -40,7 +47,12 @@ export default function Training() {
 
     useEffect(() => {
         fetchQuestions();
-    }, [categories.join(',')]);
+    }, [categories.join(','), debouncedSearch]);
+
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search), 300);
+        return () => clearTimeout(t);
+    }, [search]);
 
     const handleAnswer = async (optionId) => {
         if (feedback) return; // Already answered
@@ -86,7 +98,16 @@ export default function Training() {
             {/* Top Bar */}
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-heading font-bold">Entraînement</h1>
-                <div className="w-full max-w-md">
+                <div className="w-full max-w-2xl flex flex-col gap-3">
+                    <div>
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Rechercher une question (mot-clé)"
+                            className="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        />
+                    </div>
                     <Select
                         value=""
                         onValueChange={(val) => {

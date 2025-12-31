@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import logging
 from pathlib import Path
 from typing import List, Optional
+from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import uuid
@@ -568,14 +569,99 @@ async def clear_questions(
 
 
 # ===== Question Endpoints =====
+class ExplanationUpdate(BaseModel):
+    explanation: Optional[str] = None
+
+@app.get("/api/admin/questions")
+async def list_admin_questions(
+    missingOnly: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List questions for admin management (with optional filter for missing explanation)."""
+    try:
+        query = db.query(QuestionDB)
+        if missingOnly:
+            query = query.filter((QuestionDB.explanation == None) | (QuestionDB.explanation == ""))
+        items = query.order_by(QuestionDB.created_at.desc()).offset(offset).limit(limit).all()
+        return [
+            {
+                "id": q.id,
+                "text": q.text,
+                "category": q.category,
+                "explanation": q.explanation or "",
+                "has_explanation": bool(q.explanation and q.explanation.strip()),
+                "created_at": q.created_at.isoformat(),
+            }
+            for q in items
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/admin/questions/{question_id}/explanation")
+async def update_question_explanation(
+    question_id: str,
+    payload: ExplanationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update or add explanation for a question."""
+    try:
+        q = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
+        if not q:
+            raise HTTPException(status_code=404, detail="Question not found")
+        q.explanation = (payload.explanation or "").strip()
+        db.add(q)
+        db.commit()
+        db.refresh(q)
+        return {
+            "success": True,
+            "id": q.id,
+            "explanation": q.explanation,
+            "message": "Explanation updated"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/questions/{question_id}")
+async def delete_question(
+    question_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a single question by id."""
+    try:
+        q = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
+        if not q:
+            raise HTTPException(status_code=404, detail="Question not found")
+        db.delete(q)
+        db.commit()
+        return {"success": True, "deleted": question_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 @app.get("/api/questions", response_model=List[Question])
 async def get_questions(
     category: Optional[List[str]] = None,
+    q: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(QuestionDB)
     if category and len(category) > 0:
         query = query.filter(QuestionDB.category.in_(category))
+    if q:
+        like_expr = f"%{q}%"
+        query = query.filter(
+            (QuestionDB.text.ilike(like_expr)) |
+            (QuestionDB.explanation.ilike(like_expr))
+        )
     questions = query.all()
     return [
         Question(
@@ -833,7 +919,8 @@ async def get_exam_details(
             "options": q.options,
             "selected_option_id": selected_option_id,
             "correct_option_id": correct_option_id,
-            "is_correct": is_correct
+            "is_correct": is_correct,
+            "explanation": q.explanation
         })
 
     total_questions = len(question_ids) if question_ids else 30
