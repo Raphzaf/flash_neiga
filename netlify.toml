@@ -12,7 +12,7 @@
 # IMPORTANT: Update the backend URL with your actual Render service URL
 [[redirects]]
   from = "/api/*"
-  to = "https://flash-neiga-backend.onrender.com/api/:splat"
+  to = "https://flash-neiga-demo.herokuapp.com/api/:splat"
   status = 200
   force = true
   headers = {X-From = "Netlify"}
