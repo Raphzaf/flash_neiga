@@ -364,6 +364,34 @@ async def test_paddle_auth():
         "api_message": api_message
     }
 
+@router.get("/paddle/verify-config")
+async def verify_config():
+    """Verify Paddle configuration: key presence, environment, and simple API access."""
+    key = os.getenv("PADDLE_API_KEY")
+    env = os.getenv("PADDLE_ENVIRONMENT") or "unknown"
+    base = {
+        "key_exists": bool(key),
+        "environment": env,
+    }
+    if not key:
+        return base
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+    }
+    try:
+        r = requests.get("https://api.paddle.com/prices", headers=headers, timeout=10)
+        ok = r.status_code < 400
+        result = base | {"can_list_prices": ok}
+        if not ok:
+            try:
+                result["error"] = r.json()
+            except Exception:
+                result["error"] = {"message": r.text}
+        return result
+    except Exception as e:
+        return base | {"can_list_prices": False, "error": str(e)}
+
 @router.get("/paddle/price/{price_id}")
 async def inspect_price(price_id: str):
     """Inspect a Paddle price to verify it belongs to the current project and environment."""
@@ -434,6 +462,20 @@ async def list_prices():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _verify_webhook_signature(raw_body: bytes, signature_header: str | None, secret: str | None) -> bool:
+    """Basic HMAC SHA-256 verification for webhook payload using a shared secret.
+    Note: Adjust to Paddle's official scheme (JWT or public key verification) if required by your account.
+    """
+    if not secret:
+        return True  # No verification configured, allow but log
+    if not signature_header:
+        return False
+    try:
+        computed = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        return computed == signature_header
+    except Exception:
+        return False
+
 @router.post("/paddle/webhook")
 async def paddle_webhook(
     request: Request,
@@ -461,7 +503,7 @@ async def paddle_webhook(
     except Exception as e:
         logger.error(f"Failed to parse webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid payload")
-    
+
     # 2. Vérifier la signature (si PADDLE_WEBHOOK_SECRET est configuré)
     webhook_secret = os.getenv("PADDLE_WEBHOOK_SECRET")
     if webhook_secret and paddle_signature:
@@ -473,14 +515,14 @@ async def paddle_webhook(
         logger.warning("Webhook secret configured but no signature provided")
     else:
         logger.info("Webhook signature verification skipped (PADDLE_WEBHOOK_SECRET not configured)")
-    
+
     # 3. Parser l'événement
     event_type = payload.get("event_type")
     event_id = payload.get("event_id")
     data = payload.get("data", {})
-    
+
     logger.info(f"Received Paddle webhook: event_type={event_type}, event_id={event_id}")
-    
+
     # 4. Traiter selon le type d'événement
     try:
         if event_type == "transaction.completed":
@@ -488,7 +530,7 @@ async def paddle_webhook(
             transaction_id = data.get("id")
             subscription_id = data.get("subscription_id")
             customer_id = data.get("customer_id")
-            
+
             # Extraire les détails du paiement
             amount = None
             currency = None
@@ -497,14 +539,14 @@ async def paddle_webhook(
                 totals = details["totals"]
                 amount = float(totals.get("total", 0)) / 100  # Paddle utilise les centimes
                 currency = totals.get("currency_code", "USD")
-            
+
             logger.info(f"Transaction completed: {transaction_id}, amount: {amount} {currency}")
-            
+
             # Vérifier l'éligibilité à l'offre combinée
             items = data.get("items", [])
             combo_eligible = False
             combo_info = {}
-            
+
             if items and customer_id:
                 for item in items:
                     price_id = _extract_price_id_from_item(item)
@@ -515,7 +557,7 @@ async def paddle_webhook(
                             combo_info = combo_check
                             logger.info(f"🎁 COMBO OFFER: {combo_check.get('reason')}")
                             break
-            
+
             # Enregistrer dans la base de données
             transaction = TransactionDB(
                 paddle_transaction_id=transaction_id,
@@ -536,20 +578,20 @@ async def paddle_webhook(
             db.add(transaction)
             db.commit()
             logger.info(f"Transaction saved to database: {transaction.id}")
-            
+
             if combo_eligible:
                 logger.info(f"🎁 Transaction {transaction_id} marked with combo offer bonus")
-        
+
         elif event_type == "transaction.paid":
             # Paiement reçu
             transaction_id = data.get("id")
             logger.info(f"Transaction paid: {transaction_id}")
-            
+
             # Mettre à jour le statut si la transaction existe
             existing = db.query(TransactionDB).filter(
                 TransactionDB.paddle_transaction_id == transaction_id
             ).first()
-            
+
             if existing:
                 existing.status = "paid"
                 existing.event_data = data
@@ -566,15 +608,15 @@ async def paddle_webhook(
                 db.add(transaction)
                 db.commit()
                 logger.info(f"New transaction created with 'paid' status: {transaction.id}")
-        
+
         elif event_type == "subscription.created":
             # Nouvel abonnement créé
             subscription_id = data.get("id")
             customer_id = data.get("customer_id")
             status = data.get("status")
-            
+
             logger.info(f"Subscription created: {subscription_id}, customer: {customer_id}, status: {status}")
-            
+
             # Enregistrer l'abonnement
             transaction = TransactionDB(
                 paddle_subscription_id=subscription_id,
@@ -586,175 +628,55 @@ async def paddle_webhook(
             db.add(transaction)
             db.commit()
             logger.info(f"Subscription saved to database: {transaction.id}")
-        
+
         elif event_type == "subscription.updated":
             # Abonnement modifié
             subscription_id = data.get("id")
             status = data.get("status")
-            
+
             logger.info(f"Subscription updated: {subscription_id}, new status: {status}")
-            
+
             # Mettre à jour l'abonnement existant
             existing = db.query(TransactionDB).filter(
                 TransactionDB.paddle_subscription_id == subscription_id
             ).order_by(TransactionDB.created_at.desc()).first()
-            
+
             if existing:
                 existing.status = status
                 existing.event_data = data
                 db.commit()
                 logger.info(f"Subscription updated in database: {existing.id}")
-        
+
         elif event_type == "subscription.canceled":
             # Abonnement annulé
             subscription_id = data.get("id")
-            
+
             logger.info(f"Subscription canceled: {subscription_id}")
-            
+
             # Mettre à jour le statut
             existing = db.query(TransactionDB).filter(
                 TransactionDB.paddle_subscription_id == subscription_id
             ).order_by(TransactionDB.created_at.desc()).first()
-            
+
             if existing:
                 existing.status = "canceled"
                 existing.event_data = data
                 db.commit()
                 logger.info(f"Subscription marked as canceled: {existing.id}")
-        
+
         elif event_type in ("api_key.expiring", "api_key.expired"):
             # Clé API bientôt expirée ou expirée
             logger.warning(f"⚠️  Paddle webhook: {event_type}. Pensez à faire tourner les clés API!")
-        
+
         else:
             # Événement non géré
             logger.info(f"Unhandled event type: {event_type}")
-    
+
     except Exception as e:
         logger.error(f"Error processing webhook event: {e}", exc_info=True)
         db.rollback()
         # On retourne quand même 200 pour ne pas faire réessayer Paddle indéfiniment
         return {"status": "error", "message": "Failed to process event", "eventType": event_type}
-    
+
     # 5. Retourner 200 OK pour confirmer la réception
     return {"status": "ok", "received": True, "eventType": event_type, "eventId": event_id}
-
-
-@router.get("/paddle/verify-config")
-async def verify_paddle_config():
-    """
-    Vérifie que la configuration Paddle est complète et fonctionnelle.
-    
-    Vérifie:
-    - PADDLE_API_KEY est définie
-    - PADDLE_WEBHOOK_SECRET est définie
-    - Les price IDs sont accessibles
-    - La connexion à l'API fonctionne
-    """
-    api_key = _normalize_api_key(os.getenv("PADDLE_API_KEY"))
-    webhook_secret = os.getenv("PADDLE_WEBHOOK_SECRET")
-    
-    checks = {
-        "api_key_configured": bool(api_key),
-        "webhook_secret_configured": bool(webhook_secret),
-        "api_connection_ok": False,
-        "price_ids_accessible": False,
-        "issues": []
-    }
-    
-    # Vérifier l'API key
-    if not api_key:
-        checks["issues"].append("PADDLE_API_KEY not configured")
-    else:
-        # Tester la connexion
-        try:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Accept": "application/json",
-            }
-            resp = requests.get("https://api.paddle.com/prices?per_page=1", headers=headers, timeout=10)
-            checks["api_connection_ok"] = resp.status_code < 400
-            
-            if resp.status_code < 400:
-                checks["price_ids_accessible"] = True
-            else:
-                checks["issues"].append(f"API connection failed with status {resp.status_code}")
-        except Exception as e:
-            checks["issues"].append(f"Failed to connect to Paddle API: {str(e)}")
-    
-    # Vérifier le webhook secret
-    if not webhook_secret:
-        checks["issues"].append("PADDLE_WEBHOOK_SECRET not configured - webhook signature verification disabled")
-    
-    # Déterminer le statut global
-    checks["status"] = "ok" if checks["api_key_configured"] and checks["api_connection_ok"] else "error"
-    
-    logger.info(f"Configuration verification: {checks['status']}")
-    
-    return checks
-
-
-@router.get("/paddle/subscription/{subscription_id}")
-async def get_subscription_status(subscription_id: str):
-    """
-    Vérifie le statut d'un abonnement Paddle.
-    
-    Args:
-        subscription_id: ID de l'abonnement Paddle
-    
-    Returns:
-        Détails de l'abonnement depuis l'API Paddle
-    """
-    api_key = _normalize_api_key(os.getenv("PADDLE_API_KEY"))
-    if not api_key:
-        raise HTTPException(status_code=400, detail="PADDLE_API_KEY not configured")
-    
-    try:
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Accept": "application/json",
-        }
-        
-        logger.info(f"Fetching subscription status: {subscription_id}")
-        
-        resp = requests.get(
-            f"https://api.paddle.com/subscriptions/{subscription_id}",
-            headers=headers,
-            timeout=15
-        )
-        
-        if resp.status_code == 404:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        
-        if resp.status_code >= 400:
-            try:
-                err = resp.json()
-            except Exception:
-                err = {"message": resp.text}
-            
-            logger.error(f"Paddle API error: {resp.status_code} - {err}")
-            raise HTTPException(status_code=resp.status_code, detail=f"Paddle error: {err}")
-        
-        data = resp.json().get("data", {})
-        
-        # Extraire les informations importantes
-        result = {
-            "id": data.get("id"),
-            "status": data.get("status"),
-            "customer_id": data.get("customer_id"),
-            "current_billing_period": data.get("current_billing_period"),
-            "next_billed_at": data.get("next_billed_at"),
-            "canceled_at": data.get("canceled_at"),
-            "created_at": data.get("created_at"),
-            "updated_at": data.get("updated_at"),
-        }
-        
-        logger.info(f"Subscription status retrieved: {subscription_id} - {result['status']}")
-        
-        return result
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching subscription: {e}")
-        raise HTTPException(status_code=500, detail=str(e))

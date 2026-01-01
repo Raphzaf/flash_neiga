@@ -18,16 +18,33 @@ from jose import JWTError, jwt
 import uuid
 import json
 # Stripe integration removed
-from database import engine, SessionLocal, Base, get_db
-from models import (
-    UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
-    UserCreate, User, Question, QuestionCreate, QuestionOption,
-    TrafficSign, TrafficSignCreate,
-    ExamSession, SubmitAnswerRequest, ExamResult,
-    TrainingAnswerRequest, TrainingResponse,
-    TokenResponse
-)
-from routes.paddle_payments import router as paddle_router
+# Support imports both when running from backend/ and from repo root
+try:
+    from database import engine, SessionLocal, Base, get_db
+except ImportError:
+    from backend.database import engine, SessionLocal, Base, get_db
+try:
+    from models import (
+        UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
+        UserCreate, User, Question, QuestionCreate, QuestionOption,
+        TrafficSign, TrafficSignCreate,
+        ExamSession, SubmitAnswerRequest, ExamResult,
+        TrainingAnswerRequest, TrainingResponse,
+        TokenResponse
+    )
+except ImportError:
+    from backend.models import (
+        UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
+        UserCreate, User, Question, QuestionCreate, QuestionOption,
+        TrafficSign, TrafficSignCreate,
+        ExamSession, SubmitAnswerRequest, ExamResult,
+        TrainingAnswerRequest, TrainingResponse,
+        TokenResponse
+    )
+try:
+    from routes.paddle_payments import router as paddle_router
+except ImportError:
+    from backend.routes.paddle_payments import router as paddle_router
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent

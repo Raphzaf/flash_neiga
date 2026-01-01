@@ -1,0 +1,704 @@
+[
+  {
+    "id": 1,
+    "nom": "Route inégale",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b0/Israel_road_sign_101.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 2,
+    "nom": "Courbe vers la droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b0/Israel_road_sign_102.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 3,
+    "nom": "Courbe vers la gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Israel_road_sign_103.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 4,
+    "nom": "Double courbe, première à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/dc/Israel_road_sign_104.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 5,
+    "nom": "Double courbe, première à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Israel_road_sign_105.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 6,
+    "nom": "Série de courbes",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e8/Israel_road_sign_106.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 7,
+    "nom": "La route se rétrécit",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/d5/Israel_road_sign_109.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 8,
+    "nom": "La route se rétrécit à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Israel_road_sign_110.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 9,
+    "nom": "La route se rétrécit à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e4/Israel_road_sign_111.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 10,
+    "nom": "Carrefour",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/fe/Israel_road_sign_114.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 11,
+    "nom": "Route secondaire à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/2c/Israel_road_sign_115.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 12,
+    "nom": "Route secondaire à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/53/Israel_road_sign_116.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 13,
+    "nom": "Intersection en T",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/6a/Israel_road_sign_117.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 14,
+    "nom": "Carrefour décalé à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/cf/Israel_road_sign_119.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 15,
+    "nom": "Carrefour décalé à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/01/Israel_road_sign_120.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 16,
+    "nom": "Rond point",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/1d/Israel_road_sign_121.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 17,
+    "nom": "Feux de circulations",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/8a/Israel_road_sign_122.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 18,
+    "nom": "Petite route qui rejoint à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Israel_road_sign_123.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 19,
+    "nom": "Petite route qui rejoint à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/27/Israel_road_sign_124.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 20,
+    "nom": "Rejoindre la route principale en venant de la droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/38/Israel_road_sign_125.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 21,
+    "nom": "Rejoindre la route principale en venant de la gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/55/Israel_road_sign_126.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 22,
+    "nom": "Des embouteillages possibles",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e4/Israel_road_sign_127a.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 23,
+    "nom": "Embouteillage",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/80/Israel_road_sign_127b.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 24,
+    "nom": "Traversée de tramway",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Israel_road_sign_128b.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 25,
+    "nom": "Passage à niveau",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/c0/Israel_road_sign_129b.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 26,
+    "nom": "Passage piéton",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/9a/Israel_road_sign_135.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 27,
+    "nom": "Piétons",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Israel_road_sign_136.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 28,
+    "nom": "Cyclistes",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/85/Israel_road_sign_137.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 29,
+    "nom": "Panneau d'arrêt devant",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/60/Israel_road_sign_139.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 30,
+    "nom": "Descente dangereuse",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Israel_road_sign_140.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 31,
+    "nom": "Surface glissante",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Israel_road_sign_141.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 32,
+    "nom": "Zone d'éboulement (à gauche)",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/30/Israel_road_sign_142.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 33,
+    "nom": "Zone d'éboulement (à droite)",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/4f/Israel_road_sign_143.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 34,
+    "nom": "Ralentisseur",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/d9/Israel_road_sign_144.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 35,
+    "nom": "Circulation bidirectionnelle",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/90/Israel_road_sign_145.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 36,
+    "nom": "Traversée de chameaux",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Israel_road_sign_146b.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 37,
+    "nom": "Traversée de véhicules agricoles",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Israel_road_sign_147.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 38,
+    "nom": "Autre danger",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/dd/Israel_road_sign_150.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 39,
+    "nom": "Accident",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Israel_road_sign_151.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 40,
+    "nom": "Traversée d'eau",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/5d/Israel_road_sign_153.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 41,
+    "nom": "Enfants",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/a/a3/Children_warning_sign_israel.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 42,
+    "nom": "Travaux",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/53/Israel_road_sign_901.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 43,
+    "nom": "Fin des travaux routiers",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b7/Israel_road_sign_902.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 44,
+    "nom": "Allez tout droit ou tournez à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/05/Israel_road_sign_201.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 45,
+    "nom": "Allez tout droit ou tournez à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/7/7c/Israel_road_sign_202.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 46,
+    "nom": "Allez tout droit",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/7/71/Israel_road_sign_203.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 47,
+    "nom": "Tournez à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/1f/Israel_road_sign_204.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 48,
+    "nom": "Tourner à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Israel_road_sign_207.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 49,
+    "nom": "Tourner à gauche ou à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Israel_road_sign_208.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 50,
+    "nom": "Allez tout droit ou faites demi-tour à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/38/Israel_road_sign_209.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 51,
+    "nom": "Allez tout droit ou faites demi-tour à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Israel_road_sign_210.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 52,
+    "nom": "Demi-tour obligatoire à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e4/Israel_road_sign_211.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 53,
+    "nom": "Demi-tour obligatoire à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/a/a2/Israel_road_sign_212.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 54,
+    "nom": "Peut passer des deux côtés",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/44/Israel_road_sign_213.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 55,
+    "nom": "Passer à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/01/Israel_road_sign_214.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 56,
+    "nom": "Passer à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Israel_road_sign_215.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 57,
+    "nom": "Début de l'autoroute",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Israel_road_sign_216.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 58,
+    "nom": "Fin de l'autoroute",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Israel_road_sign_217.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 59,
+    "nom": "Limite de vitesse minimum",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Israel_road_sign_218.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 60,
+    "nom": "Route réservée aux véhicules à moteur",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/33/Israel_road_sign_219.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 61,
+    "nom": "Début de la zone d’apaisement de la circulation",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Israel_road_sign_220.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 62,
+    "nom": "Fin de la zone d'apaisement de la circulation",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Israel_road_sign_221.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 63,
+    "nom": "Zone de retrait du trafic",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/46/Israel_road_sign_222.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 64,
+    "nom": "Fin de la zone de décession de circulation",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/30/Israel_road_sign_223.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 65,
+    "nom": "Piste cyclable",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/f1/Israel_road_sign_224.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 66,
+    "nom": "Fin de la piste cyclable",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/19/Israel_road_sign_225.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 67,
+    "nom": "Chemin piétonnier",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/24/Israel_road_sign_226.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 68,
+    "nom": "Chemin cyclable",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/31/Israel_road_sign_227.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 69,
+    "nom": "Piste piétonne et cyclable partagée",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Israel_road_sign_228.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 70,
+    "nom": "Piste piétonne et cyclable séparée",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/61/Israel_road_sign_229.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 71,
+    "nom": "Voie à péage",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/59/Israel_road_sign_230a.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 72,
+    "nom": "Fin de la voie à péage",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/23/Israel_road_sign_231a.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 73,
+    "nom": "Cédez le passage",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/85/Israel_road_sign_301.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 74,
+    "nom": "Arrêt",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/24/Israel_road_sign_302.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 75,
+    "nom": "Rond point",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/7/76/Israel_road_sign_303.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 76,
+    "nom": "Arrêt (commande manuelle)",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/41/Israel_road_sign_304.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 77,
+    "nom": "Aller (commande manuelle)",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/60/Israel_road_sign_305.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 78,
+    "nom": "Passage piéton",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/94/Israel_road_sign_306.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 79,
+    "nom": "Priorité aux véhicules venant en sens inverse",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/51/Israel_road_sign_307.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 80,
+    "nom": "Priorité sur les véhicules venant en sens inverse",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/29/Israel_road_sign_308.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 81,
+    "nom": "Route prioritaire",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Israel_road_sign_309.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 82,
+    "nom": "Fin de la route prioritaire",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/13/Israel_road_sign_310.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 83,
+    "nom": "Interdiction de tous les véhicules",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/db/Israel_road_sign_401.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 84,
+    "nom": "Interdiction d'entrée",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/53/Israel_road_sign_402.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 85,
+    "nom": "Interdiction des véhicules à moteur",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/02/Israel_road_sign_405.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 86,
+    "nom": "Interdiction des camions de 10 tonnes",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e1/Israel_road_sign_406.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 87,
+    "nom": "Interdiction des véhicules transportant des matières dangereuses",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Israel_road_sign_407.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 88,
+    "nom": "Interdiction des véhicules à quatre roues",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b6/Israel_road_sign_408.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 89,
+    "nom": "Interdiction des motos",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/69/Israel_road_sign_409.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 90,
+    "nom": "Interdiction des véhicules agricoles",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/7/76/Israel_road_sign_410.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 91,
+    "nom": "Interdiction des animaux",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/10/Israel_road_sign_411.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 92,
+    "nom": "Interdiction aux cyclistes",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/1/1d/Israel_road_sign_412.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 93,
+    "nom": "Interdiction aux piétons",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/08/Israel_road_sign_413.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 94,
+    "nom": "Interdiction des piétons, des cyclistes, des véhicules agricoles et des animaux",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b6/Israel_road_sign_414.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 95,
+    "nom": "Interdiction des véhicules de plus de 6 tonnes",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Israel_road_sign_415.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 96,
+    "nom": "Interdiction des véhicules de plus de 4,6 mètres",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/63/Israel_road_sign_416.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 97,
+    "nom": "Interdiction des véhicules d'une largeur supérieure à 2,1 mètres",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/c9/Israel_road_sign_417.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 98,
+    "nom": "Espace cours de conduite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/8e/Israel_road_sign_418.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 99,
+    "nom": "Aire de fin de cours de conduite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Israel_road_sign_419.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 100,
+    "nom": "Interdiction de dépasser",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/0/02/Israel_road_sign_420.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 101,
+    "nom": "Fin de l'interdiction de dépasser",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/6/65/Israel_road_sign_421.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 102,
+    "nom": "Interdiction de dépasser pour les camions",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Israel_road_sign_422.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 103,
+    "nom": "Fin de l'interdiction de dépasser pour les camions",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Israel_road_sign_423.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 104,
+    "nom": "Zone urbaine",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/a/a0/Israel_road_sign_424.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 105,
+    "nom": "Fin de la zone urbaine",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Israel_road_sign_425.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 106,
+    "nom": "Limitation de vitesse",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/50/Israel_road_sign_426-50.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 107,
+    "nom": "Fin de la limitation de vitesse",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/4/44/Israel_road_sign_427-50.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 108,
+    "nom": "Interdiction de tourner à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/b/b3/Israel_road_sign_428.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 109,
+    "nom": "Interdiction de tourner à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/9/92/Israel_road_sign_429.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 110,
+    "nom": "Interdiction de faire demi-tour à droite",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Israel_road_sign_430.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 111,
+    "nom": "Interdiction de faire demi-tour à gauche",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/8b/Israel_road_sign_431.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 112,
+    "nom": "Interdiction de stationner",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/80/Israel_road_sign_432.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 113,
+    "nom": "Interdiction de stationner et de s'arrêter",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/e1/Israel_road_sign_433.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 114,
+    "nom": "L'interdiction de stationner se termine",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/57/Israel_road_sign_434.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 115,
+    "nom": "Interdiction de garer les camions de plus de 10 000 kg",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/7/7a/Israel_road_sign_435.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 116,
+    "nom": "Fin de l'interdiction de garer les camions de plus de 10 000 kg",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/8/87/Israel_road_sign_436.svg",
+    "type": "Panneaux d'avertissement"
+  },
+  {
+    "id": 117,
+    "nom": "Douane",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/d7/Israel_road_sign_438.svg",
+    "type": "Panneaux d'avertissement"
+  }
+]

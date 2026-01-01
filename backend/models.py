@@ -17,37 +17,18 @@ except ImportError:
 
 # ===== SQLAlchemy DB Models =====
 class UserDB(Base):
-    __tablename__ = "users"
-    
+    __tablename__ = "transactions"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+    user_id = Column(String, index=True, nullable=True)  # Lien vers UserDB
+    paddle_transaction_id = Column(String, unique=True, index=True, nullable=True)
+    paddle_subscription_id = Column(String, index=True, nullable=True)
+    amount = Column(Float, nullable=True)
+    currency = Column(String, nullable=True)
+    status = Column(String, index=True)  # pending, completed, failed, refunded, etc.
+    event_type = Column(String, nullable=True)  # transaction.completed, subscription.created, etc.
+    event_data = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
     created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class QuestionDB(Base):
-    __tablename__ = "questions"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    text = Column(String)
-    category = Column(String, index=True)
-    options = Column(JSON)  # List of {"id": str, "text": str, "is_correct": bool}
-    explanation = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class TrafficSignDB(Base):
-    __tablename__ = "traffic_signs"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    number = Column(String, unique=True)
-    name = Column(String)
-    description = Column(String)
-    image_url = Column(String, nullable=True)
-    category = Column(String)
-
-
-class ExamSessionDB(Base):
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __tablename__ = "exam_sessions"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -64,6 +45,7 @@ class ExamSessionDB(Base):
 
 
 class TransactionDB(Base):
+<<<<<<< HEAD
     """Modèle pour enregistrer les transactions Paddle"""
     __tablename__ = "transactions"
     
@@ -78,6 +60,23 @@ class TransactionDB(Base):
     event_data = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+=======
+    __tablename__ = "transactions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    paddle_transaction_id = Column(String, unique=True, index=True)
+    status = Column(String, index=True)  # created, pending, completed, paid, refunded, etc.
+    amount_cents = Column(Integer, nullable=True)
+    currency = Column(String, nullable=True)
+    user_id = Column(String, index=True, nullable=True)
+    price_id = Column(String, index=True, nullable=True)
+    product_id = Column(String, index=True, nullable=True)
+    checkout_id = Column(String, index=True, nullable=True)
+    subscription_id = Column(String, index=True, nullable=True)
+    raw_event = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+>>>>>>> 2d0b719 (feat(signs): add Israel FR 117 traffic signs JSON and importer; fix backend imports for uvicorn module mode)
 
 
 # ===== Pydantic Models =====
