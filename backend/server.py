@@ -292,6 +292,58 @@ async def startup():
             print(f"✅ Successfully loaded {new_count} questions from data_v3.json!")
         else:
             print(f"ℹ️  Database already contains {question_count} questions")
+
+        # Load traffic signs from bundled JSON if none exist
+        def _load_signs_from_json(db: Session) -> int:
+            path = ROOT_DIR.parent / "data" / "signs_israel_fr_117.json"
+            if not path.exists():
+                print(f"⚠️  signs JSON not found at {path}")
+                return 0
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, list):
+                    print("⚠️  signs JSON format invalid (expected list)")
+                    return 0
+
+                imported_signs = 0
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    raw_id = item.get("id")
+                    number = f"IL-{raw_id}" if raw_id is not None else None
+                    if not number:
+                        continue
+
+                    existing = db.query(TrafficSignDB).filter(TrafficSignDB.number == str(number)).first()
+                    if existing:
+                        continue
+
+                    sign = TrafficSignDB(
+                        number=str(number),
+                        name=item.get("nom") or "",
+                        description=(item.get("nom") or ""),
+                        image_url=item.get("image"),
+                        category=item.get("type") or "Autre",
+                    )
+                    db.add(sign)
+                    imported_signs += 1
+
+                db.commit()
+                return imported_signs
+            except Exception as e:
+                logger.error(f"Error importing signs from JSON: {e}", exc_info=True)
+                db.rollback()
+                return 0
+
+        sign_count = db.query(TrafficSignDB).count()
+        if sign_count == 0:
+            print("🚸 Loading traffic signs from bundled JSON...")
+            imported_signs = _load_signs_from_json(db)
+            new_sign_count = db.query(TrafficSignDB).count()
+            print(f"✅ Loaded {new_sign_count} traffic signs from JSON")
+        else:
+            print(f"ℹ️  Database already contains {sign_count} traffic signs")
             
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
@@ -726,18 +778,51 @@ async def create_question(
 # ===== Traffic Signs Endpoints =====
 @app.get("/api/signs", response_model=List[TrafficSign])
 async def get_signs(db: Session = Depends(get_db)):
-    signs = db.query(TrafficSignDB).all()
-    return [
-        TrafficSign(
-            id=s.id,
-            number=s.number,
-            name=s.name,
-            description=s.description,
-            image_url=s.image_url,
-            category=s.category
-        )
-        for s in signs
-    ]
+    """Return traffic signs from DB; fallback to bundled JSON if DB unavailable.
+
+    Prevents 500 errors in case of DB/table issues by serving static data.
+    """
+    try:
+        signs = db.query(TrafficSignDB).all()
+        if signs:
+            return [
+                TrafficSign(
+                    id=s.id,
+                    number=s.number,
+                    name=s.name,
+                    description=s.description,
+                    image_url=s.image_url,
+                    category=s.category,
+                )
+                for s in signs
+            ]
+    except Exception as e:
+        logger.error(f"Error fetching signs from DB: {e}", exc_info=True)
+
+    # Fallback: load from packaged JSON
+    fallback_path = ROOT_DIR.parent / "data" / "signs_israel_fr_117.json"
+    if fallback_path.exists():
+        try:
+            with fallback_path.open("r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, list):
+                return [
+                    TrafficSign(
+                        id=str(f"IL-{item.get('id')}") if item.get("id") is not None else str(uuid.uuid4()),
+                        number=str(f"IL-{item.get('id')}") if item.get("id") is not None else "",
+                        name=item.get("nom") or "",
+                        description=item.get("nom") or "",
+                        image_url=item.get("image"),
+                        category=item.get("type") or "Autre",
+                    )
+                    for item in raw
+                    if isinstance(item, dict)
+                ]
+        except Exception as e:
+            logger.error(f"Error loading fallback signs JSON: {e}", exc_info=True)
+
+    # If nothing available, return empty list instead of 500
+    return []
 
 
 # ===== Exam Endpoints =====
