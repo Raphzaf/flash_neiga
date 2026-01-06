@@ -48,7 +48,7 @@ function Refund() {
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Les promotions et réductions appliquées lors de l’achat ne sont pas remboursées séparément.</li>
           </ul>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-slate-600 dark:text-slate-400">
             Tu peux adapter ici : Exemple : droit de rétractation de 14 jours tant que aucun contenu n’a été consulté / aucune leçon réalisée.
           </p>
         </div>

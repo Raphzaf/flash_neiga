@@ -126,7 +126,7 @@ export default function Stats() {
                                     </div>
                                 ))}
                                 {(!summary?.last_exams || summary.last_exams.length === 0) && (
-                                    <p className="text-muted-foreground">Pas assez de données pour afficher le graphique.</p>
+                                    <p className="text-slate-600 dark:text-slate-400">Pas assez de données pour afficher le graphique.</p>
                                 )}
                             </div>
                         </CardContent>

@@ -134,7 +134,7 @@ export default function Exam() {
                     
                     <div>
                         <h2 className="text-3xl font-bold mb-2">{result.passed ? "Félicitations !" : "Désolé, c'est raté."}</h2>
-                        <p className="text-muted-foreground">Vous avez fait {result.total_questions - result.correct_answers} erreurs.</p>
+                        <p className="text-slate-600 dark:text-slate-400">Vous avez fait {result.total_questions - result.correct_answers} erreurs.</p>
                     </div>
 
                     <div className="text-5xl font-black text-primary my-8">
