@@ -230,21 +230,21 @@ function Pricing() {
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">-</td>
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">-</td>
             </tr>
-            <tr className="bg-purple-50">
+            <tr className="bg-purple-50 dark:bg-purple-950/30">
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">Vidéos 2 mois</td>
-              <td className="px-4 py-2 border font-semibold">349₪</td>
-              <td className="px-4 py-2 border line-through">398₪</td>
-              <td className="px-4 py-2 border text-purple-600 font-bold">-12%</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 font-semibold text-slate-900 dark:text-white">349₪</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 line-through text-slate-600 dark:text-slate-400">398₪</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-purple-600 dark:text-purple-400 font-bold">-12%</td>
             </tr>
             <tr className="bg-purple-100 dark:bg-purple-900/30">
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">Vidéos 3 mois</td>
-              <td className="px-4 py-2 border font-semibold">489₪</td>
-              <td className="px-4 py-2 border line-through">597₪</td>
-              <td className="px-4 py-2 border text-purple-700 font-bold">-18%</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 font-semibold text-slate-900 dark:text-white">489₪</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 line-through text-slate-600 dark:text-slate-400">597₪</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-purple-700 dark:text-purple-300 font-bold">-18%</td>
             </tr>
             <tr>
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">Extension 1 semaine</td>
-              <td className="px-4 py-2 border font-semibold">49₪</td>
+              <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 font-semibold text-slate-900 dark:text-white">49₪</td>
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">-</td>
               <td className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">-</td>
             </tr>
