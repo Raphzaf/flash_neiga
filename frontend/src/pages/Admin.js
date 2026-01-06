@@ -199,7 +199,7 @@ export default function Admin() {
 
     return (
         <div className="max-w-4xl mx-auto p-6 min-h-screen">
-            <h1 className="text-3xl font-bold mb-8">Administration (CMS)</h1>
+            <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white">Administration (CMS)</h1>
 
             <Tabs defaultValue="question">
                 <TabsList className="grid w-full grid-cols-4 mb-8">
@@ -218,8 +218,8 @@ export default function Admin() {
                 </TabsList>
 
                 <TabsContent value="database">
-                    <Card>
-                        <CardHeader><CardTitle>📊 Gestion de la base de données</CardTitle></CardHeader>
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <CardHeader><CardTitle className="text-slate-900 dark:text-white">📊 Gestion de la base de données</CardTitle></CardHeader>
                         <CardContent className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {isLoadingStats ? (
@@ -230,16 +230,16 @@ export default function Admin() {
                                     </>
                                 ) : (
                                     <>
-                                        <div className="rounded-xl border p-4 bg-slate-50 dark:bg-slate-900">
-                                            <div className="text-sm text-muted-foreground">Total questions</div>
-                                            <div className="text-2xl font-bold">{stats.total_questions}</div>
+                                        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800">
+                                            <div className="text-sm text-slate-600 dark:text-slate-300">Total questions</div>
+                                            <div className="text-2xl font-bold text-slate-900 dark:text-white">{stats.total_questions}</div>
                                         </div>
-                                        <div className="rounded-xl border p-4 bg-slate-50 dark:bg-slate-900">
-                                            <div className="text-sm text-muted-foreground">Base de données</div>
-                                            <div className="text-lg font-semibold">{stats.database_type}</div>
+                                        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800">
+                                            <div className="text-sm text-slate-600 dark:text-slate-300">Base de données</div>
+                                            <div className="text-lg font-semibold text-slate-900 dark:text-white">{stats.database_type}</div>
                                         </div>
-                                        <div className="rounded-xl border p-4 bg-slate-50 dark:bg-slate-900">
-                                            <div className="text-sm text-muted-foreground mb-2">Catégories</div>
+                                        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800">
+                                            <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">Catégories</div>
                                             <div className="flex flex-wrap gap-2">
                                                 {Object.entries(stats.by_category || {}).map(([category, count]) => (
                                                     <Badge key={category} variant="secondary">{category}: {count}</Badge>
@@ -278,22 +278,22 @@ export default function Admin() {
                 </TabsContent>
 
                 <TabsContent value="manage">
-                    <Card>
-                        <CardHeader><CardTitle>🛠️ Gérer les questions</CardTitle></CardHeader>
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <CardHeader><CardTitle className="text-slate-900 dark:text-white">🛠️ Gérer les questions</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
                                 <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400" />
                                     <Input
                                         value={manageSearch}
                                         onChange={(e) => setManageSearch(e.target.value)}
                                         placeholder="Rechercher une question ou une explication"
-                                        className="pl-9"
+                                        className="pl-9 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Switch checked={manageOnlyMissing} onCheckedChange={(v) => { setManageOnlyMissing(v); fetchManageQuestions({ reset: true }); }} />
-                                    <span className="text-sm">Seulement sans explication</span>
+                                    <span className="text-sm text-slate-900 dark:text-white">Seulement sans explication</span>
                                 </div>
                                 <Button variant="outline" onClick={() => fetchManageQuestions({ reset: true })}>
                                     <RefreshCw className="h-4 w-4 mr-2" /> Actualiser
@@ -309,19 +309,19 @@ export default function Admin() {
                             ) : (
                                 <div className="space-y-4">
                                     {filteredManageQuestions.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">Aucune question à afficher.</p>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">Aucune question à afficher.</p>
                                     ) : (
                                         filteredManageQuestions.map((q) => (
-                                            <div key={q.id} className="border rounded-lg p-4 space-y-3 bg-slate-50 dark:bg-slate-900">
+                                            <div key={q.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-3 bg-slate-50 dark:bg-slate-800">
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div>
-                                                        <p className="font-medium">{q.text}</p>
+                                                        <p className="font-medium text-slate-900 dark:text-white">{q.text}</p>
                                                         <div className="flex items-center gap-2 mt-1">
-                                                            <Badge variant="outline">{q.category}</Badge>
+                                                            <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">{q.category}</Badge>
                                                             {q.has_explanation ? (
-                                                                <Badge variant="secondary">Explication OK</Badge>
+                                                                <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300">Explication OK</Badge>
                                                             ) : (
-                                                                <Badge variant="destructive">Explication manquante</Badge>
+                                                                <Badge variant="destructive" className="bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300">Explication manquante</Badge>
                                                             )}
                                                         </div>
                                                     </div>
@@ -330,11 +330,12 @@ export default function Admin() {
                                                     </Button>
                                                 </div>
                                                 <div>
-                                                    <label className="text-sm font-medium">Explication</label>
+                                                    <label className="text-sm font-medium text-slate-900 dark:text-white">Explication</label>
                                                     <Textarea
                                                         value={q.explanation || ''}
                                                         onChange={(e) => setManageQuestions(prev => prev.map(item => item.id === q.id ? { ...item, explanation: e.target.value } : item))}
                                                         placeholder="Ajoutez une explication claire et concise"
+                                                        className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                                                     />
                                                 </div>
                                                 <div className="flex justify-end">
@@ -357,17 +358,17 @@ export default function Admin() {
                 </TabsContent>
 
                 <TabsContent value="question">
-                    <Card>
-                        <CardHeader><CardTitle>Nouvelle Question</CardTitle></CardHeader>
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <CardHeader><CardTitle className="text-slate-900 dark:text-white">Nouvelle Question</CardTitle></CardHeader>
                         <CardContent>
                             <form onSubmit={submitQuestion} className="space-y-4">
                                 <div>
-                                    <label className="text-sm font-medium">Énoncé</label>
-                                    <Textarea value={qText} onChange={e => setQText(e.target.value)} required />
+                                    <label className="text-sm font-medium text-slate-900 dark:text-white">Énoncé</label>
+                                    <Textarea value={qText} onChange={e => setQText(e.target.value)} required className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-sm font-medium">Catégorie</label>
+                                        <label className="text-sm font-medium text-slate-900 dark:text-white">Catégorie</label>
                                         <Select value={qCategory} onValueChange={setQCategory}>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
