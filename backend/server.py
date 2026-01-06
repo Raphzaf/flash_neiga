@@ -42,9 +42,13 @@ except ImportError:
         TokenResponse
     )
 try:
-    from routes.paddle_payments import router as paddle_router
+    from routes.verifone_payments import router as verifone_router
 except ImportError:
-    from backend.routes.paddle_payments import router as paddle_router
+    from backend.routes.verifone_payments import router as verifone_router
+try:
+    from routes.twocheckout import router as twocheckout_router
+except ImportError:
+    from backend.routes.twocheckout import router as twocheckout_router
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
@@ -92,7 +96,8 @@ app.add_middleware(
 )
 
 # Include external routers
-app.include_router(paddle_router)
+app.include_router(verifone_router)
+app.include_router(twocheckout_router)
 
 
 # ===== Health Check Endpoint =====

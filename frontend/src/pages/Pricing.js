@@ -1,20 +1,24 @@
 import React from "react";
 import axios from "axios";
-import { PADDLE_PRICES } from '../config/paddlePrices';
+import { VERIFONE_PLANS } from '../config/verifonePlans';
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 
-const UNCONFIGURED_PRICE_ID = 'TO_BE_CREATED';
-
-async function startPaddleCheckout(priceId) {
+async function startVerifoneCheckout(plan) {
   try {
-    if (!priceId || String(priceId).startsWith('pri_FILL_ME') || String(priceId) === UNCONFIGURED_PRICE_ID) {
-      alert('⚠️ Ce prix n\'est pas encore configuré. Veuillez créer les price IDs avec le script backend/scripts/create_paddle_extensions.py');
+    if (!plan || !plan.amount || !plan.currency) {
+      alert('⚠️ Ce plan n\'est pas configuré correctement (montant/devise manquants).');
       return;
     }
-    console.log('Envoi priceId:', priceId);
-    // Use camelCase 'priceId' to match backend expectations
-    const res = await axios.post('/api/payments/paddle/create-checkout', { priceId: priceId });
+    const body = {
+      amount: plan.amount,
+      currency: plan.currency,
+      name: plan.name,
+      productId: plan.productId,
+      returnUrl: window.location.origin + '/subscription-success',
+      test: true,
+    };
+    const res = await axios.post('/api/payments/verifone/create-checkout', body);
     const checkoutUrl = res.data?.checkoutUrl || res.data?.url;
     if (checkoutUrl) {
       console.log('Checkout URL:', checkoutUrl);
@@ -28,12 +32,12 @@ async function startPaddleCheckout(priceId) {
         }
       }
     } else {
-      alert('❌ Erreur: URL de paiement Paddle non disponible');
+      alert('❌ Erreur: URL de paiement Verifone non disponible');
     }
   } catch (e) {
-    console.error('Paddle checkout error:', e?.response?.status, e?.response?.data);
+    console.error('Verifone checkout error:', e?.response?.status, e?.response?.data);
     const errorDetail = e?.response?.data?.detail || 'Erreur inconnue';
-    alert(`❌ Erreur de paiement Paddle: ${errorDetail}`);
+    alert(`❌ Erreur de paiement Verifone: ${errorDetail}`);
   }
 }
 
@@ -60,7 +64,7 @@ function Pricing() {
               <Button 
                 variant="outline" 
                 className="w-full mt-2" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.CODE.DAYS_14)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.CODE.DAYS_14)}
               >
                 Souscrire 14 jours
               </Button>
@@ -77,7 +81,7 @@ function Pricing() {
               <Button 
                 variant="default" 
                 className="w-full mt-2 bg-blue-600 hover:bg-blue-700" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.CODE.DAYS_30)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.CODE.DAYS_30)}
               >
                 Souscrire 30 jours
               </Button>
@@ -89,7 +93,7 @@ function Pricing() {
                 variant="outline" 
                 size="sm"
                 className="w-full mt-2" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.CODE.WEEK_EXTENSION)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.CODE.WEEK_EXTENSION)}
               >
                 Prolonger d'une semaine
               </Button>
@@ -112,7 +116,7 @@ function Pricing() {
               <Button 
                 variant="outline" 
                 className="w-full mt-2" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.VIDEOS.MONTH_1)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.MONTH_1)}
               >
                 Souscrire 1 mois
               </Button>
@@ -129,7 +133,7 @@ function Pricing() {
               <Button 
                 variant="default" 
                 className="w-full mt-2 bg-purple-600 hover:bg-purple-700" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.VIDEOS.MONTH_2)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.MONTH_2)}
               >
                 Souscrire 2 mois
               </Button>
@@ -146,7 +150,7 @@ function Pricing() {
               <Button 
                 variant="default" 
                 className="w-full mt-2 bg-purple-700 hover:bg-purple-800" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.VIDEOS.MONTH_3)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.MONTH_3)}
               >
                 Souscrire 3 mois
               </Button>
@@ -158,7 +162,7 @@ function Pricing() {
                 variant="outline" 
                 size="sm"
                 className="w-full mt-2" 
-                onClick={() => startPaddleCheckout(PADDLE_PRICES.VIDEOS.WEEK_EXTENSION)}
+                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.WEEK_EXTENSION)}
               >
                 Prolonger d'une semaine
               </Button>

@@ -1,101 +1,106 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Outfit:wght@300;400;500;700&family=JetBrains+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Hide "Made with Emergent" badge if injected dynamically */
-[class*="emergent" i],
-[class*="made-with" i],
-[data-emergent],
-a[href*="emergent.sh"],
-div:has(> a[href*="emergent.sh"]) {
-  display: none !important;
-}
-
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-
+    /* Thème Clair : Très épuré, typé Apple */
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
- 
+    --card-foreground: 224 71.4% 4.1%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
- 
-    --primary: 243 75% 59%;
-    --primary-foreground: 210 40% 98%;
- 
-    --secondary: 215 25% 27%;
-    --secondary-foreground: 210 40% 98%;
- 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
- 
-    --accent: 35 92% 50%;
-    --accent-foreground: 222.2 47.4% 11.2%;
- 
+    --popover-foreground: 224 71.4% 4.1%;
+    
+    /* Primaire : Un doré/bronze sophistiqué */
+    --primary: 43 46% 56%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 243 75% 59%;
- 
-    --radius: 1rem;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 43 46% 56%;
+    --radius: 1.25rem;
   }
  
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
- 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
- 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
- 
-    --primary: 243 75% 59%;
+    /* Thème Sombre : Profond (Deep Night) */
+    --background: 222 47% 4%; /* Très proche du noir mais avec une pointe de bleu */
+    --foreground: 213 31% 91%;
+    --card: 222 47% 4%;
+    --card-foreground: 213 31% 91%;
+    --popover: 222 47% 4%;
+    --popover-foreground: 213 31% 91%;
+    
+    --primary: 43 46% 56%; /* On garde le doré pour le contraste */
     --primary-foreground: 210 40% 98%;
- 
-    --secondary: 215 25% 27%;
+    
+    --secondary: 217.2 32.6% 12%;
     --secondary-foreground: 210 40% 98%;
- 
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 217.2 32.6% 12%;
     --muted-foreground: 215 20.2% 65.1%;
- 
-    --accent: 35 92% 50%;
+    --accent: 217.2 32.6% 12%;
     --accent-foreground: 210 40% 98%;
- 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
- 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 217.2 32.6% 15%;
+    --input: 217.2 32.6% 15%;
+    --ring: 43 46% 56%;
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    /* On utilise la variable directement au lieu de l'utilitaire Tailwind */
+    border-color: hsl(var(--border));
+    @apply tracking-tight;
   }
   body {
-    @apply bg-background text-foreground font-body;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-heading;
-  }
+  /* ... reste du code identique */
 }
 
-/* Custom Scrollbar */
+
+/* --- Animations Sexy --- */
+
+/* Effet de pulsation douce pour les fonds */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+/* Glassmorphism utility */
+.glass {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)];
+}
+
+/* Scrollbar élégante */
 ::-webkit-scrollbar {
-    width: 8px;
+  width: 5px;
 }
 ::-webkit-scrollbar-track {
-    background: transparent;
+  @apply bg-transparent;
 }
 ::-webkit-scrollbar-thumb {
-    @apply bg-slate-300 dark:bg-slate-700 rounded-full;
-}
+  @apply bg-primary/20 hover:bg-primary/40 rounded-full transition-colors;
+} 

@@ -59,7 +59,7 @@ class ExamSessionDB(Base):
 
 
 class TransactionDB(Base):
-    """Modèle pour enregistrer les transactions Paddle"""
+    """Modèle pour enregistrer les transactions de paiement (Verifone/2Checkout, etc.)"""
     __tablename__ = "transactions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -71,6 +71,38 @@ class TransactionDB(Base):
     status = Column(String, index=True)  # pending, completed, failed, refunded, etc.
     event_type = Column(String, nullable=True)  # transaction.completed, subscription.created, etc.
     event_data = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PaymentDB(Base):
+    """Paiements individuels (Order/Payment via Verifone/2Checkout)."""
+    __tablename__ = "payments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True, nullable=True)
+    order_id = Column(String, index=True, nullable=True)
+    product_id = Column(Integer, index=True, nullable=True)
+    amount = Column(Float, nullable=True)
+    currency = Column(String, nullable=True)
+    status = Column(String, index=True)  # received, approved, refunded, etc.
+    event_type = Column(String, nullable=True)  # ipn.order, ipn.payment, etc.
+    event_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SubscriptionDB(Base):
+    """Abonnements/licences gérés par Verifone/2Checkout (LCN)."""
+    __tablename__ = "subscriptions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True, nullable=True)
+    license_id = Column(String, index=True, nullable=True)  # LCN license/subscription id
+    product_id = Column(Integer, index=True, nullable=True)
+    status = Column(String, index=True)  # active, canceled, expired, etc.
+    next_renewal = Column(DateTime, nullable=True)
+    canceled_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -163,7 +195,7 @@ class TokenResponse(BaseModel):
 
 
 class Transaction(BaseModel):
-    """Modèle Pydantic pour les transactions"""
+    """Modèle Pydantic pour les transactions de paiement"""
     id: str
     user_id: Optional[str] = None
     paddle_transaction_id: Optional[str] = None
@@ -178,7 +210,7 @@ class Transaction(BaseModel):
 
 
 class TransactionCreate(BaseModel):
-    """Modèle pour créer une transaction"""
+    """Modèle pour créer une transaction de paiement"""
     user_id: Optional[str] = None
     paddle_transaction_id: Optional[str] = None
     paddle_subscription_id: Optional[str] = None

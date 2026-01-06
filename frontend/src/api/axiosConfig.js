@@ -7,23 +7,17 @@ const getBackendURL = () => {
   const isLocalHost = isBrowser && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
   const isEnvLocalhost = envUrl && /(^http:\/\/localhost|^http:\/\/127\.0\.0\.1)/i.test(envUrl);
 
-  // If explicitly set, honor it unless it's pointing to localhost while hosted remotely
   if (envUrl) {
     if (!isLocalHost && isEnvLocalhost) {
-      // Ignore a baked-in localhost URL on a remote host like Netlify
-      // and prefer proxy/relative path to avoid CORS issues.
       return '';
     }
     return envUrl.replace(/\/$/, '');
   }
 
-  // Production: default to relative paths (Netlify proxy). If running locally
-  // (serving build/ via a simple static server), fall back to localhost:8000.
   if (process.env.NODE_ENV === 'production') {
     return isLocalHost ? 'http://localhost:8000' : '';
   }
 
-  // Development: point directly to local backend
   return 'http://localhost:8000';
 };
 
@@ -31,7 +25,7 @@ const BACKEND_URL = getBackendURL();
 
 // Configure axios defaults
 axios.defaults.baseURL = BACKEND_URL;
-axios.defaults.withCredentials = true; // Important for cookies/auth
+axios.defaults.withCredentials = true;
 
 // Log configuration in development
 if (process.env.NODE_ENV === 'development') {
@@ -44,6 +38,9 @@ axios.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📤 Request with token:', token.substring(0, 10) + '...');
+      }
     }
     return config;
   },
@@ -55,13 +52,18 @@ axios.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      console.warn('🚫 Unauthorized (401) - Clearing token');
       localStorage.removeItem('token');
-      // Force full page reload to /login to clear all app state
-      // This is intentional for security - ensures clean logout on auth failure
-      window.location.href = '/login';
+      delete axios.defaults.headers.common['Authorization'];
+      
+      // Secure redirection
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
 
 export default axios;
+// ✅ PAS de useEffect ici !
