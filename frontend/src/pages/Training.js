@@ -97,7 +97,7 @@ export default function Training() {
         <div className="max-w-3xl mx-auto p-4 min-h-screen flex flex-col">
             {/* Top Bar */}
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-heading font-bold">Entraînement</h1>
+                <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">Entraînement</h1>
                 <div className="w-full max-w-2xl flex flex-col gap-3">
                     <div>
                         <input
@@ -105,7 +105,7 @@ export default function Training() {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Rechercher une question (mot-clé)"
-                            className="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                            className="w-full rounded-md border px-3 py-2 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder:text-slate-500"
                         />
                     </div>
                     <Select
@@ -149,7 +149,7 @@ export default function Training() {
 
             {/* Question Card */}
             <div className="flex-1 flex flex-col justify-center">
-                <Card className="border-0 shadow-lg overflow-hidden bg-white dark:bg-slate-900">
+                <Card className="border-0 shadow-lg overflow-hidden bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     {currentQ.image_url && (
                         <div className="h-64 bg-black flex items-center justify-center">
                             <img src={currentQ.image_url} alt="Context" className="h-full object-contain" />
@@ -157,20 +157,20 @@ export default function Training() {
                     )}
                     
                     <CardContent className="p-6 md:p-8">
-                        <h2 className="text-xl font-bold mb-8">{currentQ.text}</h2>
+                        <h2 className="text-xl font-semibold mb-8 text-slate-900 dark:text-white">{currentQ.text}</h2>
 
                         <div className="grid grid-cols-1 gap-3">
                             {currentQ.options.map(opt => {
-                                let stateClass = "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800";
+                                let stateClass = "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30";
                                 let icon = null;
 
                                 if (feedback) {
                                     if (opt.id === feedback.correct_option_id) {
-                                        stateClass = "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-500";
-                                        icon = <CheckCircle className="h-5 w-5 text-emerald-600 ml-auto" />;
+                                        stateClass = "border-emerald-500 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100 ring-1 ring-emerald-500";
+                                        icon = <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400 ml-auto" />;
                                     } else if (opt.id === selectedOption && opt.id !== feedback.correct_option_id) {
-                                        stateClass = "border-red-500 bg-red-50 dark:bg-red-900/20 ring-1 ring-red-500";
-                                        icon = <XCircle className="h-5 w-5 text-red-600 ml-auto" />;
+                                        stateClass = "border-red-500 bg-red-100 dark:bg-red-950/30 text-red-900 dark:text-red-100 ring-1 ring-red-500";
+                                        icon = <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 ml-auto" />;
                                     } else {
                                         stateClass = "opacity-50";
                                     }
@@ -193,7 +193,11 @@ export default function Training() {
 
                         {/* Feedback Section */}
                         {feedback && (
-                            <div className={`mt-6 p-4 rounded-xl border animate-in slide-in-from-bottom-2 ${feedback.is_correct ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                            <div className={`mt-6 p-4 rounded-xl border animate-in slide-in-from-bottom-2 ${
+                                feedback.is_correct 
+                                    ? 'bg-emerald-100 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100' 
+                                    : 'bg-amber-100 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100'
+                            }`}>
                                 <div className="flex items-start gap-3">
                                     <Info className="h-5 w-5 mt-0.5 flex-shrink-0" />
                                     <div>
@@ -201,7 +205,7 @@ export default function Training() {
                                         <p className="text-sm opacity-90">{feedback.explanation}</p>
                                     </div>
                                 </div>
-                                <Button onClick={nextQuestion} className="mt-4 w-full bg-slate-900 text-white hover:bg-slate-800">
+                                <Button onClick={nextQuestion} className="mt-4 w-full bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600">
                                     Question Suivante <ArrowRight className="ml-2 h-4 w-4" />
                                 </Button>
                             </div>

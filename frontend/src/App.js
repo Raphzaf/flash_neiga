@@ -22,7 +22,7 @@ import Refund from "./pages/Refund";
 const ProtectedRoute = () => {
     const { isAuthenticated, loading } = useAuth();
     
-    if (loading) return <div className="flex h-screen items-center justify-center">Chargement...</div>;
+    if (loading) return <div className="flex h-screen items-center justify-center text-slate-900 dark:text-white">Chargement...</div>;
     
     return isAuthenticated ? <Outlet /> : <Navigate to="/login" />;
 };
@@ -40,13 +40,13 @@ function App() {
         setAllowed(false);
       }
     }, []);
-    if (allowed === null) return <div className="flex h-screen items-center justify-center">Vérification du paiement...</div>;
+    if (allowed === null) return <div className="flex h-screen items-center justify-center text-slate-900 dark:text-white">Vérification du paiement...</div>;
     return allowed ? <Register /> : <Navigate to="/pricing" />;
   };
   return (
     <AuthProvider>
   {/* On utilise une couleur solide profonde avec un dégradé radial CSS natif */}
-  <div className="min-h-screen bg-[#020617] text-slate-200 antialiased selection:bg-primary/30 relative">
+  <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-200 antialiased selection:bg-primary/30 relative">
     
     {/* Effet de lumière diffuse en arrière-plan (remplace le grain qui bugguait) */}
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
