@@ -3,12 +3,12 @@ import React from 'react';
 function Refund() {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
-      <h1 className="text-2xl font-semibold mb-4">Politique de remboursement – Flash Neiga</h1>
-      <p className="text-sm text-muted-foreground mb-6">Dernière mise à jour : 31 décembre 2025</p>
+      <h1 className="text-2xl font-semibold mb-4 text-slate-900 dark:text-white">Politique de remboursement – Flash Neiga</h1>
+      <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">Dernière mise à jour : 31 décembre 2025</p>
 
-      <section className="space-y-6 text-sm leading-relaxed">
+      <section className="space-y-6 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
         <div>
-          <h2 className="font-medium mb-1">1. Champ d’application</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">1. Champ d’application</h2>
           <p>
             La présente politique de remboursement s’applique à tous les achats d’abonnements et de contenus numériques
             effectués sur la plateforme Flash Neiga (https://appflashneiga.netlify.app/).
@@ -22,7 +22,7 @@ function Refund() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">2. Nature des services et contenus</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">2. Nature des services et contenus</h2>
           <p>Flash Neiga propose principalement :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Des contenus numériques accessibles immédiatement (web app, e‑book, questions officielles, vidéos pédagogiques).</li>
@@ -32,7 +32,7 @@ function Refund() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">3. Délai et conditions de remboursement</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">3. Délai et conditions de remboursement</h2>
           <p>Sauf indication contraire dans une offre spécifique, les règles suivantes s’appliquent :</p>
           <p className="mt-2 font-medium">Contenus numériques (code en ligne, e‑book, questions, vidéos)</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
@@ -48,13 +48,13 @@ function Refund() {
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Les promotions et réductions appliquées lors de l’achat ne sont pas remboursées séparément.</li>
           </ul>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-slate-600 dark:text-slate-400">
             Tu peux adapter ici : Exemple : droit de rétractation de 14 jours tant que aucun contenu n’a été consulté / aucune leçon réalisée.
           </p>
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">4. Abonnements et résiliation</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">4. Abonnements et résiliation</h2>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Tu peux demander la résiliation de ton abonnement à tout moment.</li>
             <li>La résiliation empêche les futurs prélèvements, mais n’implique pas automatiquement le remboursement des périodes déjà facturées.</li>
@@ -63,7 +63,7 @@ function Refund() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">5. Comment demander un remboursement</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">5. Comment demander un remboursement</h2>
           <p>Pour toute demande de remboursement, contacte-nous à : +972 53-708-0667</p>
           <p className="mt-2">En indiquant :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
@@ -77,7 +77,7 @@ function Refund() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">6. Paiements et rôle de Paddle</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">6. Paiements et rôle de Paddle</h2>
           <p>Les paiements sur Flash Neiga sont traités par notre prestataire Paddle.</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>En cas de remboursement accepté, celui‑ci sera effectué par Paddle selon leurs propres délais de traitement bancaires.</li>
@@ -86,7 +86,7 @@ function Refund() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">7. Cas de fraude ou d’abus</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">7. Cas de fraude ou d’abus</h2>
           <p>
             Nous nous réservons le droit de refuser un remboursement en cas de fraude avérée ou tentative de fraude, ou d’abus manifeste de la politique de remboursement.
           </p>

@@ -134,21 +134,21 @@ export default function Exam() {
                     
                     <div>
                         <h2 className="text-3xl font-bold mb-2">{result.passed ? "Félicitations !" : "Désolé, c'est raté."}</h2>
-                        <p className="text-muted-foreground">Vous avez fait {result.total_questions - result.correct_answers} erreurs.</p>
+                        <p className="text-slate-600 dark:text-slate-400">Vous avez fait {result.total_questions - result.correct_answers} erreurs.</p>
                     </div>
 
                     <div className="text-5xl font-black text-primary my-8">
                         {result.correct_answers}/{result.total_questions}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-900 p-4 rounded-xl">
+                    <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
                         <div>
-                            <div className="text-sm text-muted-foreground">Score</div>
-                            <div className="font-bold">{(result.score ?? Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400">Score</div>
+                            <div className="font-bold text-slate-900 dark:text-white">{(result.score ?? Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
                         </div>
                         <div>
-                            <div className="text-sm text-muted-foreground">Résultat</div>
-                            <div className={`font-bold ${result.passed ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <div className="text-sm text-slate-600 dark:text-slate-400">Résultat</div>
+                            <div className={`font-bold ${result.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                                 {result.passed ? 'Admis' : 'Ajourné'}
                             </div>
                         </div>
@@ -176,9 +176,15 @@ export default function Exam() {
     return (
         <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-900 p-4 border-b shadow-sm flex justify-between items-center sticky top-0 z-20">
-                <div className="font-bold text-lg">Question {currentQIndex + 1}/{questions.length}</div>
-                <div className={`font-mono font-medium px-3 py-1 rounded-full ${timeLeft < 300 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-700'} flex items-center`}>
+            <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center sticky top-0 z-20">
+                <div className="font-bold text-lg text-slate-900 dark:text-white">Question {currentQIndex + 1}/{questions.length}</div>
+                <div className={`font-mono font-medium px-3 py-1 rounded-full flex items-center ${
+                    timeLeft < 300 
+                        ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-100' 
+                        : timeLeft < 600 
+                        ? 'bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-100'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
+                }`}>
                     <Clock className="w-4 h-4 mr-2" />
                     {formatTime(timeLeft)}
                 </div>
@@ -206,7 +212,7 @@ export default function Exam() {
                     </div>
                 )}
 
-                <h2 className="text-xl md:text-2xl font-bold mb-8 leading-relaxed text-slate-800 dark:text-slate-100">
+                <h2 className="text-xl md:text-2xl font-semibold mb-8 leading-relaxed text-slate-900 dark:text-white">
                     {currentQuestion.text}
                 </h2>
 
@@ -221,11 +227,11 @@ export default function Exam() {
                                     p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex items-center
                                     ${isSelected 
                                         ? 'border-primary bg-primary/5 ring-2 ring-primary/20' 
-                                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-300 hover:bg-slate-50'}
+                                        : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30'}
                                 `}
                                 data-testid={`option-${option.id}`}
                             >
-                                <div className={`w-8 h-8 rounded-full border-2 mr-4 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-primary bg-primary text-white' : 'border-slate-300'}`}>
+                                <div className={`w-8 h-8 rounded-full border-2 mr-4 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-primary bg-primary text-white' : 'border-slate-400 dark:border-slate-500'}`}>
                                     {isSelected && <div className="w-3 h-3 bg-white rounded-full"></div>}
                                 </div>
                                 <span className="font-medium">{option.text}</span>
@@ -237,7 +243,7 @@ export default function Exam() {
             </main>
 
             {/* Footer Nav */}
-            <div className="p-4 border-t bg-white dark:bg-slate-900 flex justify-between items-center max-w-3xl w-full mx-auto">
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex justify-between items-center max-w-3xl w-full mx-auto">
                 <Button 
                     variant="outline" 
                     onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}

@@ -38,35 +38,35 @@ export default function ExamDetails() {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-heading font-bold">Détails de l'examen</h1>
+        <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">Détails de l'examen</h1>
         <Button variant="ghost" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Retour
         </Button>
       </div>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle>Résumé</CardTitle>
+          <CardTitle className="text-slate-900 dark:text-white">Résumé</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
             <div>
-              <div className="text-sm text-muted-foreground">Score</div>
-              <div className="font-bold text-lg">{correct}/{total} ({Math.round((correct/(total||1))*100)}%)</div>
+              <div className="text-sm text-slate-600 dark:text-slate-300">Score</div>
+              <div className="font-bold text-lg text-slate-900 dark:text-white">{correct}/{total} ({Math.round((correct/(total||1))*100)}%)</div>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">Résultat</div>
-              <div className={`font-bold ${details.passed ? 'text-emerald-600' : 'text-red-600'}`}>
+              <div className="text-sm text-slate-600 dark:text-slate-300">Résultat</div>
+              <div className={`font-bold ${details.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {details.passed ? 'Admis' : 'Ajourné'}
               </div>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">Début</div>
-              <div className="font-medium">{details.created_at ? new Date(details.created_at).toLocaleString() : '—'}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-300">Début</div>
+              <div className="font-medium text-slate-900 dark:text-white">{details.created_at ? new Date(details.created_at).toLocaleString() : '—'}</div>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">Fin</div>
-              <div className="font-medium">{details.completed_at ? new Date(details.completed_at).toLocaleString() : '—'}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-300">Fin</div>
+              <div className="font-medium text-slate-900 dark:text-white">{details.completed_at ? new Date(details.completed_at).toLocaleString() : '—'}</div>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2">
@@ -77,9 +77,9 @@ export default function ExamDetails() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle>Erreurs et réponses</CardTitle>
+          <CardTitle className="text-slate-900 dark:text-white">Erreurs et réponses</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {filtered.length > 0 ? (
@@ -88,16 +88,16 @@ export default function ExamDetails() {
               const correctOpt = (q.options || []).find(o => o.id === q.correct_option_id);
               const isCorrect = !!q.is_correct;
               return (
-                <div key={q.question_id || idx} className={`p-4 rounded-xl border ${isCorrect ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+                <div key={q.question_id || idx} className={`p-4 rounded-xl border ${isCorrect ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30' : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30'}`}>
                   <div className="flex items-start gap-3">
                     {isCorrect ? (
-                      <CheckCircle className="h-5 w-5 text-emerald-600" />
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <AlertTriangle className="h-5 w-5 text-amber-600" />
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                     )}
                     <div>
-                      <div className="font-medium mb-1">{q.text}</div>
-                      <div className="text-sm">
+                      <div className="font-medium mb-1 text-slate-900 dark:text-white">{q.text}</div>
+                      <div className="text-sm text-slate-700 dark:text-slate-200">
                         <div>
                           Votre réponse: <span className="font-medium">{selected?.text || '—'}</span>
                         </div>
@@ -107,8 +107,8 @@ export default function ExamDetails() {
                           </div>
                         )}
                         {q.explanation && (
-                          <div className="mt-3 p-3 rounded-lg bg-white/70 text-slate-800">
-                            <div className="font-semibold mb-1">Explication</div>
+                          <div className="mt-3 p-3 rounded-lg bg-white/70 dark:bg-slate-700/70 text-slate-800 dark:text-slate-200">
+                            <div className="font-semibold mb-1 text-slate-900 dark:text-white">Explication</div>
                             <div className="opacity-90">{q.explanation}</div>
                           </div>
                         )}
@@ -119,7 +119,7 @@ export default function ExamDetails() {
               );
             })
           ) : (
-            <div className="text-muted-foreground">Aucune question à afficher.</div>
+            <div className="text-slate-600 dark:text-slate-400">Aucune question à afficher.</div>
           )}
         </CardContent>
       </Card>

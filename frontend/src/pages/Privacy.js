@@ -3,12 +3,12 @@ import React from 'react';
 function Privacy() {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
-      <h1 className="text-2xl font-semibold mb-4">Politique de confidentialité – Flash Neiga</h1>
-      <p className="text-sm text-muted-foreground mb-6">Dernière mise à jour : 31 décembre 2025</p>
+      <h1 className="text-2xl font-semibold mb-4 text-slate-900 dark:text-white">Politique de confidentialité – Flash Neiga</h1>
+      <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">Dernière mise à jour : 31 décembre 2025</p>
 
-      <section className="space-y-6 text-sm leading-relaxed">
+      <section className="space-y-6 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
         <div>
-          <h2 className="font-medium mb-1">1. Qui sommes-nous ?</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">1. Qui sommes-nous ?</h2>
           <p>
             Flash Neiga est une plateforme en ligne d’apprentissage du code de la route et de la conduite,
             proposant des contenus numériques (web app, e‑book, vidéos pédagogiques) et des services de coaching
@@ -18,7 +18,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">2. Données que nous collectons</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">2. Données que nous collectons</h2>
           <p>Nous pouvons collecter les données suivantes :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Informations de compte : nom, prénom, adresse e‑mail, numéro de téléphone.</li>
@@ -30,7 +30,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">3. Comment nous collectons ces données</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">3. Comment nous collectons ces données</h2>
           <p>Les données sont collectées :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Lorsque tu crées un compte ou mets ton profil à jour.</li>
@@ -41,7 +41,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">4. Pourquoi nous utilisons tes données ?</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">4. Pourquoi nous utilisons tes données ?</h2>
           <p>Nous utilisons tes données pour :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Créer et gérer ton compte utilisateur.</li>
@@ -54,7 +54,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">5. Base légale (RGPD)</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">5. Base légale (RGPD)</h2>
           <p>Selon le RGPD, nous traitons tes données sur les bases légales suivantes :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Exécution du contrat : fournir la plateforme et les abonnements souscrits.</li>
@@ -65,7 +65,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">6. Avec qui nous partageons les données</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">6. Avec qui nous partageons les données</h2>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Paddle, notre prestataire de paiement, pour traiter les paiements et la facturation.</li>
             <li>Outils d’hébergement, d’envoi d’e‑mails et de statistiques (hébergeur, e‑mailing, analytics).</li>
@@ -75,7 +75,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">7. Durée de conservation</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">7. Durée de conservation</h2>
           <p>Nous conservons tes données :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Tant que ton compte est actif.</li>
@@ -85,7 +85,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">8. Tes droits</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">8. Tes droits</h2>
           <p>Conformément à la réglementation applicable (notamment RGPD), tu disposes de :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Droit d’accès : obtenir une copie de tes données.</li>
@@ -98,7 +98,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">9. Cookies et traceurs</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">9. Cookies et traceurs</h2>
           <ul className="list-disc pl-6 mt-2 space-y-1">
             <li>Assurer le bon fonctionnement du site (authentification, session).</li>
             <li>Mesurer l’audience et améliorer l’expérience utilisateur.</li>
@@ -110,7 +110,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">10. Sécurité</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">10. Sécurité</h2>
           <p>
             Nous mettons en œuvre des mesures techniques et organisationnelles raisonnables pour protéger tes données
             (chiffrement des mots de passe, accès restreint aux données, etc.).
@@ -118,7 +118,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">11. Transferts hors UE</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">11. Transferts hors UE</h2>
           <p>
             Certains de nos prestataires (comme les services de paiement ou d’hébergement) peuvent être situés en dehors
             de l’EEE. Dans ce cas, nous veillons à ce que des garanties appropriées soient en place
@@ -127,7 +127,7 @@ function Privacy() {
         </div>
 
         <div>
-          <h2 className="font-medium mb-1">12. Mise à jour de cette politique</h2>
+          <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">12. Mise à jour de cette politique</h2>
           <p>
             Nous pouvons modifier cette Politique de confidentialité de temps à autre. En cas de changement important,
             nous t’en informerons par e‑mail ou via la plateforme. La version la plus récente sera toujours disponible
