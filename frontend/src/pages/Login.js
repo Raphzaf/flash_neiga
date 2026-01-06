@@ -59,16 +59,13 @@ export default function Login() {
             <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white via-indigo-200 to-white bg-clip-text text-transparent filter drop-shadow-[0_2px_8px_rgba(255,255,255,0.3)]">
               Flash Neiga
             </h1>
-            <p className="text-sm text-slate-300 font-light">
-              L'art de capturer l'instant.
-            </p>
           </div>
         </CardHeader>
 
         <CardContent className="px-8 pb-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300 ml-1" htmlFor="email">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200 ml-1" htmlFor="email">
                 Email Professionnel
               </Label>
               <div className="relative group">
@@ -86,7 +83,7 @@ export default function Login() {
 
             <div className="space-y-2">
               <div className="px-1">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300" htmlFor="password">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200" htmlFor="password">
                   Mot de passe
                 </Label>
               </div>
