@@ -380,13 +380,13 @@ export default function Admin() {
                                         </Select>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium">Image URL (Optionnel)</label>
-                                        <Input value={qImage} onChange={e => setQImage(e.target.value)} placeholder="https://..." />
+                                        <label className="text-sm font-medium text-slate-900 dark:text-white">Image URL (Optionnel)</label>
+                                        <Input value={qImage} onChange={e => setQImage(e.target.value)} placeholder="https://..." className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white" />
                                     </div>
                                 </div>
 
-                                <div className="space-y-3 border p-4 rounded-lg bg-slate-50 dark:bg-slate-900">
-                                    <label className="text-sm font-medium">Réponses (Cochez la bonne)</label>
+                                <div className="space-y-3 border border-slate-200 dark:border-slate-700 p-4 rounded-lg bg-slate-50 dark:bg-slate-800">
+                                    <label className="text-sm font-medium text-slate-900 dark:text-white">Réponses (Cochez la bonne)</label>
                                     {options.map((opt, idx) => (
                                         <div key={idx} className="flex items-center gap-3">
                                             <input 
@@ -407,8 +407,8 @@ export default function Admin() {
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium">Explication</label>
-                                    <Textarea value={qExplanation} onChange={e => setQExplanation(e.target.value)} required />
+                                    <label className="text-sm font-medium text-slate-900 dark:text-white">Explication</label>
+                                    <Textarea value={qExplanation} onChange={e => setQExplanation(e.target.value)} required className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white" />
                                 </div>
 
                                 <Button type="submit" className="w-full">Enregistrer la question</Button>

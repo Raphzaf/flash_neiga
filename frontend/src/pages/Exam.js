@@ -141,14 +141,14 @@ export default function Exam() {
                         {result.correct_answers}/{result.total_questions}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-900 p-4 rounded-xl">
+                    <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
                         <div>
-                            <div className="text-sm text-muted-foreground">Score</div>
-                            <div className="font-bold">{(result.score ?? Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400">Score</div>
+                            <div className="font-bold text-slate-900 dark:text-white">{(result.score ?? Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
                         </div>
                         <div>
-                            <div className="text-sm text-muted-foreground">Résultat</div>
-                            <div className={`font-bold ${result.passed ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <div className="text-sm text-slate-600 dark:text-slate-400">Résultat</div>
+                            <div className={`font-bold ${result.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                                 {result.passed ? 'Admis' : 'Ajourné'}
                             </div>
                         </div>
@@ -176,7 +176,7 @@ export default function Exam() {
     return (
         <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-900 p-4 border-b shadow-sm flex justify-between items-center sticky top-0 z-20">
+            <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center sticky top-0 z-20">
                 <div className="font-bold text-lg text-slate-900 dark:text-white">Question {currentQIndex + 1}/{questions.length}</div>
                 <div className={`font-mono font-medium px-3 py-1 rounded-full flex items-center ${
                     timeLeft < 300 
@@ -243,7 +243,7 @@ export default function Exam() {
             </main>
 
             {/* Footer Nav */}
-            <div className="p-4 border-t bg-white dark:bg-slate-900 flex justify-between items-center max-w-3xl w-full mx-auto">
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex justify-between items-center max-w-3xl w-full mx-auto">
                 <Button 
                     variant="outline" 
                     onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}

@@ -30,7 +30,7 @@ export default function Dashboard() {
     return (
         <div className="min-h-screen pb-20 md:pb-0">
             {/* Header */}
-            <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 p-4">
+            <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 p-4">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">Flash Neiga</h1>
                     <div className="flex items-center gap-4">
