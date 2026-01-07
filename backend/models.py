@@ -42,6 +42,7 @@ class TrafficSignDB(Base):
     description = Column(Text, nullable=False)
     image_url = Column(String, nullable=True)
     category = Column(String, index=True, nullable=False)
+    explanation = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
