@@ -45,14 +45,14 @@ export default function Dashboard() {
             <main className="max-w-5xl mx-auto p-4 space-y-8 mt-6">
                 
                 {/* Welcome Section */}
-                <div className="relative rounded-2xl overflow-hidden bg-indigo-900 text-white p-8 md:p-12 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-90"></div>
+                <div className="relative rounded-2xl overflow-hidden bg-sky-500 text-white p-8 md:p-12 shadow-xl">
+                    <div className="absolute inset-0 bg-gradient-to-r from-sky-400 to-blue-500 opacity-90"></div>
                     <div className="relative z-10">
                         <h2 className="text-3xl md:text-4xl font-bold mb-2 text-white">Prêt à prendre la route ?</h2>
                         <p className="text-white/90 mb-6 max-w-xl">Entraînez-vous, suivez vos progrès et obtenez votre code de la route avec Flash Neiga.</p>
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Link to="/exam">
-                                <Button size="lg" className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold rounded-full px-8 shadow-lg transition-transform hover:scale-105" data-testid="start-exam-hero-btn">
+                                <Button size="lg" className="bg-yellow-400 text-sky-900 hover:bg-yellow-300 font-bold rounded-full px-8 shadow-lg transition-transform hover:scale-105" data-testid="start-exam-hero-btn">
                                     <Play className="mr-2 h-5 w-5" /> Lancer un Examen
                                 </Button>
                             </Link>
@@ -68,7 +68,7 @@ export default function Dashboard() {
                         <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700" data-testid="training-card">
                             <CardHeader>
                                 <CardTitle className="flex items-center text-lg text-slate-900 dark:text-white font-semibold">
-                                    <div className="p-2 rounded-lg bg-emerald-100 text-emerald-600 mr-3 group-hover:scale-110 transition-transform">
+                                    <div className="p-2 rounded-lg bg-sky-100 text-sky-600 mr-3 group-hover:scale-110 transition-transform">
                                         <BookOpen className="h-6 w-6" />
                                     </div>
                                     Entraînement
@@ -84,7 +84,7 @@ export default function Dashboard() {
                         <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700" data-testid="signs-card">
                             <CardHeader>
                                 <CardTitle className="flex items-center text-lg text-slate-900 dark:text-white font-semibold">
-                                    <div className="p-2 rounded-lg bg-amber-100 text-amber-600 mr-3 group-hover:scale-110 transition-transform">
+                                    <div className="p-2 rounded-lg bg-yellow-100 text-yellow-600 mr-3 group-hover:scale-110 transition-transform">
                                         <AlertTriangle className="h-6 w-6" />
                                     </div>
                                     Panneaux
@@ -100,7 +100,7 @@ export default function Dashboard() {
                         <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700" data-testid="stats-card">
                             <CardHeader>
                                 <CardTitle className="flex items-center text-lg text-slate-900 dark:text-white font-semibold">
-                                    <div className="p-2 rounded-lg bg-purple-100 text-purple-600 mr-3 group-hover:scale-110 transition-transform">
+                                    <div className="p-2 rounded-lg bg-blue-100 text-blue-600 mr-3 group-hover:scale-110 transition-transform">
                                         <BarChart3 className="h-6 w-6" />
                                     </div>
                                     Statistiques
@@ -123,7 +123,7 @@ export default function Dashboard() {
                                     <div className="text-sm text-slate-600 dark:text-slate-300">Derniers examens</div>
                                     <div className="font-medium text-slate-900 dark:text-white">{stats?.last_exams?.length ?? 0}/5</div>
                                 </div>
-                                <div className="text-xs text-indigo-600 dark:text-indigo-400">Cliquez pour voir les statistiques détaillées</div>
+                                <div className="text-xs text-sky-600 dark:text-sky-400">Cliquez pour voir les statistiques détaillées</div>
                             </CardContent>
                         </Card>
                     </Link>
@@ -135,7 +135,7 @@ export default function Dashboard() {
                         <h3 className="text-xl font-heading font-bold flex items-center text-slate-900 dark:text-white">
                             <History className="mr-2 h-5 w-5 text-slate-500 dark:text-slate-400" /> Activité Récente
                         </h3>
-                        <Link to="/stats" className="text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Voir tout</Link>
+                        <Link to="/stats" className="text-sm text-sky-600 dark:text-sky-400 font-medium hover:underline">Voir tout</Link>
                     </div>
                     
                     <div className="space-y-3">

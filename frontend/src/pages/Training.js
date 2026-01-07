@@ -166,8 +166,8 @@ export default function Training() {
 
                                 if (feedback) {
                                     if (opt.id === feedback.correct_option_id) {
-                                        stateClass = "border-emerald-500 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100 ring-1 ring-emerald-500";
-                                        icon = <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400 ml-auto" />;
+                                        stateClass = "border-sky-500 bg-sky-100 dark:bg-sky-950/30 text-sky-900 dark:text-sky-100 ring-1 ring-sky-500";
+                                        icon = <CheckCircle className="h-5 w-5 text-sky-600 dark:text-sky-400 ml-auto" />;
                                     } else if (opt.id === selectedOption && opt.id !== feedback.correct_option_id) {
                                         stateClass = "border-red-500 bg-red-100 dark:bg-red-950/30 text-red-900 dark:text-red-100 ring-1 ring-red-500";
                                         icon = <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 ml-auto" />;
@@ -195,8 +195,8 @@ export default function Training() {
                         {feedback && (
                             <div className={`mt-6 p-4 rounded-xl border animate-in slide-in-from-bottom-2 ${
                                 feedback.is_correct 
-                                    ? 'bg-emerald-100 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100' 
-                                    : 'bg-amber-100 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100'
+                                    ? 'bg-sky-100 dark:bg-sky-950/30 border-sky-300 dark:border-sky-700 text-sky-900 dark:text-sky-100' 
+                                    : 'bg-yellow-100 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-700 text-yellow-900 dark:text-yellow-100'
                             }`}>
                                 <div className="flex items-start gap-3">
                                     <Info className="h-5 w-5 mt-0.5 flex-shrink-0" />
