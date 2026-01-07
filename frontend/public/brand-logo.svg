@@ -1,39 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flash Neiga logo">
   <defs>
-    <!-- Light blue gradient for ring -->
-    <linearGradient id="lightblue" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7DD3FC"/>
-      <stop offset="0.5" stop-color="#38BDF8"/>
-      <stop offset="1" stop-color="#0EA5E9"/>
+    <!-- Light blue gradient for circle background -->
+    <linearGradient id="bg" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60C5FF"/>
+      <stop offset="0.5" stop-color="#3B9EFF"/>
+      <stop offset="1" stop-color="#1E88E5"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(36 36) rotate(90) scale(34)">
-      <stop offset="0" stop-color="#38BDF8" stop-opacity=".35"/>
-      <stop offset="1" stop-color="#38BDF8" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".25"/>
-    </filter>
     <!-- Yellow gradient for lightning bolt -->
-    <linearGradient id="bolt" x1="20" y1="8" x2="56" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FEFCE8"/>
-      <stop offset=".5" stop-color="#FDE047"/>
-      <stop offset="1" stop-color="#FACC15"/>
+    <linearGradient id="bolt" x1="28" y1="12" x2="44" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE082"/>
+      <stop offset="0.5" stop-color="#FFC107"/>
+      <stop offset="1" stop-color="#FFA000"/>
     </linearGradient>
+    <!-- Soft glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 
-  <!-- soft glow -->
-  <circle cx="36" cy="36" r="34" fill="url(#glow)"/>
+  <!-- Background circle with light blue gradient -->
+  <circle cx="36" cy="36" r="32" fill="url(#bg)"/>
 
-  <!-- outer ring with bevel -->
-  <g filter="url(#shadow)">
-    <circle cx="36" cy="36" r="28" fill="none" stroke="url(#lightblue)" stroke-width="4" />
-    <circle cx="36" cy="36" r="23" fill="none" stroke="url(#lightblue)" stroke-opacity=".25" stroke-width="2" />
-  </g>
+  <!-- Lightning bolt with yellow gradient and glow -->
+  <path d="M42 12 L26 36 L34 36 L30 60 L50 32 L40 32 Z" fill="url(#bolt)" filter="url(#glow)" stroke="#F57F17" stroke-width="0.5" stroke-linejoin="round"/>
 
-  <!-- lightning bolt with slight bevel -->
-  <path d="M40 8L22 38h10l-4 26 22-36H40l0-20z" fill="url(#bolt)" stroke="#CA8A04" stroke-opacity=".35" stroke-width="0.5" />
-
-  <!-- specular highlight on ring -->
-  <path d="M56 16c-4-4.2-10-7-20-7" stroke="#FFFFFF" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+  <!-- Highlight on bolt for 3D effect -->
+  <path d="M40 14 L28 34 L33 34" fill="none" stroke="#FFECB3" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
 </svg>
