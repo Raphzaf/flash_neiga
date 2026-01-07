@@ -725,6 +725,87 @@ async def delete_question(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+# ===== Admin Traffic Signs Endpoints =====
+@app.get("/api/admin/signs")
+async def list_admin_signs(
+    missingOnly: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List traffic signs for admin management (with optional filter for missing explanation)."""
+    try:
+        query = db.query(TrafficSignDB)
+        if missingOnly:
+            query = query.filter((TrafficSignDB.explanation.is_(None)) | (TrafficSignDB.explanation == ""))
+        items = query.order_by(TrafficSignDB.created_at.desc()).offset(offset).limit(limit).all()
+        return [
+            {
+                "id": s.id,
+                "number": s.number,
+                "name": s.name,
+                "description": s.description,
+                "image_url": s.image_url,
+                "category": s.category,
+                "explanation": s.explanation or "",
+                "has_explanation": bool(s.explanation and s.explanation.strip()),
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in items
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/admin/signs/{sign_id}/explanation")
+async def update_sign_explanation(
+    sign_id: str,
+    payload: ExplanationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update or add explanation for a traffic sign."""
+    try:
+        s = db.query(TrafficSignDB).filter(TrafficSignDB.id == sign_id).first()
+        if not s:
+            raise HTTPException(status_code=404, detail="Traffic sign not found")
+        s.explanation = (payload.explanation or "").strip()
+        db.add(s)
+        db.commit()
+        db.refresh(s)
+        return {
+            "success": True,
+            "id": s.id,
+            "explanation": s.explanation,
+            "message": "Explanation updated"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/signs/{sign_id}")
+async def delete_sign(
+    sign_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a single traffic sign by id."""
+    try:
+        s = db.query(TrafficSignDB).filter(TrafficSignDB.id == sign_id).first()
+        if not s:
+            raise HTTPException(status_code=404, detail="Traffic sign not found")
+        db.delete(s)
+        db.commit()
+        return {"success": True, "deleted": sign_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/questions", response_model=List[Question])
 async def get_questions(
     category: Optional[List[str]] = None,
