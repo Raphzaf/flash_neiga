@@ -739,7 +739,7 @@ async def list_admin_signs(
     try:
         query = db.query(TrafficSignDB)
         if missingOnly:
-            query = query.filter((TrafficSignDB.explanation == None) | (TrafficSignDB.explanation == ""))
+            query = query.filter((TrafficSignDB.explanation.is_(None)) | (TrafficSignDB.explanation == ""))
         items = query.order_by(TrafficSignDB.created_at.desc()).offset(offset).limit(limit).all()
         return [
             {

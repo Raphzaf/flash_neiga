@@ -57,6 +57,7 @@ export default function Admin() {
     useEffect(() => {
         fetchStats();
         fetchManageQuestions({ reset: true });
+        fetchManageSigns({ reset: true });
     }, []);
 
     const fetchStats = async () => {
