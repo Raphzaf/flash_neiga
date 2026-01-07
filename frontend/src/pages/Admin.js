@@ -45,6 +45,14 @@ export default function Admin() {
     const [manageOffset, setManageOffset] = useState(0);
     const [manageHasMore, setManageHasMore] = useState(false);
 
+    // Manage signs state
+    const [manageSigns, setManageSigns] = useState([]);
+    const [manageSignsSearch, setManageSignsSearch] = useState('');
+    const [manageSignsLoading, setManageSignsLoading] = useState(false);
+    const [manageSignsOnlyMissing, setManageSignsOnlyMissing] = useState(true);
+    const [manageSignsOffset, setManageSignsOffset] = useState(0);
+    const [manageSignsHasMore, setManageSignsHasMore] = useState(false);
+
     // Fetch stats on component mount
     useEffect(() => {
         fetchStats();
@@ -110,10 +118,64 @@ export default function Admin() {
         }
     };
 
+    // Manage signs functions
+    const fetchManageSigns = async ({ reset = false } = {}) => {
+        if (reset) {
+            setManageSignsLoading(true);
+            setManageSignsOffset(0);
+        } else {
+            setManageSignsLoading(true);
+        }
+        try {
+            const limit = 50;
+            const params = { missingOnly: manageSignsOnlyMissing, limit, offset: reset ? 0 : manageSignsOffset };
+            const resp = await axios.get('/api/admin/signs', { params });
+            const items = resp.data || [];
+            setManageSigns(prev => reset ? items : [...prev, ...items]);
+            setManageSignsHasMore(items.length === limit);
+            if (!reset) setManageSignsOffset(prev => prev + items.length);
+        } catch (error) {
+            console.error('Error fetching signs:', error);
+            toast.error("Erreur lors du chargement des panneaux");
+        } finally {
+            setManageSignsLoading(false);
+        }
+    };
+
+    const saveSignExplanation = async (id, explanation) => {
+        try {
+            await axios.patch(`/api/admin/signs/${id}/explanation`, { explanation });
+            toast.success('Explication enregistrée');
+            // Update local state
+            setManageSigns(prev => prev.map(s => s.id === id ? { ...s, explanation, has_explanation: !!(explanation && explanation.trim()) } : s));
+        } catch (error) {
+            toast.error("Erreur lors de l'enregistrement");
+        }
+    };
+
+    const deleteSign = async (id) => {
+        if (!window.confirm('Supprimer ce panneau ?')) return;
+        try {
+            await axios.delete(`/api/admin/signs/${id}`);
+            toast.success('Panneau supprimé');
+            setManageSigns(prev => prev.filter(s => s.id !== id));
+        } catch (error) {
+            toast.error('Erreur lors de la suppression');
+        }
+    };
+
     const filteredManageQuestions = manageQuestions.filter(q => {
         if (!manageSearch.trim()) return true;
         const s = manageSearch.trim().toLowerCase();
         return q.text.toLowerCase().includes(s) || (q.explanation || '').toLowerCase().includes(s);
+    });
+
+    const filteredManageSigns = manageSigns.filter(s => {
+        if (!manageSignsSearch.trim()) return true;
+        const search = manageSignsSearch.trim().toLowerCase();
+        return s.name.toLowerCase().includes(search) || 
+               s.description.toLowerCase().includes(search) ||
+               (s.explanation || '').toLowerCase().includes(search);
     });
 
     const handleImportQuestions = async () => {
@@ -202,7 +264,7 @@ export default function Admin() {
             <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white">Administration (CMS)</h1>
 
             <Tabs defaultValue="question">
-                <TabsList className="grid w-full grid-cols-4 mb-8">
+                <TabsList className="grid w-full grid-cols-5 mb-8">
                     <TabsTrigger value="question">
                         <span className="flex items-center gap-2">Ajouter Question</span>
                     </TabsTrigger>
@@ -211,6 +273,9 @@ export default function Admin() {
                     </TabsTrigger>
                     <TabsTrigger value="manage">
                         <span className="flex items-center gap-2">Gérer Questions <Badge variant="outline">{filteredManageQuestions.length}</Badge></span>
+                    </TabsTrigger>
+                    <TabsTrigger value="manageSigns">
+                        <span className="flex items-center gap-2">Gérer Panneaux <Badge variant="outline">{filteredManageSigns.length}</Badge></span>
                     </TabsTrigger>
                     <TabsTrigger value="sign">
                         <span className="flex items-center gap-2">Ajouter Panneau</span>
@@ -349,6 +414,95 @@ export default function Admin() {
                                     {manageHasMore && (
                                         <div className="flex justify-center">
                                             <Button variant="outline" onClick={() => fetchManageQuestions()}>Charger plus</Button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="manageSigns">
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                        <CardHeader><CardTitle className="text-slate-900 dark:text-white">🛠️ Gérer les panneaux</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400" />
+                                    <Input
+                                        value={manageSignsSearch}
+                                        onChange={(e) => setManageSignsSearch(e.target.value)}
+                                        placeholder="Rechercher un panneau ou une explication"
+                                        className="pl-9 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Switch checked={manageSignsOnlyMissing} onCheckedChange={(v) => { setManageSignsOnlyMissing(v); fetchManageSigns({ reset: true }); }} />
+                                    <span className="text-sm text-slate-900 dark:text-white">Seulement sans explication</span>
+                                </div>
+                                <Button variant="outline" onClick={() => fetchManageSigns({ reset: true })}>
+                                    <RefreshCw className="h-4 w-4 mr-2" /> Actualiser
+                                </Button>
+                            </div>
+
+                            {manageSignsLoading && manageSigns.length === 0 ? (
+                                <div className="grid gap-3">
+                                    <Skeleton className="h-24 w-full rounded-xl" />
+                                    <Skeleton className="h-24 w-full rounded-xl" />
+                                    <Skeleton className="h-24 w-full rounded-xl" />
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {filteredManageSigns.length === 0 ? (
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">Aucun panneau à afficher.</p>
+                                    ) : (
+                                        filteredManageSigns.map((s) => (
+                                            <div key={s.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-3 bg-slate-50 dark:bg-slate-800">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            {s.image_url && (
+                                                                <img src={s.image_url} alt={s.name} className="w-16 h-16 object-contain border border-slate-300 dark:border-slate-600 rounded" />
+                                                            )}
+                                                            <div>
+                                                                <p className="font-medium text-slate-900 dark:text-white">{s.name}</p>
+                                                                <p className="text-sm text-slate-600 dark:text-slate-400">{s.description}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">{s.category}</Badge>
+                                                            <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">#{s.number}</Badge>
+                                                            {s.has_explanation ? (
+                                                                <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300">Explication OK</Badge>
+                                                            ) : (
+                                                                <Badge variant="destructive" className="bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300">Explication manquante</Badge>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <Button variant="destructive" onClick={() => deleteSign(s.id)}>
+                                                        <Trash2 className="h-4 w-4 mr-2" /> Supprimer
+                                                    </Button>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-slate-900 dark:text-white">Explication</label>
+                                                    <Textarea
+                                                        value={s.explanation || ''}
+                                                        onChange={(e) => setManageSigns(prev => prev.map(item => item.id === s.id ? { ...item, explanation: e.target.value } : item))}
+                                                        placeholder="Ajoutez une explication claire et concise"
+                                                        className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                                                    />
+                                                </div>
+                                                <div className="flex justify-end">
+                                                    <Button onClick={() => saveSignExplanation(s.id, s.explanation || '')}>
+                                                        <Save className="h-4 w-4 mr-2" /> Enregistrer l'explication
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                    {manageSignsHasMore && (
+                                        <div className="flex justify-center">
+                                            <Button variant="outline" onClick={() => fetchManageSigns()}>Charger plus</Button>
                                         </div>
                                     )}
                                 </div>
