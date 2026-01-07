@@ -31,20 +31,20 @@ module.exports = {
                                 foreground: 'hsl(var(--popover-foreground))'
                         },
                         primary: {
-                                DEFAULT: '#4F46E5', // Electric Indigo
-                                foreground: '#FFFFFF'
+                                DEFAULT: 'hsl(var(--primary))',
+                                foreground: 'hsl(var(--primary-foreground))'
                         },
                         secondary: {
-                                DEFAULT: '#1E293B', // Asphalt
-                                foreground: '#FFFFFF'
+                                DEFAULT: 'hsl(var(--secondary))',
+                                foreground: 'hsl(var(--secondary-foreground))'
                         },
                         muted: {
                                 DEFAULT: 'hsl(var(--muted))',
                                 foreground: 'hsl(var(--muted-foreground))'
                         },
                         accent: {
-                                DEFAULT: '#F59E0B', // Signal Amber
-                                foreground: '#FFFFFF'
+                                DEFAULT: 'hsl(var(--accent))',
+                                foreground: 'hsl(var(--accent-foreground))'
                         },
                         success: {
                                 DEFAULT: '#10B981', // Go Green
