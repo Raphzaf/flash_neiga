@@ -46,7 +46,15 @@ export default function Training() {
             
             // Shuffle client side for variety (only if not searching)
             const shouldShuffle = !(debouncedSearch && debouncedSearch.trim());
-            const data = shouldShuffle ? newQuestions.sort(() => 0.5 - Math.random()) : newQuestions;
+            let data = newQuestions;
+            if (shouldShuffle) {
+                // Fisher-Yates shuffle for truly random results
+                data = [...newQuestions];
+                for (let i = data.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [data[i], data[j]] = [data[j], data[i]];
+                }
+            }
             
             if (loadMore) {
                 setQuestions(prev => [...prev, ...data]);
@@ -57,7 +65,8 @@ export default function Training() {
                 setCurrentIndex(0);
             }
             
-            setHasMore(data.length === LIMIT);
+            // If we got fewer items than LIMIT, there are no more items to load
+            setHasMore(data.length >= LIMIT);
             setFeedback(null);
             setSelectedOption(null);
         } catch (e) {
