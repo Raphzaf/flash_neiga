@@ -20,9 +20,9 @@ import json
 # Stripe integration removed
 # Support imports both when running from backend/ and from repo root
 try:
-    from database import engine, SessionLocal, Base, get_db
+    from database import engine, SessionLocal, Base, get_db, ensure_schema_updated
 except ImportError:
-    from backend.database import engine, SessionLocal, Base, get_db
+    from backend.database import engine, SessionLocal, Base, get_db, ensure_schema_updated
 try:
     from models import (
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
@@ -259,6 +259,11 @@ async def startup():
     print("🔧 Initializing database...")
     init_db()
     print("✅ Database tables created")
+    
+    # Check and update schema if needed
+    print("🔍 Checking database schema...")
+    ensure_schema_updated()
+    print("✅ Database schema verified")
     
     db = SessionLocal()
     try:
@@ -736,11 +741,18 @@ async def list_admin_signs(
     db: Session = Depends(get_db)
 ):
     """List traffic signs for admin management (with optional filter for missing explanation)."""
+    logger.info(f"📋 Admin signs request - missingOnly={missingOnly}, limit={limit}, offset={offset}, user={current_user.email}")
+    
     try:
         query = db.query(TrafficSignDB)
+        
         if missingOnly:
+            logger.info("🔍 Filtering for signs with missing explanations")
             query = query.filter((TrafficSignDB.explanation.is_(None)) | (TrafficSignDB.explanation == ""))
+        
         items = query.order_by(TrafficSignDB.created_at.desc()).offset(offset).limit(limit).all()
+        logger.info(f"✅ Successfully retrieved {len(items)} traffic signs")
+        
         return [
             {
                 "id": s.id,
@@ -756,7 +768,18 @@ async def list_admin_signs(
             for s in items
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error in list_admin_signs endpoint: {str(e)}", exc_info=True)
+        logger.error(f"   Request params: missingOnly={missingOnly}, limit={limit}, offset={offset}")
+        
+        # Check if it's a database column error
+        error_msg = str(e).lower()
+        if 'explanation' in error_msg and ('column' in error_msg or 'attribute' in error_msg or 'no such column' in error_msg):
+            raise HTTPException(
+                status_code=500, 
+                detail="Database schema error: 'explanation' column is missing from traffic_signs table. Please run the migration script or restart the application."
+            )
+        
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.patch("/api/admin/signs/{sign_id}/explanation")
 async def update_sign_explanation(
