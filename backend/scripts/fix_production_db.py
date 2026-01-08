@@ -338,6 +338,8 @@ def main():
     engine = connect_to_database(db_url)
     
     # Check if table exists
+    # Note: table_name is hardcoded to 'traffic_signs' for this specific fix script
+    # This prevents SQL injection as it's a constant, not user input
     table_name = 'traffic_signs'
     if not check_table_exists(engine, table_name):
         logger.error(f"❌ Cannot proceed without '{table_name}' table")

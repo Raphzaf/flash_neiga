@@ -55,6 +55,7 @@ def ensure_schema_updated():
         tables = inspector.get_table_names()
         
         # Define expected columns for critical tables
+        # Using a controlled dictionary prevents SQL injection
         expected_columns = {
             'traffic_signs': ['id', 'number', 'name', 'description', 'image_url', 'category', 'explanation', 'created_at'],
             'questions': ['id', 'text', 'category', 'options', 'explanation', 'created_at'],
@@ -62,6 +63,10 @@ def ensure_schema_updated():
         
         # Check each table
         for table_name, expected_cols in expected_columns.items():
+            # Validate table name is in our controlled list before using in SQL
+            if table_name not in expected_columns:
+                continue
+                
             if table_name not in tables:
                 logger.info(f"⚠️  {table_name} table doesn't exist yet, will be created by init_db()")
                 continue
@@ -82,6 +87,11 @@ def ensure_schema_updated():
                         logger.info(f"🔧 Adding '{col_name}' column to {table_name} table...")
                         
                         with engine.connect() as conn:
+                            # Validate column name against expected list
+                            if col_name not in expected_cols:
+                                logger.error(f"❌ Column '{col_name}' not in expected schema, skipping")
+                                continue
+                            
                             # Determine column type based on name
                             if col_name == 'created_at':
                                 # Use TIMESTAMP with default for PostgreSQL, DATETIME for SQLite

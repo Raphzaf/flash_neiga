@@ -244,8 +244,20 @@ def verify_table(engine, table_name, expected_schema, verbose=False):
     # Get row count
     row_count = 0
     try:
+        # Validate table_name is from our controlled EXPECTED_SCHEMAS dict
+        if table_name not in EXPECTED_SCHEMAS:
+            logger.warning(f"⚠️  Table {table_name} not in expected schemas")
+            return {
+                'exists': False,
+                'missing_columns': [],
+                'extra_columns': [],
+                'type_mismatches': [],
+                'row_count': 0
+            }
+        
         with engine.connect() as conn:
             from sqlalchemy import text
+            # table_name is validated above to be from EXPECTED_SCHEMAS keys only
             result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
             row_count = result.fetchone()[0]
     except:
