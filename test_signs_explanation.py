@@ -6,6 +6,7 @@ This tests all the requirements from issue #19.
 
 import sys
 import os
+import traceback
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
 
 from fastapi.testclient import TestClient
@@ -237,7 +238,7 @@ def test_frontend_integration():
     """Test 6: Verify frontend Admin.js has the required components"""
     print("\n📋 Test 6: Verify frontend implementation")
     
-    admin_js_path = os.path.join(os.path.dirname(__file__), 'frontend/src/pages/Admin.js')
+    admin_js_path = os.path.join(os.path.dirname(__file__), 'frontend', 'src', 'pages', 'Admin.js')
     
     if not os.path.exists(admin_js_path):
         print(f"  ❌ Admin.js not found at {admin_js_path}")
@@ -344,7 +345,6 @@ def main():
         
     except Exception as e:
         print(f"\n❌ Test suite failed with error: {e}")
-        import traceback
         traceback.print_exc()
         cleanup()
         return 1

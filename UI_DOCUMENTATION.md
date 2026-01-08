@@ -224,7 +224,7 @@ While loading:
 
 4. **Add Explanation**: 
    - Click in explanation textarea
-   - Type: "Ce panneau triangulaire pointe vers le bas indique que vous devez céder le passage aux véhicules circulant sur la route que vous vous apprêtez à rejoindre. Ralentissez et préparez-vous à vous arrêter si nécessaire."
+   - Type: "Ce panneau triangulaire pointe vers le bas, indique que vous devez céder le passage aux véhicules circulant sur la route que vous vous apprêtez à rejoindre. Ralentissez et préparez-vous à vous arrêter si nécessaire."
 
 5. **Save**:
    - Click "Enregistrer l'explication"
