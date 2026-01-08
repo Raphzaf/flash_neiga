@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Header
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, text, func
 from datetime import datetime, timedelta, timezone
@@ -94,6 +95,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add GZip compression middleware for responses > 1000 bytes
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Include external routers
 app.include_router(verifone_router)
@@ -852,6 +856,8 @@ async def delete_sign(
 async def get_questions(
     category: Optional[List[str]] = None,
     q: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db)
 ):
     query = db.query(QuestionDB)
@@ -863,14 +869,17 @@ async def get_questions(
             (QuestionDB.text.ilike(like_expr)) |
             (QuestionDB.explanation.ilike(like_expr))
         )
-    questions = query.all()
+    
+    # Apply pagination
+    questions = query.offset(offset).limit(limit).all()
+    
     return [
         Question(
             id=q.id,
             text=q.text,
             category=q.category,
             options=[QuestionOption(**opt) for opt in q.options],
-            explanation=q.explanation,
+            explanation=None,  # Don't load explanation in list view for performance
             created_at=q.created_at
         )
         for q in questions
