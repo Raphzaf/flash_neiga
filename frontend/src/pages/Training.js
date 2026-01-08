@@ -16,26 +16,48 @@ export default function Training() {
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [feedback, setFeedback] = useState(null); // { is_correct, explanation, correct_option_id }
     const [selectedOption, setSelectedOption] = useState(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [offset, setOffset] = useState(0);
+    const LIMIT = 20;
 
-    const fetchQuestions = async () => {
+    const fetchQuestions = async (loadMore = false) => {
         setLoading(true);
         try {
+            const currentOffset = loadMore ? offset : 0;
             let url = '/api/questions';
             const params = new URLSearchParams();
+            
+            // Pagination
+            params.append('limit', LIMIT);
+            params.append('offset', currentOffset);
+            
             if (!(categories.length === 1 && categories[0] === 'all')) {
                 categories.forEach(c => params.append('category', c));
             }
             if (debouncedSearch && debouncedSearch.trim()) {
                 params.append('q', debouncedSearch.trim());
             }
+            
             const qs = params.toString();
             if (qs) url = `${url}?${qs}`;
+            
             const res = await axios.get(url);
-            // Shuffle client side for variety
+            const newQuestions = res.data;
+            
+            // Shuffle client side for variety (only if not searching)
             const shouldShuffle = !(debouncedSearch && debouncedSearch.trim());
-            const data = shouldShuffle ? res.data.sort(() => 0.5 - Math.random()) : res.data;
-            setQuestions(data);
-            setCurrentIndex(0);
+            const data = shouldShuffle ? newQuestions.sort(() => 0.5 - Math.random()) : newQuestions;
+            
+            if (loadMore) {
+                setQuestions(prev => [...prev, ...data]);
+                setOffset(currentOffset + LIMIT);
+            } else {
+                setQuestions(data);
+                setOffset(LIMIT);
+                setCurrentIndex(0);
+            }
+            
+            setHasMore(data.length === LIMIT);
             setFeedback(null);
             setSelectedOption(null);
         } catch (e) {
@@ -53,6 +75,19 @@ export default function Training() {
         const t = setTimeout(() => setDebouncedSearch(search), 300);
         return () => clearTimeout(t);
     }, [search]);
+
+    // Preload images of next 3 questions
+    useEffect(() => {
+        const preloadImages = () => {
+            for (let i = currentIndex + 1; i < Math.min(currentIndex + 4, questions.length); i++) {
+                if (questions[i]?.image_url) {
+                    const img = new Image();
+                    img.src = questions[i].image_url;
+                }
+            }
+        };
+        preloadImages();
+    }, [currentIndex, questions]);
 
     const handleAnswer = async (optionId) => {
         if (feedback) return; // Already answered
@@ -207,6 +242,15 @@ export default function Training() {
                                 </div>
                                 <Button onClick={nextQuestion} className="mt-4 w-full bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600">
                                     Question Suivante <ArrowRight className="ml-2 h-4 w-4" />
+                                </Button>
+                            </div>
+                        )}
+                        
+                        {/* Load More Button */}
+                        {currentIndex === questions.length - 1 && hasMore && !feedback && (
+                            <div className="text-center mt-4">
+                                <Button onClick={() => fetchQuestions(true)} disabled={loading} className="w-full">
+                                    {loading ? 'Chargement...' : 'Charger plus de questions'}
                                 </Button>
                             </div>
                         )}
