@@ -168,6 +168,7 @@ def fix_issues(issues):
 def main():
     parser = argparse.ArgumentParser(description='Check and fix database integrity')
     parser.add_argument('--fix', action='store_true', help='Automatically fix detected issues')
+    parser.add_argument('--dry-run', action='store_true', help='Show what would be fixed without making changes')
     args = parser.parse_args()
     
     # Check database
@@ -187,11 +188,16 @@ def main():
         logger.warning(f"{i}. {issue['details']}")
     
     # Fix if requested
-    if args.fix:
+    if args.dry_run:
+        logger.info("\n💡 DRY RUN MODE - no changes will be made")
+        logger.info("   Run with --fix flag to automatically fix these issues")
+        logger.info("   Example: python backend/scripts/check_and_fix_db.py --fix")
+    elif args.fix:
         fix_issues(issues)
     else:
         logger.info("\n💡 Run with --fix flag to automatically fix these issues")
         logger.info("   Example: python backend/scripts/check_and_fix_db.py --fix")
+        logger.info("   Or run with --dry-run to preview changes")
     
     return len(issues)
 
