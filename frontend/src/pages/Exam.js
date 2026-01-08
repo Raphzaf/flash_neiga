@@ -42,6 +42,21 @@ export default function Exam() {
         }
     }, [loading, isFinished, timeLeft]);
 
+    // Preload images of next 3 questions
+    useEffect(() => {
+        if (!examSession?.questions) return;
+        const preloadImages = () => {
+            const questions = examSession.questions;
+            for (let i = currentQIndex + 1; i < Math.min(currentQIndex + 4, questions.length); i++) {
+                if (questions[i]?.image_url) {
+                    const img = new Image();
+                    img.src = questions[i].image_url;
+                }
+            }
+        };
+        preloadImages();
+    }, [currentQIndex, examSession?.questions]);
+
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
