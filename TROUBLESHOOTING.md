@@ -19,52 +19,102 @@ Ce document contient les solutions aux problèmes courants rencontrés avec l'ap
 ```
 Failed to load resource: the server responded with a status of 500
 Error fetching signs: ...
+column traffic_signs.created_at does not exist
 ```
 
 **Cause:**
-La colonne `explanation` est manquante dans la table `traffic_signs`. Cette colonne a été ajoutée récemment au modèle mais la base de données existante n'a pas été migrée.
+Des colonnes requises sont manquantes dans la table `traffic_signs` (par exemple: `explanation`, `created_at`). Ces colonnes ont été ajoutées au modèle mais la base de données existante n'a pas été migrée.
 
 **Solutions:**
 
 #### Solution 1: Redémarrage de l'application (Recommandé)
-L'application vérifie et corrige automatiquement le schéma au démarrage depuis la dernière mise à jour:
+L'application vérifie et corrige automatiquement le schéma au démarrage:
 
 ```bash
-# Arrêter et redémarrer l'application
-# En développement:
+# En développement local:
 cd backend
 uvicorn server:app --reload
 
 # En production (Render):
 # Le redémarrage se fait automatiquement lors du déploiement
+# Ou manuellement via le dashboard Render
 ```
 
-#### Solution 2: Script de migration manuel
-Si le redémarrage ne résout pas le problème:
+L'application effectue maintenant ces étapes au démarrage:
+1. ✅ Initialisation des tables de la base de données
+2. ✅ Vérification et mise à jour du schéma
+3. ✅ Création de l'utilisateur admin
+4. ✅ Chargement des questions si la base est vide
+5. ✅ Chargement des panneaux de signalisation si la base est vide
+
+#### Solution 2: Script de réparation de production (Recommandé pour production)
+Utilisez le script dédié pour réparer la base de données PostgreSQL en production:
 
 ```bash
-# Depuis la racine du projet
-python backend/migrations/add_explanation_column.py
+# Vérifier le schéma sans faire de changements (sûr)
+python backend/scripts/fix_production_db.py --dry-run
+
+# Réparer la base de données (ajoute les colonnes manquantes)
+python backend/scripts/fix_production_db.py
+
+# Avec une URL de base de données personnalisée
+python backend/scripts/fix_production_db.py --db-url "postgresql://user:pass@host/db"
 ```
 
 Ce script:
-- Vérifie si la colonne `explanation` existe
-- L'ajoute si elle est manquante
-- Supporte SQLite et PostgreSQL
-- Affiche des logs détaillés
+- ✅ Vérifie les colonnes actuelles de `traffic_signs`
+- ✅ Ajoute toutes les colonnes manquantes avec les bons types
+- ✅ Crée les index nécessaires
+- ✅ Vérifie la structure finale
+- ✅ Fournit un journal détaillé de toutes les opérations
 
-#### Solution 3: Vérification et réparation complète
+#### Solution 3: Vérification du schéma (lecture seule)
+Vérifiez l'état du schéma sans modifier quoi que ce soit:
+
+```bash
+# Vérifier toutes les tables
+python backend/scripts/verify_db_schema.py
+
+# Vérifier une table spécifique
+python backend/scripts/verify_db_schema.py --table traffic_signs
+
+# Mode verbeux avec détails de toutes les colonnes
+python backend/scripts/verify_db_schema.py --verbose
+```
+
+#### Solution 4: Vérification et réparation complète
 Utilisez le script de vérification de l'intégrité:
 
 ```bash
 # Vérifier l'intégrité de la base de données
 python backend/scripts/check_and_fix_db.py
 
+# Prévisualiser les corrections sans les appliquer
+python backend/scripts/check_and_fix_db.py --dry-run
+
 # Corriger automatiquement les problèmes détectés
 python backend/scripts/check_and_fix_db.py --fix
 ```
 
-#### Solution 4: SQL manuel (Dernier recours)
+#### Solution 5: Option nucléaire - Recréer la table (DESTRUCTIF)
+⚠️  **ATTENTION:** Cette option supprime et recrée la table. À utiliser en dernier recours uniquement!
+
+```bash
+# Prévisualiser ce qui sera fait (sûr)
+python backend/scripts/recreate_traffic_signs_table.py --dry-run
+
+# Recréer la table (nécessite confirmation)
+python backend/scripts/recreate_traffic_signs_table.py --confirm
+```
+
+Ce script:
+- 💾 Sauvegarde les données existantes
+- 🗑️  Supprime la table `traffic_signs`
+- 🔧 Recrée la table avec le schéma correct
+- ♻️  Restaure les données sauvegardées
+- 📥 Charge depuis JSON si la table était vide
+
+#### Solution 6: SQL manuel (Dernier recours)
 
 **Pour SQLite (développement local):**
 ```bash
@@ -74,8 +124,9 @@ sqlite3 backend/flash_neiga.db
 -- Vérifier si la colonne existe
 PRAGMA table_info(traffic_signs);
 
--- Ajouter la colonne si manquante
+-- Ajouter les colonnes manquantes
 ALTER TABLE traffic_signs ADD COLUMN explanation TEXT;
+ALTER TABLE traffic_signs ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 -- Vérifier
 PRAGMA table_info(traffic_signs);
@@ -88,31 +139,74 @@ PRAGMA table_info(traffic_signs);
 -- Via Render dashboard ou psql
 
 -- Vérifier les colonnes
-SELECT column_name, data_type 
+SELECT column_name, data_type, is_nullable, column_default
 FROM information_schema.columns 
-WHERE table_name = 'traffic_signs';
+WHERE table_name = 'traffic_signs'
+ORDER BY ordinal_position;
 
--- Ajouter la colonne si manquante
+-- Ajouter les colonnes manquantes
 ALTER TABLE traffic_signs ADD COLUMN explanation TEXT;
+ALTER TABLE traffic_signs ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- Vérifier
 \d traffic_signs
 ```
 
+### Connexion à la base de données de production
+
+**URLs de connexion Render:**
+
+- **URL interne** (pour les services Render):
+  ```
+  postgresql://flash_neiga_user:XbM2WHVQLhAShKB8axTj2DPkbquOxDX6@dpg-d4v0ld6uk2gs7394fbm0-a/flash_neiga
+  ```
+
+- **URL externe** (pour connexion locale):
+  ```
+  postgresql://flash_neiga_user:XbM2WHVQLhAShKB8axTj2DPkbquOxDX6@dpg-d4v0ld6uk2gs7394fbm0-a.oregon-postgres.render.com/flash_neiga
+  ```
+
+**Connexion via psql:**
+```bash
+psql "postgresql://flash_neiga_user:XbM2WHVQLhAShKB8axTj2DPkbquOxDX6@dpg-d4v0ld6uk2gs7394fbm0-a.oregon-postgres.render.com/flash_neiga"
+```
+
+**Via le dashboard Render:**
+1. Allez sur https://dashboard.render.com
+2. Sélectionnez votre service de base de données
+3. Cliquez sur "Shell" pour accéder à un terminal psql
+
 ### Autres colonnes manquantes
 
-Si d'autres colonnes sont manquantes, le script `check_and_fix_db.py` peut les détecter et les corriger:
+Si d'autres colonnes sont manquantes, les scripts peuvent les détecter et les corriger:
 
 ```bash
+# Vérifier toutes les tables
+python backend/scripts/verify_db_schema.py
+
+# Corriger automatiquement
 python backend/scripts/check_and_fix_db.py --fix
 ```
 
-Tables vérifiées:
-- `traffic_signs`: id, number, name, description, image_url, category, explanation, created_at
-- `questions`: id, text, category, options, explanation, created_at
-- `users`: id, email, hashed_password, created_at, is_premium, premium_until
-- `exam_sessions`: id, user_id, started_at, ended_at, score, total_questions, passed, answers
-- `transactions`: id, user_id, transaction_id, amount, currency, provider, status, created_at, metadata
+**Schéma attendu des tables principales:**
+
+**traffic_signs:**
+- id (VARCHAR PRIMARY KEY)
+- number (VARCHAR NOT NULL)
+- name (VARCHAR NOT NULL)
+- description (TEXT NOT NULL)
+- image_url (VARCHAR)
+- category (VARCHAR NOT NULL)
+- explanation (TEXT)
+- created_at (TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+
+**questions:**
+- id (VARCHAR PRIMARY KEY)
+- text (TEXT NOT NULL)
+- category (VARCHAR NOT NULL)
+- options (JSON NOT NULL)
+- explanation (TEXT)
+- created_at (TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
 
 ---
 
@@ -227,6 +321,110 @@ Consultez les messages d'erreur détaillés et référez-vous aux sections appro
 ---
 
 ## Outils de diagnostic
+
+### Scripts de gestion de la base de données
+
+L'application dispose de plusieurs scripts pour gérer et dépanner la base de données:
+
+#### 1. `verify_db_schema.py` - Vérification du schéma (lecture seule)
+
+**Objectif:** Vérifier que le schéma de la base de données correspond aux modèles attendus, sans faire de modifications.
+
+**Usage:**
+```bash
+# Vérifier toutes les tables
+python backend/scripts/verify_db_schema.py
+
+# Vérifier une table spécifique
+python backend/scripts/verify_db_schema.py --table traffic_signs
+
+# Mode verbeux avec tous les détails
+python backend/scripts/verify_db_schema.py --verbose
+
+# Avec une URL de base personnalisée
+python backend/scripts/verify_db_schema.py --db-url "postgresql://..."
+```
+
+**Sortie attendue:**
+```
+🔍 DATABASE SCHEMA VERIFICATION
+✅ Connected to PostgreSQL
+📋 Table: traffic_signs
+  ✅ Table exists
+  📊 Row count: 117
+  ✅ All expected columns present
+✅ All tables verified successfully - schema is correct!
+```
+
+#### 2. `fix_production_db.py` - Réparation de la base de production
+
+**Objectif:** Ajouter les colonnes manquantes et créer les index dans la base de données PostgreSQL de production.
+
+**Usage:**
+```bash
+# Mode dry-run (prévisualisation sans changements)
+python backend/scripts/fix_production_db.py --dry-run
+
+# Réparer la base de données
+python backend/scripts/fix_production_db.py
+
+# Avec DATABASE_URL personnalisée
+export DATABASE_URL="postgresql://user:pass@host/db"
+python backend/scripts/fix_production_db.py
+
+# Ignorer la création d'index
+python backend/scripts/fix_production_db.py --skip-indexes
+```
+
+**Ce que fait le script:**
+- ✅ Se connecte à PostgreSQL
+- ✅ Vérifie les colonnes actuelles
+- ✅ Identifie les colonnes manquantes
+- ✅ Ajoute les colonnes manquantes avec les bons types
+- ✅ Crée les index recommandés
+- ✅ Vérifie le schéma final
+
+#### 3. `check_and_fix_db.py` - Vérification et réparation
+
+**Objectif:** Vérifier l'intégrité de toutes les tables et optionnellement corriger les problèmes.
+
+**Usage:**
+```bash
+# Vérifier uniquement (sans corrections)
+python backend/scripts/check_and_fix_db.py
+
+# Prévisualiser les corrections
+python backend/scripts/check_and_fix_db.py --dry-run
+
+# Corriger automatiquement
+python backend/scripts/check_and_fix_db.py --fix
+```
+
+**Tables vérifiées:**
+- users, questions, traffic_signs
+- exam_sessions, transactions, payments, subscriptions
+
+#### 4. `recreate_traffic_signs_table.py` - Recréation de la table (DESTRUCTIF)
+
+**Objectif:** Option nucléaire pour recréer complètement la table `traffic_signs` avec le bon schéma.
+
+⚠️  **ATTENTION:** Cette option supprime et recrée la table. À utiliser uniquement si les autres méthodes ont échoué!
+
+**Usage:**
+```bash
+# Prévisualiser ce qui sera fait (sûr)
+python backend/scripts/recreate_traffic_signs_table.py --dry-run
+
+# Recréer la table (nécessite --confirm)
+python backend/scripts/recreate_traffic_signs_table.py --confirm
+```
+
+**Ce que fait le script:**
+1. 💾 Sauvegarde les données existantes dans `backend/backups/`
+2. 🗑️  Supprime la table `traffic_signs`
+3. 🔧 Recrée la table avec le schéma correct
+4. ♻️  Restaure les données sauvegardées
+5. 📥 Charge depuis `data/signs_israel_fr_117.json` si la table était vide
 
 ### 1. Vérification de l'intégrité de la base de données
 

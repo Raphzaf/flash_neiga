@@ -308,6 +308,222 @@ The backend supports both PostgreSQL (production) and SQLite (local development)
 - Database file (`flash_neiga.db`) is stored in the `backend/` directory
 - No configuration needed - automatically created on first run
 
+## 🗄️ Database Management
+
+### Overview
+
+The application includes comprehensive database management tools to help maintain schema integrity and troubleshoot issues.
+
+### Database Schema Automatic Updates
+
+The backend **automatically checks and updates** the database schema on startup:
+
+1. ✅ **Initializes** database tables if they don't exist
+2. ✅ **Verifies** that all required columns exist
+3. ✅ **Adds** any missing columns with correct types
+4. ✅ **Loads** sample data (questions and traffic signs) if database is empty
+
+This ensures that your database is always up-to-date with the latest schema requirements.
+
+### Database Management Scripts
+
+Located in `backend/scripts/`, these tools help diagnose and fix database issues:
+
+#### 1. `verify_db_schema.py` - Schema Verification (Read-Only)
+
+**Purpose:** Verify database schema without making any changes. Safe to run anytime.
+
+```bash
+# Verify all tables
+python backend/scripts/verify_db_schema.py
+
+# Verify specific table
+python backend/scripts/verify_db_schema.py --table traffic_signs
+
+# Verbose output with all column details
+python backend/scripts/verify_db_schema.py --verbose
+
+# Use custom database URL
+python backend/scripts/verify_db_schema.py --db-url "postgresql://user:pass@host/db"
+```
+
+**Output Example:**
+```
+🔍 DATABASE SCHEMA VERIFICATION
+✅ Connected to PostgreSQL
+📋 Table: traffic_signs
+  ✅ Table exists
+  📊 Row count: 117
+  ✅ All expected columns present
+✅ All tables verified successfully!
+```
+
+#### 2. `fix_production_db.py` - Production Database Repair
+
+**Purpose:** Fix missing columns and create indexes in PostgreSQL production database.
+
+```bash
+# Preview changes without applying them (safe)
+python backend/scripts/fix_production_db.py --dry-run
+
+# Fix the database
+python backend/scripts/fix_production_db.py
+
+# Use custom DATABASE_URL
+export DATABASE_URL="postgresql://user:pass@host/db"
+python backend/scripts/fix_production_db.py
+
+# Skip index creation
+python backend/scripts/fix_production_db.py --skip-indexes
+```
+
+**What it does:**
+- ✅ Connects to PostgreSQL database
+- ✅ Checks current schema
+- ✅ Identifies missing columns
+- ✅ Adds missing columns with correct types
+- ✅ Creates recommended indexes
+- ✅ Verifies final schema
+
+#### 3. `check_and_fix_db.py` - Complete Database Integrity Check
+
+**Purpose:** Check all tables for schema issues and optionally fix them.
+
+```bash
+# Check database integrity (no changes)
+python backend/scripts/check_and_fix_db.py
+
+# Preview fixes
+python backend/scripts/check_and_fix_db.py --dry-run
+
+# Fix issues automatically
+python backend/scripts/check_and_fix_db.py --fix
+```
+
+**Tables Checked:**
+- users, questions, traffic_signs
+- exam_sessions, transactions, payments, subscriptions
+
+#### 4. `recreate_traffic_signs_table.py` - Nuclear Option (DESTRUCTIVE)
+
+**Purpose:** Drop and recreate the `traffic_signs` table with correct schema.
+
+⚠️ **WARNING:** This drops the table! Use only when other methods have failed.
+
+```bash
+# Preview what would happen (safe)
+python backend/scripts/recreate_traffic_signs_table.py --dry-run
+
+# Recreate the table (requires confirmation)
+python backend/scripts/recreate_traffic_signs_table.py --confirm
+```
+
+**What it does:**
+1. 💾 Backs up existing data to `backend/backups/`
+2. 🗑️ Drops the `traffic_signs` table
+3. 🔧 Recreates table with correct schema
+4. ♻️ Restores backed up data
+5. 📥 Loads from JSON if table was empty
+
+### Common Database Issues
+
+#### Issue: "column does not exist" Error
+
+**Symptoms:**
+```
+500 Internal Server Error
+column traffic_signs.created_at does not exist
+```
+
+**Solution:**
+```bash
+# Option 1: Restart the application (automatic fix)
+# The backend will detect and add missing columns on startup
+
+# Option 2: Use the production fix script
+python backend/scripts/fix_production_db.py
+
+# Option 3: Verify and fix manually
+python backend/scripts/verify_db_schema.py
+python backend/scripts/check_and_fix_db.py --fix
+```
+
+#### Issue: Database Schema Out of Sync
+
+**Solution:**
+```bash
+# 1. Verify current schema
+python backend/scripts/verify_db_schema.py --verbose
+
+# 2. Fix issues
+python backend/scripts/fix_production_db.py
+
+# 3. Restart backend service
+```
+
+#### Connecting to Production Database
+
+**Render Database URLs:**
+
+- **Internal URL** (for Render services):
+  ```
+  postgresql://flash_neiga_user:PASSWORD@dpg-xxxxx-a/flash_neiga
+  ```
+
+- **External URL** (for local connection):
+  ```
+  postgresql://flash_neiga_user:PASSWORD@dpg-xxxxx-a.oregon-postgres.render.com/flash_neiga
+  ```
+
+**Connect via psql:**
+```bash
+psql "postgresql://flash_neiga_user:PASSWORD@dpg-xxxxx-a.oregon-postgres.render.com/flash_neiga"
+```
+
+**Via Render Dashboard:**
+1. Go to https://dashboard.render.com
+2. Select your database service
+3. Click "Shell" to access psql terminal
+
+### Expected Database Schema
+
+**traffic_signs table:**
+```sql
+CREATE TABLE traffic_signs (
+    id VARCHAR PRIMARY KEY,
+    number VARCHAR NOT NULL,
+    name VARCHAR NOT NULL,
+    description TEXT NOT NULL,
+    image_url VARCHAR,
+    category VARCHAR NOT NULL,
+    explanation TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_traffic_signs_number ON traffic_signs (number);
+CREATE INDEX idx_traffic_signs_category ON traffic_signs (category);
+```
+
+**questions table:**
+```sql
+CREATE TABLE questions (
+    id VARCHAR PRIMARY KEY,
+    text TEXT NOT NULL,
+    category VARCHAR NOT NULL,
+    options JSON NOT NULL,
+    explanation TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Troubleshooting
+
+For detailed troubleshooting guides and solutions to common problems, see:
+- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Comprehensive troubleshooting guide
+- Includes step-by-step solutions for database issues
+- SQL commands for manual fixes
+- Connection examples for production database
+
 ### CORS Configuration
 
 The backend uses a **dual approach** for handling cross-origin requests:
