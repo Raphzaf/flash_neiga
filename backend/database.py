@@ -67,13 +67,8 @@ def ensure_schema_updated():
             logger.info("🔧 Adding 'explanation' column to traffic_signs table...")
             
             with engine.connect() as conn:
-                # Determine database type and use appropriate SQL
-                if DATABASE_URL.startswith("sqlite"):
-                    sql = text("ALTER TABLE traffic_signs ADD COLUMN explanation TEXT")
-                else:
-                    # PostgreSQL
-                    sql = text("ALTER TABLE traffic_signs ADD COLUMN explanation TEXT")
-                
+                # Both SQLite and PostgreSQL use the same ALTER TABLE syntax for adding a TEXT column
+                sql = text("ALTER TABLE traffic_signs ADD COLUMN explanation TEXT")
                 conn.execute(sql)
                 conn.commit()
                 logger.info("✅ Successfully added 'explanation' column to traffic_signs table")

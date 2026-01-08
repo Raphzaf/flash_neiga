@@ -50,14 +50,8 @@ def run_migration():
         logger.info("🔨 Adding explanation column to traffic_signs table...")
         
         with engine.connect() as conn:
-            # Determine database type and use appropriate SQL
-            if DATABASE_URL.startswith("sqlite"):
-                logger.info("   Using SQLite ALTER TABLE syntax")
-                sql = text("ALTER TABLE traffic_signs ADD COLUMN explanation TEXT")
-            else:
-                logger.info("   Using PostgreSQL ALTER TABLE syntax")
-                sql = text("ALTER TABLE traffic_signs ADD COLUMN explanation TEXT")
-            
+            # Both SQLite and PostgreSQL use the same ALTER TABLE syntax
+            sql = text("ALTER TABLE traffic_signs ADD COLUMN explanation TEXT")
             conn.execute(sql)
             conn.commit()
             logger.info("✅ Successfully added explanation column to traffic_signs table")

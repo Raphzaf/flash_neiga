@@ -14,7 +14,8 @@ import argparse
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, Column, Text, Boolean, TIMESTAMP
+from sqlalchemy.schema import Table, MetaData
 from database import engine, Base, DATABASE_URL
 from models import TrafficSignDB, QuestionDB, UserDB, ExamSessionDB, TransactionDB
 import logging
@@ -93,30 +94,41 @@ def check_database_integrity():
 
 def fix_missing_column(table_name, column_name):
     """
-    Add a missing column to a table.
+    Add a missing column to a table using SQLAlchemy DDL.
     """
     logger.info(f"🔧 Adding column '{column_name}' to table '{table_name}'...")
     
     try:
         # Define column types based on table and column name
-        column_types = {
+        column_definitions = {
             'traffic_signs': {
-                'explanation': 'TEXT'
+                'explanation': Column('explanation', Text, nullable=True)
             },
             'questions': {
-                'explanation': 'TEXT'
+                'explanation': Column('explanation', Text, nullable=True)
             },
             'users': {
-                'is_premium': 'BOOLEAN DEFAULT FALSE',
-                'premium_until': 'TIMESTAMP'
+                'is_premium': Column('is_premium', Boolean, default=False),
+                'premium_until': Column('premium_until', TIMESTAMP, nullable=True)
             }
         }
         
-        column_type = column_types.get(table_name, {}).get(column_name, 'TEXT')
+        column_def = column_definitions.get(table_name, {}).get(column_name)
         
+        if not column_def:
+            logger.warning(f"⚠️  Column definition for {table_name}.{column_name} not found, using TEXT")
+            column_def = Column(column_name, Text, nullable=True)
+        
+        # Use SQLAlchemy's DDL to add the column
         with engine.connect() as conn:
-            sql = text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
-            conn.execute(sql)
+            # Get table metadata
+            metadata = MetaData()
+            table = Table(table_name, metadata, autoload_with=engine)
+            
+            # Add column using DDL
+            column_def.table = table
+            from sqlalchemy.schema import AddColumn
+            conn.execute(AddColumn(table, column_def))
             conn.commit()
             logger.info(f"   ✅ Successfully added column '{column_name}'")
             return True

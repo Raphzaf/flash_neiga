@@ -741,7 +741,7 @@ async def list_admin_signs(
     db: Session = Depends(get_db)
 ):
     """List traffic signs for admin management (with optional filter for missing explanation)."""
-    logger.info(f"📋 Admin signs request - missingOnly={missingOnly}, limit={limit}, offset={offset}, user={current_user.email}")
+    logger.info(f"📋 Admin signs request - missingOnly={missingOnly}, limit={limit}, offset={offset}, user_id={current_user.id}")
     
     try:
         query = db.query(TrafficSignDB)
