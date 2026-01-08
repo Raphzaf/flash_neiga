@@ -256,15 +256,30 @@ def load_questions_from_data_v3(db: Session):
 async def startup():
     """Initialize database, create admin, and load questions on first startup"""
     
-    print("🔧 Initializing database...")
-    init_db()
-    print("✅ Database tables created")
+    logger.info("=" * 70)
+    logger.info("🚀 Starting Flash Neiga Backend Application")
+    logger.info("=" * 70)
     
-    # Check and update schema if needed
-    print("🔍 Checking database schema...")
-    ensure_schema_updated()
-    print("✅ Database schema verified")
+    # Step 1: Initialize database tables
+    logger.info("📝 Step 1: Initializing database tables...")
+    try:
+        init_db()
+        logger.info("✅ Database tables created successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize database: {e}", exc_info=True)
+        raise
     
+    # Step 2: Check and update schema BEFORE any data operations
+    logger.info("📝 Step 2: Verifying and updating database schema...")
+    try:
+        ensure_schema_updated()
+        logger.info("✅ Database schema verified and updated")
+    except Exception as e:
+        logger.error(f"❌ Failed to update schema: {e}", exc_info=True)
+        logger.warning("⚠️  Continuing startup despite schema issues...")
+    
+    # Step 3: Ensure admin user exists
+    logger.info("📝 Step 3: Checking admin user...")
     db = SessionLocal()
     try:
         # Create admin user if it doesn't exist
@@ -272,9 +287,9 @@ async def startup():
         existing_admin = db.query(UserDB).filter(UserDB.email == admin_email).first()
         
         if existing_admin:
-            print(f"ℹ️  Admin user already exists: {admin_email}")
+            logger.info(f"✅ Admin user already exists: {admin_email}")
         else:
-            print(f"📝 Creating admin user: {admin_email}")
+            logger.info(f"📝 Creating admin user: {admin_email}")
             
             admin_user = UserDB(
                 id=str(uuid.uuid4()),
@@ -286,34 +301,36 @@ async def startup():
             db.commit()
             db.refresh(admin_user)
             
-            print(f"✅ Admin user created successfully!")
-            print(f"   Email: {admin_email}")
-            print(f"   Password: admin.")
-            print(f"   User ID: {admin_user.id}")
-            print("⚠️  IMPORTANT: Change the admin password after first login!")
+            logger.info(f"✅ Admin user created successfully!")
+            logger.info(f"   📧 Email: {admin_email}")
+            logger.info(f"   🔑 Password: admin.")
+            logger.info(f"   🆔 User ID: {admin_user.id}")
+            logger.warning("⚠️  IMPORTANT: Change the admin password after first login!")
         
-        # Load questions from data_v3.json if database is empty
+        # Step 4: Load questions from data_v3.json if database is empty
+        logger.info("📝 Step 4: Checking questions in database...")
         question_count = db.query(QuestionDB).count()
         
         if question_count == 0:
-            print("📚 Database is empty, loading questions from data_v3.json...")
+            logger.info("📚 Database is empty, loading questions from data_v3.json...")
             imported = load_questions_from_data_v3(db)
             new_count = db.query(QuestionDB).count()
-            print(f"✅ Successfully loaded {new_count} questions from data_v3.json!")
+            logger.info(f"✅ Successfully loaded {new_count} questions from data_v3.json!")
         else:
-            print(f"ℹ️  Database already contains {question_count} questions")
+            logger.info(f"✅ Database already contains {question_count} questions")
 
-        # Load traffic signs from bundled JSON if none exist
+        # Step 5: Load traffic signs from bundled JSON if none exist
+        logger.info("📝 Step 5: Checking traffic signs in database...")
         def _load_signs_from_json(db: Session) -> int:
             path = ROOT_DIR.parent / "data" / "signs_israel_fr_117.json"
             if not path.exists():
-                print(f"⚠️  signs JSON not found at {path}")
+                logger.warning(f"⚠️  signs JSON not found at {path}")
                 return 0
             try:
                 with path.open("r", encoding="utf-8") as f:
                     data = json.load(f)
                 if not isinstance(data, list):
-                    print("⚠️  signs JSON format invalid (expected list)")
+                    logger.warning("⚠️  signs JSON format invalid (expected list)")
                     return 0
 
                 imported_signs = 0
@@ -342,27 +359,29 @@ async def startup():
                 db.commit()
                 return imported_signs
             except Exception as e:
-                logger.error(f"Error importing signs from JSON: {e}", exc_info=True)
+                logger.error(f"❌ Error importing signs from JSON: {e}", exc_info=True)
                 db.rollback()
                 return 0
 
         sign_count = db.query(TrafficSignDB).count()
         if sign_count == 0:
-            print("🚸 Loading traffic signs from bundled JSON...")
+            logger.info("🚸 Loading traffic signs from bundled JSON...")
             imported_signs = _load_signs_from_json(db)
             new_sign_count = db.query(TrafficSignDB).count()
-            print(f"✅ Loaded {new_sign_count} traffic signs from JSON")
+            logger.info(f"✅ Loaded {new_sign_count} traffic signs from JSON")
         else:
-            print(f"ℹ️  Database already contains {sign_count} traffic signs")
+            logger.info(f"✅ Database already contains {sign_count} traffic signs")
             
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
         db.rollback()
+        raise
     finally:
         db.close()
     
-    print("🚀 Application startup complete!")
-    logger.info("Application startup complete")
+    logger.info("=" * 70)
+    logger.info("🚀 Application startup complete!")
+    logger.info("=" * 70)
 
     # ===== Admin Import Official =====
     def _map_official_question(raw: dict):
