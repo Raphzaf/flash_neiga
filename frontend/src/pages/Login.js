@@ -124,11 +124,11 @@ export default function Login() {
           </form>
         </CardContent>
 
-        <CardFooter className="bg-slate-950/50 border-t border-white/[0.05] py-6 backdrop-blur-md">
+        <CardFooter className="bg-slate-950 border-t border-white/[0.05] py-6 backdrop-blur-sm">
           <div className="w-full text-center">
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-gray-200">
               Nouveau ici ?{' '}
-              <Link to="/register" className="text-primary hover:text-indigo-400 transition-colors font-semibold hover:underline underline-offset-4">
+              <Link to="/register" className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors underline-offset-4 hover:underline">
                 Créer un compte
               </Link>
             </p>
