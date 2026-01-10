@@ -17,6 +17,25 @@ Linux/Mac (Bash):
 - `./test-paddle.sh` - Vérifier la configuration Paddle
 - `./test-paddle-checkout.sh <PRICE_ID>` - Tester un checkout
 
+## 📊 Data Enrichment
+
+Enrich question data with image URLs extracted from the source HTML.
+
+**Quick command:**
+```bash
+npm run enrich
+```
+
+This command:
+- Loads `data/data_v3.json` and `data/sample_questions.json`
+- Extracts image URLs from HTML descriptions
+- Adds `imageUrl`, `questionId`, and `index` fields to each question
+- Generates `data/data_enriched.json` with 1802 enriched questions
+
+**For detailed documentation:**
+- See [Data Enrichment Documentation](./docs/ENRICHMENT.md)
+- Output file: `data/data_enriched.json` (generated, not committed to git)
+
 ## 🏗️ Project Structure
 
 ```

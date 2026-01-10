@@ -59,7 +59,8 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "test": "craco test"
+    "test": "craco test",
+    "enrich": "node scripts/enrich-questions.js"
   },
   "browserslist": {
     "production": [

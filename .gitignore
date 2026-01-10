@@ -68,6 +68,9 @@ agenthub/agents/youtube/db
 *.sqlite
 *.sqlite3
 
+# Generated enriched data files
+data/data_enriched.json
+
 # Archive files and large assets
 **/*.zip
 **/*.tar.gz
