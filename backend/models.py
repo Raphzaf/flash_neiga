@@ -23,6 +23,16 @@ class UserDB(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class QuestionDB(Base):
+    __tablename__ = "questions"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    text = Column(Text, nullable=False)
+    category = Column(String, index=True)
+    options = Column(JSON)  # Stored as JSON array
+    explanation = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=True)  # ← COLONNE IMAGE
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 class TrafficSignDB(Base):
     __tablename__ = "traffic_signs"
