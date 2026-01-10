@@ -421,7 +421,7 @@ async def startup():
                     return
             except Exception as e:
                 # Column might not exist yet, continue
-                logger.info("   ℹ️  First time enrichment")rollback()
+                logger.info("   ℹ️  First time enrichment")
             
             # Load files
             sample_path = Path(__file__).parent.parent / "data" / "sample_questions.json"
