@@ -24,14 +24,14 @@ class UserDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class QuestionDB(Base):
-    __tablename__ = "questions"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    text = Column(Text, nullable=False)
-    category = Column(String, index=True, nullable=False)
-    options = Column(JSON, nullable=False)  # List[QuestionOption]
-    explanation = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+class Question(BaseModel):
+    id: str
+    text: str
+    category: str
+    options: List[QuestionOption]
+    explanation:  Optional[str] = None
+    image_url: Optional[str] = None  # ← AJOUTE CETTE LIGNE
+    created_at: Optional[str] = None
 
 
 class TrafficSignDB(Base):
