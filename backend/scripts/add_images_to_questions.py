@@ -21,7 +21,8 @@ def extract_image_url(html):
     """Extrait l'URL de l'image depuis le HTML"""
     if not html:
         return None
-    match = re.search(r'<img[^>]+src="([^">]+)"', html)
+    # Support both single and double quotes for robustness
+    match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html)
     return match.group(1) if match else None
 
 
@@ -63,6 +64,8 @@ def add_images_to_database():
     
     # 4. Extraire et mettre à jour les images
     print("\n🖼️  Extraction et mise à jour des images...")
+    # Note: Les questions dans data_v3.json et sample_questions.json sont dans le même ordre
+    # Cette correspondance par index est basée sur la source de données d'origine
     updated = 0
     with_images = 0
     without_images = 0
