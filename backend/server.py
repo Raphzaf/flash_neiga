@@ -318,6 +318,77 @@ async def startup():
             logger.info(f"✅ Successfully loaded {new_count} questions from data_v3.json!")
         else:
             logger.info(f"✅ Database already contains {question_count} questions")
+                    # Step 4.5: Enrich questions with images from sample_questions.json
+        logger.info("📝 Step 4.5: Enriching questions with images...")
+        try:
+            import psycopg2
+            
+            DATABASE_URL = os.getenv('DATABASE_URL')
+            if DATABASE_URL and 'postgres' in DATABASE_URL:
+                conn = psycopg2.connect(DATABASE_URL)
+                cursor = conn.cursor()
+                
+                # Check if image_url column exists
+                try:
+                    cursor.execute("ALTER TABLE questions ADD COLUMN image_url TEXT")
+                    conn.commit()
+                    logger.info("   ✅ Column image_url added to questions table")
+                except Exception: 
+                    conn.rollback()
+                    logger.info("   ℹ️  Column image_url already exists")
+                
+                # Load sample_questions.json
+                sample_path = Path(__file__).parent.parent / "data" / "sample_questions.json"
+                if sample_path.exists():
+                    with open(sample_path, 'r', encoding='utf-8') as f:
+                        sample_data = json.load(f)
+                    
+                    # Load data_v3.json for correspondence
+                    data_v3_path = Path(__file__).parent.parent / "data" / "data_v3.json"
+                    with open(data_v3_path, 'r', encoding='utf-8') as f:
+                        data_v3 = json.load(f)
+                    
+                    questions_list = data_v3 if isinstance(data_v3, list) else data_v3.get("questions", [])
+                    sample_items = sample_data.get("items", [])
+                    
+                    # Extract and update images
+                    def extract_image_url(html):
+                        if not html:
+                            return None
+                        match = re.search(r'<img[^>]+src="([^">]+)"', html)
+                        return match.group(1) if match else None
+                    
+                    updated = 0
+                    with_images = 0
+                    
+                    for i, question in enumerate(questions_list):
+                        if i < len(sample_items):
+                            description4 = sample_items[i]. get('raw', {}).get('description4', '')
+                            image_url = extract_image_url(description4)
+                            
+                            if image_url:
+                                with_images += 1
+                                cursor.execute(
+                                    "UPDATE questions SET image_url = %s WHERE text = %s",
+                                    (image_url, question['text'])
+                                )
+                                updated += cursor.rowcount
+                    
+                    conn.commit()
+                    conn.close()
+                    
+                    logger.info(f"✅ Questions enriched with images:")
+                    logger.info(f"   • Questions with images: {with_images}")
+                    logger.info(f"   • Database rows updated: {updated}")
+                else:
+                    logger.warning("⚠️  sample_questions. json not found, skipping image enrichment")
+            else:
+                logger.info("   ℹ️  SQLite detected, skipping image enrichment (PostgreSQL only)")
+                
+        except ImportError:
+            logger.warning("⚠️  psycopg2 not installed, skipping image enrichment")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to enrich images: {e}")
 
         # Step 5: Load traffic signs from bundled JSON if none exist
         logger.info("📝 Step 5: Checking traffic signs in database...")
