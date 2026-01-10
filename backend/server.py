@@ -399,22 +399,29 @@ async def startup():
             conn = psycopg2.connect(DATABASE_URL)
             cursor = conn.cursor()
             
-            # Check if already enriched
-            cursor.execute("SELECT COUNT(*) FROM questions WHERE image_url IS NOT NULL")
-            already_enriched = cursor.fetchone()[0]
-            
-            if already_enriched > 100: 
-                logger.info(f"   ℹ️  {already_enriched} questions already enriched, skipping")
-                conn.close()
-                return
-            
-            # Add column if needed
+            # Add column FIRST if needed
             try:
                 cursor.execute("ALTER TABLE questions ADD COLUMN image_url TEXT")
-                conn. commit()
-                logger.info("   ✅ Column image_url added")
-            except: 
+                conn.commit()
+                logger. info("   ✅ Column image_url added")
+            except Exception as e:
                 conn.rollback()
+                # Column already exists, that's fine
+                if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
+                    logger.warning(f"   ⚠️  Column creation issue: {e}")
+            
+            # NOW check if already enriched
+            try:
+                cursor.execute("SELECT COUNT(*) FROM questions WHERE image_url IS NOT NULL")
+                already_enriched = cursor.fetchone()[0]
+                
+                if already_enriched > 100: 
+                    logger.info(f"   ℹ️  {already_enriched} questions already enriched, skipping")
+                    conn.close()
+                    return
+            except Exception as e:
+                # Column might not exist yet, continue
+                logger.info("   ℹ️  First time enrichment")rollback()
             
             # Load files
             sample_path = Path(__file__).parent.parent / "data" / "sample_questions.json"
