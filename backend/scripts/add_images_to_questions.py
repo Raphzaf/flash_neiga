@@ -46,6 +46,21 @@ def add_images_to_database():
         sample_questions = json.load(f)
     print(f"✅ sample_questions.json chargé ({len(sample_questions['items'])} items)")
     
+    # Validation: Vérifier que les fichiers ont le même nombre d'éléments
+    if len(data_v3['questions']) != len(sample_questions['items']):
+        print(f"⚠️  AVERTISSEMENT : Nombre d'éléments différent !")
+        print(f"   data_v3.json: {len(data_v3['questions'])} questions")
+        print(f"   sample_questions.json: {len(sample_questions['items'])} items")
+    
+    # Validation: Vérifier que l'ordre correspond (premiers éléments)
+    if len(data_v3['questions']) > 0 and len(sample_questions['items']) > 0:
+        first_q_text = data_v3['questions'][0]['text']
+        first_s_text = sample_questions['items'][0]['raw'].get('title2', '')
+        if first_q_text != first_s_text:
+            print(f"⚠️  AVERTISSEMENT : L'ordre des questions ne correspond pas !")
+            print(f"   Premier élément data_v3: {first_q_text[:60]}...")
+            print(f"   Premier élément sample: {first_s_text[:60]}...")
+    
     # 2. Connexion à la base de données
     print(f"\n💾 Connexion à la base de données : {db_path}")
     conn = sqlite3.connect(db_path)
