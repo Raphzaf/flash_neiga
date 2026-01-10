@@ -388,6 +388,7 @@ async def startup():
         
         logger.info("📝 Step 5: Enriching questions with images (background)...")
         try:
+            import re
             import psycopg2
             from psycopg2.extras import execute_batch
             
