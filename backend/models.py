@@ -120,12 +120,12 @@ class QuestionCreate(BaseModel):
     category: str
     options: List[QuestionOption]
     explanation: Optional[str] = None
+    image_url: Optional[str] = None  # ← AJOUTE ICI
 
 
 class Question(QuestionCreate):
     id: str
-    created_at: datetime
-
+    created_at: Optional[datetime] = None  # ← Rends created_at optionnel aussi
 
 class TrafficSignCreate(BaseModel):
     number: str
