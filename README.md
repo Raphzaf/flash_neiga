@@ -36,6 +36,28 @@ This command:
 - See [Data Enrichment Documentation](./docs/ENRICHMENT.md)
 - Output file: `data/data_enriched.json` (generated, not committed to git)
 
+## 🖼️ Enrichir les questions avec les images
+
+Les questions peuvent être enrichies avec des URLs d'images extraites de `sample_questions.json`.
+
+### Localement
+
+```bash
+cd backend
+python scripts/add_images_to_questions.py
+```
+
+### Sur Render
+
+1. Aller dans **Dashboard Render > Shell**
+2. Exécuter :
+```bash
+cd backend
+python scripts/add_images_to_questions.py
+```
+
+📚 **Documentation complète** : [backend/docs/RENDER_DEPLOYMENT.md](backend/docs/RENDER_DEPLOYMENT.md)
+
 ## 🏗️ Project Structure
 
 ```
