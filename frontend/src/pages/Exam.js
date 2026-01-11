@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useBlocker } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -16,53 +16,62 @@ export default function Exam() {
     const [result, setResult] = useState(null);
     const [showExitDialog, setShowExitDialog] = useState(false);
     const navigate = useNavigate();
+    const navigationBlockedRef = useRef(false);
 
-    // 🔒 PROTECTION 1: Bloquer la navigation React Router (bouton retour, etc.)
-    const blocker = useBlocker(
-        ({ currentLocation, nextLocation }) => {
-            // Bloquer uniquement si l'examen est en cours
-            const examInProgress = ! loading && ! isFinished && examSession;
-            // Permettre la navigation vers la page de détails de l'examen
-            const isNavigatingToExamDetails = nextLocation.pathname. includes('/exam/');
-            
-            return examInProgress && ! isNavigatingToExamDetails;
-        }
-    );
-
-    // Gérer le dialogue de confirmation pour la navigation bloquée
+    // 🔒 PROTECTION 1: Bloquer la navigation arrière (bouton retour)
     useEffect(() => {
-        if (blocker. state === "blocked") {
-            setShowExitDialog(true);
+        if (! loading && !isFinished && examSession) {
+            // Ajouter une entrée dans l'historique pour intercepter le retour arrière
+            window.history.pushState(null, '', window.location.href);
+            
+            const handlePopState = (event) => {
+                // Remettre l'entrée dans l'historique pour rester sur la page
+                window. history.pushState(null, '', window.location.href);
+                
+                // Afficher le dialogue de confirmation
+                setShowExitDialog(true);
+            };
+
+            window.addEventListener('popstate', handlePopState);
+
+            return () => {
+                window.removeEventListener('popstate', handlePopState);
+            };
         }
-    }, [blocker.state]);
-
-    const handleCancelNavigation = () => {
-        blocker.reset();
-        setShowExitDialog(false);
-        toast.info("Continue ton examen - tu peux le faire !  💪");
-    };
-
-    const handleConfirmNavigation = () => {
-        blocker.proceed();
-        setShowExitDialog(false);
-    };
+    }, [loading, isFinished, examSession]);
 
     // 🔒 PROTECTION 2: Bloquer fermeture/rechargement de page
     useEffect(() => {
-        if (! loading && !isFinished && examSession) {
+        if (!loading && !isFinished && examSession) {
             const handleBeforeUnload = (e) => {
                 e.preventDefault();
-                e.returnValue = "Êtes-vous sûr de vouloir quitter cette page ?  Vous êtes en train de passer un examen.";
+                e.returnValue = "Êtes-vous sûr de vouloir quitter cette page ?  Vous êtes en train de passer un examen. ";
                 return e. returnValue;
             };
 
             window.addEventListener('beforeunload', handleBeforeUnload);
 
             return () => {
-                window.removeEventListener('beforeunload', handleBeforeUnload);
+                window. removeEventListener('beforeunload', handleBeforeUnload);
             };
         }
     }, [loading, isFinished, examSession]);
+
+    const handleCancelNavigation = () => {
+        setShowExitDialog(false);
+        toast.info("Continue ton examen - tu peux le faire !  💪");
+    };
+
+    const handleConfirmNavigation = () => {
+        setShowExitDialog(false);
+        // Permettre la navigation en retirant la protection temporairement
+        navigationBlockedRef.current = false;
+        
+        // Retourner au dashboard
+        setTimeout(() => {
+            navigate('/', { replace: true });
+        }, 100);
+    };
 
     // Start Exam
     useEffect(() => {
@@ -71,6 +80,7 @@ export default function Exam() {
                 const res = await axios.post(`/api/exam/start`);
                 setExamSession(res.data);
                 setLoading(false);
+                navigationBlockedRef.current = true;
             } catch (e) {
                 console.error(e);
                 toast.error("Impossible de démarrer l'examen.  Veuillez réessayer.");
@@ -85,7 +95,7 @@ export default function Exam() {
         if (! loading && !isFinished && timeLeft > 0) {
             const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
             return () => clearInterval(timer);
-        } else if (timeLeft === 0 && ! isFinished) {
+        } else if (timeLeft === 0 && !isFinished) {
             finishExam();
         }
     }, [loading, isFinished, timeLeft]);
@@ -93,7 +103,7 @@ export default function Exam() {
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
-        return `${m}:${s < 10 ? '0' : ''}${s}`;
+        return `${m}: ${s < 10 ? '0' :  ''}${s}`;
     };
 
     const handleAnswer = async (optionId) => {
@@ -108,9 +118,9 @@ export default function Exam() {
         const question = examSession.questions[currentQIndex];
         
         try {
-            const updatedAnswers = [...examSession. answers. filter(a => a.question_id !== question.question_id)];
+            const updatedAnswers = [...examSession.answers. filter(a => a.question_id !== question.question_id)];
             updatedAnswers.push({
-                question_id:  question.question_id,
+                question_id: question.question_id,
                 selected_option_id: optionId
             });
             
@@ -125,7 +135,7 @@ export default function Exam() {
             });
 
             setTimeout(() => {
-                if (currentQIndex < examSession.questions.length - 1) {
+                if (currentQIndex < examSession. questions.length - 1) {
                     setCurrentQIndex(prev => prev + 1);
                 }
             }, 300);
@@ -139,7 +149,7 @@ export default function Exam() {
     const finishExam = async () => {
         if (!examSession) return;
         
-        const total = Array. isArray(examSession?. questions) ? examSession.questions. length : 0;
+        const total = Array.isArray(examSession?. questions) ? examSession.questions. length : 0;
         const answered = Array.isArray(examSession?.answers) ? examSession.answers.length : 0;
         
         if (answered < total) {
@@ -158,6 +168,9 @@ export default function Exam() {
         const sessionId = examSession.id || examSession._id;
         
         try {
+            // Désactiver les protections avant de terminer
+            navigationBlockedRef.current = false;
+            
             const res = await axios.post(`/api/exam/${sessionId}/finish`);
             setResult(res.data);
             setIsFinished(true);
@@ -185,19 +198,23 @@ export default function Exam() {
                 <Card className="w-full max-w-2xl p-6 md:p-8 text-center space-y-6">
                     <div className="flex justify-center">
                         {result.passed ? (
-                            <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                            <div className="h-24 w-24 bg-emerald-100 dark:bg-emerald-950/30 rounded-full flex items-center justify-center text-emerald-600 dark: text-emerald-400">
                                 <CheckCircle className="h-12 w-12" />
                             </div>
                         ) : (
-                            <div className="h-24 w-24 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                            <div className="h-24 w-24 bg-red-100 dark:bg-red-950/30 rounded-full flex items-center justify-center text-red-600 dark:text-red-400">
                                 <XCircle className="h-12 w-12" />
                             </div>
                         )}
                     </div>
                     
                     <div>
-                        <h2 className="text-3xl font-bold mb-2">{result.passed ? "Félicitations !" : "Désolé, c'est raté."}</h2>
-                        <p className="text-slate-600 dark:text-slate-400">Vous avez fait {result.total_questions - result.correct_answers} erreurs. </p>
+                        <h2 className="text-3xl font-bold mb-2 text-slate-900 dark:text-white">
+                            {result.passed ? "Félicitations !" : "Désolé, c'est raté. "}
+                        </h2>
+                        <p className="text-slate-600 dark:text-slate-400">
+                            Vous avez fait {result.total_questions - result.correct_answers} erreurs. 
+                        </p>
                     </div>
 
                     <div className="text-5xl font-black text-primary my-8">
@@ -207,7 +224,9 @@ export default function Exam() {
                     <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
                         <div>
                             <div className="text-sm text-slate-600 dark:text-slate-400">Score</div>
-                            <div className="font-bold text-slate-900 dark:text-white">{(result.score ??  Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
+                            <div className="font-bold text-slate-900 dark:text-white">
+                                {(result.score ??  Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%
+                            </div>
                         </div>
                         <div>
                             <div className="text-sm text-slate-600 dark:text-slate-400">Résultat</div>
@@ -217,11 +236,17 @@ export default function Exam() {
                         </div>
                     </div>
 
-                    <div className="flex gap-4 justify-center pt-4">
-                        <Button variant="outline" onClick={() => navigate('/')}>Retour au menu</Button>
-                        <Button onClick={() => window.location.reload()}>Nouvel Examen</Button>
+                    <div className="flex flex-wrap gap-4 justify-center pt-4">
+                        <Button variant="outline" onClick={() => navigate('/')}>
+                            Retour au menu
+                        </Button>
+                        <Button onClick={() => window.location.reload()}>
+                            Nouvel Examen
+                        </Button>
                         {examSession?. id && (
-                            <Button variant="secondary" onClick={() => navigate(`/exam/${examSession.id}`)}>Voir les détails</Button>
+                            <Button variant="secondary" onClick={() => navigate(`/exam/${examSession.id}`)}>
+                                Voir les détails
+                            </Button>
                         )}
                     </div>
                 </Card>
@@ -240,21 +265,38 @@ export default function Exam() {
             {/* 🎨 DIALOGUE DE CONFIRMATION PERSONNALISÉ */}
             {showExitDialog && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <Card className="max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-3 text-amber-600">
-                            <AlertTriangle className="h-8 w-8" />
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                    <Card className="max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
+                            <div className="p-2 bg-amber-100 dark:bg-amber-950/30 rounded-full">
+                                <AlertTriangle className="h-6 w-6" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 dark: text-white">
                                 Quitter l'examen ? 
                             </h3>
                         </div>
                         
-                        <p className="text-slate-600 dark:text-slate-400">
-                            ⚠️ <strong>Tu es en train de passer un examen !</strong>
-                            <br /><br />
-                            Si tu quittes maintenant, tu devras recommencer depuis le début. 
-                            <br /><br />
-                            Es-tu sûr de vouloir abandonner ? 
-                        </p>
+                        <div className="space-y-3">
+                            <p className="text-slate-700 dark:text-slate-300 font-medium">
+                                ⚠️ Tu es en train de passer un examen ! 
+                            </p>
+                            
+                            <p className="text-slate-600 dark:text-slate-400 text-sm">
+                                Si tu quittes maintenant, tu devras recommencer depuis le début. 
+                            </p>
+
+                            <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
+                                <div className="text-sm text-slate-600 dark:text-slate-400">
+                                    Questions répondues : <span className="font-bold text-slate-900 dark:text-white">
+                                        {answersArr.length}/{questions.length}
+                                    </span>
+                                </div>
+                                <div className="text-sm text-slate-600 dark:text-slate-400">
+                                    Temps restant : <span className="font-bold text-slate-900 dark:text-white">
+                                        {formatTime(timeLeft)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
 
                         <div className="flex gap-3 pt-2">
                             <Button 
@@ -262,14 +304,14 @@ export default function Exam() {
                                 className="flex-1"
                                 onClick={handleCancelNavigation}
                             >
-                                Continuer l'examen
+                                ✅ Continuer l'examen
                             </Button>
                             <Button 
                                 variant="destructive" 
                                 className="flex-1"
                                 onClick={handleConfirmNavigation}
                             >
-                                Oui, quitter
+                                ❌ Oui, quitter
                             </Button>
                         </div>
                     </Card>
@@ -279,7 +321,9 @@ export default function Exam() {
             <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
                 {/* Header */}
                 <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center sticky top-0 z-20">
-                    <div className="font-bold text-lg text-slate-900 dark: text-white">Question {currentQIndex + 1}/{questions.length}</div>
+                    <div className="font-bold text-lg text-slate-900 dark: text-white">
+                        Question {currentQIndex + 1}/{questions.length}
+                    </div>
                     <div className={`font-mono font-medium px-3 py-1 rounded-full flex items-center ${
                         timeLeft < 300 
                             ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-100' 
@@ -293,7 +337,7 @@ export default function Exam() {
                     <Button 
                         variant={allAnswered ? "default" : "ghost"}
                         size="sm"
-                        className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50'}`}
+                        className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                         onClick={finishExam}
                         title={allAnswered ? 'Terminer l\'examen' : 'Vous pouvez terminer à tout moment'}
                     >
@@ -304,9 +348,9 @@ export default function Exam() {
                 <Progress value={questions.length ?  (((currentQIndex + 1) / questions.length) * 100) : 0} className="h-1 rounded-none" />
 
                 <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center">
-                    <Card className="p-6 md:p-8">
+                    <Card className="p-6 md:p-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                         {currentQuestion. image_url && (
-                            <div className="mb-6 rounded-xl overflow-hidden border shadow-sm max-h-[300px] w-full flex justify-center bg-black">
+                            <div className="mb-6 rounded-xl overflow-hidden border border-slate-200 dark: border-slate-700 shadow-sm max-h-[300px] w-full flex justify-center bg-black">
                                 <img src={currentQuestion.image_url} alt="Question Context" className="h-full object-contain" />
                             </div>
                         )}
@@ -316,7 +360,7 @@ export default function Exam() {
                         </h2>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {(Array.isArray(currentQuestion.options) ? currentQuestion.options : []).map((option) => {
+                            {(Array.isArray(currentQuestion. options) ? currentQuestion.options :  []).map((option) => {
                                 const isSelected = currentAnswer?.selected_option_id === option.id;
                                 return (
                                     <div 
@@ -325,7 +369,7 @@ export default function Exam() {
                                         className={`
                                             p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex items-center
                                             ${isSelected 
-                                                ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]' 
+                                                ? 'border-primary bg-primary/5 shadow-lg scale-[1.02] ring-2 ring-primary/20' 
                                                 : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-primary/50 hover:shadow-md'
                                             }
                                         `}
@@ -334,12 +378,14 @@ export default function Exam() {
                                             w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 flex items-center justify-center transition-all
                                             ${isSelected 
                                                 ? 'border-primary bg-primary' 
-                                                : 'border-slate-300 dark:border-slate-600'
+                                                : 'border-slate-300 dark: border-slate-600'
                                             }
                                         `}>
                                             {isSelected && <div className="w-3 h-3 bg-white rounded-full" />}
                                         </div>
-                                        <span className="text-base font-medium text-slate-900 dark:text-white">{option.text}</span>
+                                        <span className="text-base font-medium text-slate-900 dark:text-white">
+                                            {option.text}
+                                        </span>
                                     </div>
                                 );
                             })}
@@ -360,7 +406,13 @@ export default function Exam() {
                        {questions.map((_, idx) => (
                            <div 
                                 key={idx} 
-                                className={`w-2 h-2 rounded-full ${idx === currentQIndex ? 'bg-primary' : idx < currentQIndex ? 'bg-slate-300' : 'bg-slate-100'}`}
+                                className={`w-2 h-2 rounded-full transition-all ${
+                                    idx === currentQIndex 
+                                        ? 'bg-primary w-6' 
+                                        : answersArr.some(a => a.question_id === questions[idx]?.question_id)
+                                        ? 'bg-emerald-400 dark:bg-emerald-500' 
+                                        : 'bg-slate-200 dark:bg-slate-700'
+                                }`}
                            />
                        ))}
                     </div>
