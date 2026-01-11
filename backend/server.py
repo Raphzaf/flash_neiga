@@ -960,17 +960,18 @@ async def get_questions(
             (QuestionDB.explanation.ilike(like_expr))
         )
     questions = query.all()
-    return [
-        Question(
-            id=q.id,
-            text=q.text,
-            category=q.category,
-            options=[QuestionOption(**opt) for opt in q.options],
-            explanation=q.explanation,
-            created_at=q.created_at
-        )
-        for q in questions
-    ]
+return [
+    Question(
+        id=q.id,
+        text=q.text,
+        category=q.category,
+        options=[QuestionOption(**opt) for opt in q.options],
+        explanation=q.explanation,
+        image_url=q.image_url,  # ✅ AJOUTER CETTE LIGNE
+        created_at=q.created_at
+    )
+    for q in questions
+]
 
 
 @app.post("/api/questions", response_model=Question)
