@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useBlocker } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
 import { toast } from 'sonner';
-import { Clock, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, ArrowLeft, ArrowRight, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 export default function Exam() {
     const [examSession, setExamSession] = useState(null);
@@ -14,23 +14,50 @@ export default function Exam() {
     const [loading, setLoading] = useState(true);
     const [isFinished, setIsFinished] = useState(false);
     const [result, setResult] = useState(null);
+    const [showExitDialog, setShowExitDialog] = useState(false);
     const navigate = useNavigate();
 
-    // 🔒 NOUVELLE FONCTIONNALITÉ: Protection contre la sortie accidentelle
+    // 🔒 PROTECTION 1: Bloquer la navigation React Router (bouton retour, etc.)
+    const blocker = useBlocker(
+        ({ currentLocation, nextLocation }) => {
+            // Bloquer uniquement si l'examen est en cours
+            const examInProgress = ! loading && ! isFinished && examSession;
+            // Permettre la navigation vers la page de détails de l'examen
+            const isNavigatingToExamDetails = nextLocation.pathname. includes('/exam/');
+            
+            return examInProgress && ! isNavigatingToExamDetails;
+        }
+    );
+
+    // Gérer le dialogue de confirmation pour la navigation bloquée
     useEffect(() => {
-        // Ne déclencher la protection que si l'examen est en cours
+        if (blocker. state === "blocked") {
+            setShowExitDialog(true);
+        }
+    }, [blocker.state]);
+
+    const handleCancelNavigation = () => {
+        blocker.reset();
+        setShowExitDialog(false);
+        toast.info("Continue ton examen - tu peux le faire !  💪");
+    };
+
+    const handleConfirmNavigation = () => {
+        blocker.proceed();
+        setShowExitDialog(false);
+    };
+
+    // 🔒 PROTECTION 2: Bloquer fermeture/rechargement de page
+    useEffect(() => {
         if (! loading && !isFinished && examSession) {
             const handleBeforeUnload = (e) => {
-                // Message standard (les navigateurs modernes affichent leur propre message)
                 e.preventDefault();
                 e.returnValue = "Êtes-vous sûr de vouloir quitter cette page ?  Vous êtes en train de passer un examen.";
                 return e. returnValue;
             };
 
-            // Ajouter l'écouteur d'événement
             window.addEventListener('beforeunload', handleBeforeUnload);
 
-            // Nettoyer l'écouteur quand le composant se démonte ou l'examen se termine
             return () => {
                 window.removeEventListener('beforeunload', handleBeforeUnload);
             };
@@ -58,7 +85,7 @@ export default function Exam() {
         if (! loading && !isFinished && timeLeft > 0) {
             const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
             return () => clearInterval(timer);
-        } else if (timeLeft === 0 && !isFinished) {
+        } else if (timeLeft === 0 && ! isFinished) {
             finishExam();
         }
     }, [loading, isFinished, timeLeft]);
@@ -66,11 +93,11 @@ export default function Exam() {
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
-        return `${m}:${s < 10 ? '0' :  ''}${s}`;
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
     const handleAnswer = async (optionId) => {
-        if (! examSession) return;
+        if (!examSession) return;
 
         const sessionId = examSession.id || examSession._id;
         if (!sessionId) {
@@ -82,7 +109,7 @@ export default function Exam() {
         
         try {
             const updatedAnswers = [...examSession. answers. filter(a => a.question_id !== question.question_id)];
-            updatedAnswers. push({
+            updatedAnswers.push({
                 question_id:  question.question_id,
                 selected_option_id: optionId
             });
@@ -98,7 +125,7 @@ export default function Exam() {
             });
 
             setTimeout(() => {
-                if (currentQIndex < examSession.questions. length - 1) {
+                if (currentQIndex < examSession.questions.length - 1) {
                     setCurrentQIndex(prev => prev + 1);
                 }
             }, 300);
@@ -109,14 +136,12 @@ export default function Exam() {
         }
     };
 
-    // 🎮 NOUVELLE FONCTIONNALITÉ:  Confirmation avant de terminer l'examen
     const finishExam = async () => {
         if (!examSession) return;
         
-        const total = Array.isArray(examSession?. questions) ? examSession.questions. length : 0;
+        const total = Array. isArray(examSession?. questions) ? examSession.questions. length : 0;
         const answered = Array.isArray(examSession?.answers) ? examSession.answers.length : 0;
         
-        // Si toutes les questions ne sont pas répondues, afficher une confirmation
         if (answered < total) {
             const confirmFinish = window.confirm(
                 `⚠️ Tu n'as répondu qu'à ${answered} questions sur ${total}.\n\n` +
@@ -124,8 +149,8 @@ export default function Exam() {
                 `Les questions non répondues seront comptées comme fausses.`
             );
             
-            if (!confirmFinish) {
-                toast.info("Continue l'examen - tu peux le faire !  💪");
+            if (! confirmFinish) {
+                toast.info("Continue l'examen - tu peux le faire ! 💪");
                 return;
             }
         }
@@ -211,102 +236,143 @@ export default function Exam() {
     const allAnswered = questions.length > 0 && answersArr.length >= questions.length;
 
     return (
-        <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
-            {/* Header */}
-            <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center sticky top-0 z-20">
-                <div className="font-bold text-lg text-slate-900 dark:text-white">Question {currentQIndex + 1}/{questions.length}</div>
-                <div className={`font-mono font-medium px-3 py-1 rounded-full flex items-center ${
-                    timeLeft < 300 
-                        ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-100' 
-                        : timeLeft < 600 
-                        ? 'bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-100'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
-                }`}>
-                    <Clock className="w-4 h-4 mr-2" />
-                    {formatTime(timeLeft)}
-                </div>
-                <Button 
-                    variant={allAnswered ? "default" : "ghost"}
-                    size="sm"
-                    className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50'}`}
-                    onClick={finishExam}
-                    title={allAnswered ? 'Terminer l\'examen' : 'Vous pouvez terminer à tout moment'}
-                >
-                    Terminer
-                </Button>
-            </div>
+        <>
+            {/* 🎨 DIALOGUE DE CONFIRMATION PERSONNALISÉ */}
+            {showExitDialog && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <Card className="max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 text-amber-600">
+                            <AlertTriangle className="h-8 w-8" />
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                                Quitter l'examen ? 
+                            </h3>
+                        </div>
+                        
+                        <p className="text-slate-600 dark:text-slate-400">
+                            ⚠️ <strong>Tu es en train de passer un examen !</strong>
+                            <br /><br />
+                            Si tu quittes maintenant, tu devras recommencer depuis le début. 
+                            <br /><br />
+                            Es-tu sûr de vouloir abandonner ? 
+                        </p>
 
-            <Progress value={questions.length ?  (((currentQIndex + 1) / questions.length) * 100) : 0} className="h-1 rounded-none" />
-
-            <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center">
-                <Card className="p-6 md:p-8">
-                {currentQuestion.image_url && (
-                    <div className="mb-6 rounded-xl overflow-hidden border shadow-sm max-h-[300px] w-full flex justify-center bg-black">
-                        <img src={currentQuestion.image_url} alt="Question Context" className="h-full object-contain" />
-                    </div>
-                )}
-
-                <h2 className="text-xl md:text-2xl font-semibold mb-8 leading-relaxed text-slate-900 dark:text-white">
-                    {currentQuestion.text}
-                </h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(Array.isArray(currentQuestion.options) ? currentQuestion.options : []).map((option) => {
-                        const isSelected = currentAnswer?. selected_option_id === option. id;
-                        return (
-                            <div 
-                                key={option.id}
-                                onClick={() => handleAnswer(option.id)}
-                                className={`
-                                    p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex items-center
-                                    ${isSelected 
-                                        ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]' 
-                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-primary/50 hover:shadow-md'
-                                    }
-                                `}
+                        <div className="flex gap-3 pt-2">
+                            <Button 
+                                variant="outline" 
+                                className="flex-1"
+                                onClick={handleCancelNavigation}
                             >
-                                <div className={`
-                                    w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 flex items-center justify-center transition-all
-                                    ${isSelected 
-                                        ? 'border-primary bg-primary' 
-                                        : 'border-slate-300 dark:border-slate-600'
-                                    }
-                                `}>
-                                    {isSelected && <div className="w-3 h-3 bg-white rounded-full" />}
-                                </div>
-                                <span className="text-base font-medium text-slate-900 dark:text-white">{option.text}</span>
+                                Continuer l'examen
+                            </Button>
+                            <Button 
+                                variant="destructive" 
+                                className="flex-1"
+                                onClick={handleConfirmNavigation}
+                            >
+                                Oui, quitter
+                            </Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
+                {/* Header */}
+                <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center sticky top-0 z-20">
+                    <div className="font-bold text-lg text-slate-900 dark: text-white">Question {currentQIndex + 1}/{questions.length}</div>
+                    <div className={`font-mono font-medium px-3 py-1 rounded-full flex items-center ${
+                        timeLeft < 300 
+                            ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-100' 
+                            : timeLeft < 600 
+                            ? 'bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-100'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
+                    }`}>
+                        <Clock className="w-4 h-4 mr-2" />
+                        {formatTime(timeLeft)}
+                    </div>
+                    <Button 
+                        variant={allAnswered ? "default" : "ghost"}
+                        size="sm"
+                        className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50'}`}
+                        onClick={finishExam}
+                        title={allAnswered ? 'Terminer l\'examen' : 'Vous pouvez terminer à tout moment'}
+                    >
+                        Terminer
+                    </Button>
+                </div>
+
+                <Progress value={questions.length ?  (((currentQIndex + 1) / questions.length) * 100) : 0} className="h-1 rounded-none" />
+
+                <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center">
+                    <Card className="p-6 md:p-8">
+                        {currentQuestion. image_url && (
+                            <div className="mb-6 rounded-xl overflow-hidden border shadow-sm max-h-[300px] w-full flex justify-center bg-black">
+                                <img src={currentQuestion.image_url} alt="Question Context" className="h-full object-contain" />
                             </div>
-                        );
-                    })}
+                        )}
+
+                        <h2 className="text-xl md:text-2xl font-semibold mb-8 leading-relaxed text-slate-900 dark:text-white">
+                            {currentQuestion.text}
+                        </h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(Array.isArray(currentQuestion.options) ? currentQuestion.options : []).map((option) => {
+                                const isSelected = currentAnswer?.selected_option_id === option.id;
+                                return (
+                                    <div 
+                                        key={option. id}
+                                        onClick={() => handleAnswer(option.id)}
+                                        className={`
+                                            p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex items-center
+                                            ${isSelected 
+                                                ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]' 
+                                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-primary/50 hover:shadow-md'
+                                            }
+                                        `}
+                                    >
+                                        <div className={`
+                                            w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 flex items-center justify-center transition-all
+                                            ${isSelected 
+                                                ? 'border-primary bg-primary' 
+                                                : 'border-slate-300 dark:border-slate-600'
+                                            }
+                                        `}>
+                                            {isSelected && <div className="w-3 h-3 bg-white rounded-full" />}
+                                        </div>
+                                        <span className="text-base font-medium text-slate-900 dark:text-white">{option.text}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Card>
+                </main>
+
+                <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex justify-between items-center max-w-3xl w-full mx-auto">
+                    <Button 
+                        variant="outline" 
+                        onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentQIndex === 0}
+                    >
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Précédent
+                    </Button>
+
+                    <div className="flex gap-1">
+                       {questions.map((_, idx) => (
+                           <div 
+                                key={idx} 
+                                className={`w-2 h-2 rounded-full ${idx === currentQIndex ? 'bg-primary' : idx < currentQIndex ? 'bg-slate-300' : 'bg-slate-100'}`}
+                           />
+                       ))}
+                    </div>
+
+                    <Button 
+                        onClick={() => setCurrentQIndex(prev => Math.min(Math.max(0, questions.length - 1), prev + 1))}
+                        disabled={currentQIndex === Math.max(0, questions.length - 1)}
+                    >
+                        Suivant <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
                 </div>
-                </Card>
-            </main>
-
-            <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex justify-between items-center max-w-3xl w-full mx-auto">
-                <Button 
-                    variant="outline" 
-                    onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
-                    disabled={currentQIndex === 0}
-                >
-                    <ArrowLeft className="mr-2 h-4 w-4" /> Précédent
-                </Button>
-
-                <div className="flex gap-1">
-                   {questions.map((_, idx) => (
-                       <div 
-                            key={idx} 
-                            className={`w-2 h-2 rounded-full ${idx === currentQIndex ? 'bg-primary' : idx < currentQIndex ? 'bg-slate-300' : 'bg-slate-100'}`}
-                       />
-                   ))}
-                </div>
-
-                <Button 
-                    onClick={() => setCurrentQIndex(prev => Math.min(Math.max(0, questions.length - 1), prev + 1))}
-                    disabled={currentQIndex === Math.max(0, questions.length - 1)}
-                >
-                    Suivant <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
             </div>
-        </div>
+        </>
     );
 }
