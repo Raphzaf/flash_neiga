@@ -10,11 +10,32 @@ import { Clock, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react
 export default function Exam() {
     const [examSession, setExamSession] = useState(null);
     const [currentQIndex, setCurrentQIndex] = useState(0);
-    const [timeLeft, setTimeLeft] = useState(40 * 60); // 40 minutes in seconds
+    const [timeLeft, setTimeLeft] = useState(40 * 60);
     const [loading, setLoading] = useState(true);
     const [isFinished, setIsFinished] = useState(false);
     const [result, setResult] = useState(null);
     const navigate = useNavigate();
+
+    // 🔒 NOUVELLE FONCTIONNALITÉ: Protection contre la sortie accidentelle
+    useEffect(() => {
+        // Ne déclencher la protection que si l'examen est en cours
+        if (! loading && !isFinished && examSession) {
+            const handleBeforeUnload = (e) => {
+                // Message standard (les navigateurs modernes affichent leur propre message)
+                e.preventDefault();
+                e.returnValue = "Êtes-vous sûr de vouloir quitter cette page ?  Vous êtes en train de passer un examen.";
+                return e. returnValue;
+            };
+
+            // Ajouter l'écouteur d'événement
+            window.addEventListener('beforeunload', handleBeforeUnload);
+
+            // Nettoyer l'écouteur quand le composant se démonte ou l'examen se termine
+            return () => {
+                window.removeEventListener('beforeunload', handleBeforeUnload);
+            };
+        }
+    }, [loading, isFinished, examSession]);
 
     // Start Exam
     useEffect(() => {
@@ -25,7 +46,7 @@ export default function Exam() {
                 setLoading(false);
             } catch (e) {
                 console.error(e);
-                toast.error("Impossible de démarrer l'examen. Veuillez réessayer.");
+                toast.error("Impossible de démarrer l'examen.  Veuillez réessayer.");
                 navigate('/');
             }
         };
@@ -34,7 +55,7 @@ export default function Exam() {
 
     // Timer
     useEffect(() => {
-        if (!loading && !isFinished && timeLeft > 0) {
+        if (! loading && !isFinished && timeLeft > 0) {
             const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
             return () => clearInterval(timer);
         } else if (timeLeft === 0 && !isFinished) {
@@ -45,26 +66,24 @@ export default function Exam() {
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
-        return `${m}:${s < 10 ? '0' : ''}${s}`;
+        return `${m}:${s < 10 ? '0' :  ''}${s}`;
     };
 
     const handleAnswer = async (optionId) => {
-        if (!examSession) return;
+        if (! examSession) return;
 
-        // Handle both id and _id for robustness
         const sessionId = examSession.id || examSession._id;
         if (!sessionId) {
-            toast.error("Erreur de session: ID manquant");
+            toast.error("Erreur de session:  ID manquant");
             return;
         }
 
         const question = examSession.questions[currentQIndex];
         
         try {
-            // Update local state immediately
-            const updatedAnswers = [...examSession.answers.filter(a => a.question_id !== question.question_id)];
-            updatedAnswers.push({
-                question_id: question.question_id,
+            const updatedAnswers = [...examSession. answers. filter(a => a.question_id !== question.question_id)];
+            updatedAnswers. push({
+                question_id:  question.question_id,
                 selected_option_id: optionId
             });
             
@@ -73,15 +92,13 @@ export default function Exam() {
                 answers: updatedAnswers
             }));
 
-            // Send to backend
             await axios.post(`/api/exam/${sessionId}/answer`, {
                 question_id: question.question_id,
                 selected_option_id: optionId
             });
 
-            // Auto advance
             setTimeout(() => {
-                if (currentQIndex < examSession.questions.length - 1) {
+                if (currentQIndex < examSession.questions. length - 1) {
                     setCurrentQIndex(prev => prev + 1);
                 }
             }, 300);
@@ -92,33 +109,54 @@ export default function Exam() {
         }
     };
 
+    // 🎮 NOUVELLE FONCTIONNALITÉ:  Confirmation avant de terminer l'examen
     const finishExam = async () => {
         if (!examSession) return;
-        // Guard: allow early finish only if all questions answered
-        const total = Array.isArray(examSession?.questions) ? examSession.questions.length : 0;
+        
+        const total = Array.isArray(examSession?. questions) ? examSession.questions. length : 0;
         const answered = Array.isArray(examSession?.answers) ? examSession.answers.length : 0;
-        if (timeLeft > 0 && answered < total) {
-            toast.info(`Répondez à toutes les questions (${answered}/${total}) pour terminer.`);
-            return;
+        
+        // Si toutes les questions ne sont pas répondues, afficher une confirmation
+        if (answered < total) {
+            const confirmFinish = window.confirm(
+                `⚠️ Tu n'as répondu qu'à ${answered} questions sur ${total}.\n\n` +
+                `Es-tu sûr de vouloir terminer l'examen maintenant ?\n` +
+                `Les questions non répondues seront comptées comme fausses.`
+            );
+            
+            if (!confirmFinish) {
+                toast.info("Continue l'examen - tu peux le faire !  💪");
+                return;
+            }
         }
+        
         const sessionId = examSession.id || examSession._id;
         
         try {
             const res = await axios.post(`/api/exam/${sessionId}/finish`);
             setResult(res.data);
             setIsFinished(true);
+            toast.success("Examen terminé !");
         } catch (e) {
             console.error(e);
-            toast.error("Erreur lors de la finalisation");
+            toast.error("Erreur lors de la finalisation de l'examen");
         }
     };
 
-    if (loading) return <div className="flex h-screen items-center justify-center">Préparation de l'examen...</div>;
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin h-12 w-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-slate-600 dark:text-slate-400">Chargement de l'examen...</p>
+                </div>
+            </div>
+        );
+    }
 
-    // RESULT SCREEN
     if (isFinished && result) {
         return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
                 <Card className="w-full max-w-2xl p-6 md:p-8 text-center space-y-6">
                     <div className="flex justify-center">
                         {result.passed ? (
@@ -134,7 +172,7 @@ export default function Exam() {
                     
                     <div>
                         <h2 className="text-3xl font-bold mb-2">{result.passed ? "Félicitations !" : "Désolé, c'est raté."}</h2>
-                        <p className="text-slate-600 dark:text-slate-400">Vous avez fait {result.total_questions - result.correct_answers} erreurs.</p>
+                        <p className="text-slate-600 dark:text-slate-400">Vous avez fait {result.total_questions - result.correct_answers} erreurs. </p>
                     </div>
 
                     <div className="text-5xl font-black text-primary my-8">
@@ -144,7 +182,7 @@ export default function Exam() {
                     <div className="grid grid-cols-2 gap-4 text-left bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
                         <div>
                             <div className="text-sm text-slate-600 dark:text-slate-400">Score</div>
-                            <div className="font-bold text-slate-900 dark:text-white">{(result.score ?? Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
+                            <div className="font-bold text-slate-900 dark:text-white">{(result.score ??  Math.round((result.correct_answers / (result.total_questions || 30)) * 100))}%</div>
                         </div>
                         <div>
                             <div className="text-sm text-slate-600 dark:text-slate-400">Résultat</div>
@@ -157,7 +195,7 @@ export default function Exam() {
                     <div className="flex gap-4 justify-center pt-4">
                         <Button variant="outline" onClick={() => navigate('/')}>Retour au menu</Button>
                         <Button onClick={() => window.location.reload()}>Nouvel Examen</Button>
-                        {examSession?.id && (
+                        {examSession?. id && (
                             <Button variant="secondary" onClick={() => navigate(`/exam/${examSession.id}`)}>Voir les détails</Button>
                         )}
                     </div>
@@ -166,11 +204,10 @@ export default function Exam() {
         );
     }
 
-    // EXAM RUNNER
     const questions = Array.isArray(examSession?.questions) ? examSession.questions : [];
     const currentQuestion = questions[currentQIndex] || { options: [] };
     const answersArr = Array.isArray(examSession?.answers) ? examSession.answers : [];
-    const currentAnswer = answersArr.find(a => a.question_id === currentQuestion.question_id);
+    const currentAnswer = answersArr. find(a => a.question_id === currentQuestion.question_id);
     const allAnswered = questions.length > 0 && answersArr.length >= questions.length;
 
     return (
@@ -193,19 +230,16 @@ export default function Exam() {
                     size="sm"
                     className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50'}`}
                     onClick={finishExam}
-                    disabled={!allAnswered && timeLeft > 0}
-                    title={allAnswered ? 'Terminer l\'examen' : 'Répondez à toutes les questions pour terminer'}
+                    title={allAnswered ? 'Terminer l\'examen' : 'Vous pouvez terminer à tout moment'}
                 >
                     Terminer
                 </Button>
             </div>
 
-            {/* Progress Bar */}
-            <Progress value={questions.length ? (((currentQIndex + 1) / questions.length) * 100) : 0} className="h-1 rounded-none" />
+            <Progress value={questions.length ?  (((currentQIndex + 1) / questions.length) * 100) : 0} className="h-1 rounded-none" />
 
-            {/* Content */}
             <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center">
-                
+                <Card className="p-6 md:p-8">
                 {currentQuestion.image_url && (
                     <div className="mb-6 rounded-xl overflow-hidden border shadow-sm max-h-[300px] w-full flex justify-center bg-black">
                         <img src={currentQuestion.image_url} alt="Question Context" className="h-full object-contain" />
@@ -218,7 +252,7 @@ export default function Exam() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(Array.isArray(currentQuestion.options) ? currentQuestion.options : []).map((option) => {
-                        const isSelected = currentAnswer?.selected_option_id === option.id;
+                        const isSelected = currentAnswer?. selected_option_id === option. id;
                         return (
                             <div 
                                 key={option.id}
@@ -226,23 +260,28 @@ export default function Exam() {
                                 className={`
                                     p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex items-center
                                     ${isSelected 
-                                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20' 
-                                        : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30'}
+                                        ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]' 
+                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-primary/50 hover:shadow-md'
+                                    }
                                 `}
-                                data-testid={`option-${option.id}`}
                             >
-                                <div className={`w-8 h-8 rounded-full border-2 mr-4 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-primary bg-primary text-white' : 'border-slate-400 dark:border-slate-500'}`}>
-                                    {isSelected && <div className="w-3 h-3 bg-white rounded-full"></div>}
+                                <div className={`
+                                    w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 flex items-center justify-center transition-all
+                                    ${isSelected 
+                                        ? 'border-primary bg-primary' 
+                                        : 'border-slate-300 dark:border-slate-600'
+                                    }
+                                `}>
+                                    {isSelected && <div className="w-3 h-3 bg-white rounded-full" />}
                                 </div>
-                                <span className="font-medium">{option.text}</span>
+                                <span className="text-base font-medium text-slate-900 dark:text-white">{option.text}</span>
                             </div>
                         );
                     })}
                 </div>
-
+                </Card>
             </main>
 
-            {/* Footer Nav */}
             <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex justify-between items-center max-w-3xl w-full mx-auto">
                 <Button 
                     variant="outline" 
