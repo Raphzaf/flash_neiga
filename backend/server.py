@@ -946,32 +946,32 @@ async def delete_sign(
 
 @app.get("/api/questions", response_model=List[Question])
 async def get_questions(
-    category: Optional[List[str]] = None,
+    category:  Optional[List[str]] = None,
     q: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db:  Session = Depends(get_db)
 ):
     query = db.query(QuestionDB)
     if category and len(category) > 0:
-        query = query.filter(QuestionDB.category.in_(category))
+        query = query.filter(QuestionDB. category.in_(category))
     if q:
         like_expr = f"%{q}%"
         query = query.filter(
             (QuestionDB.text.ilike(like_expr)) |
-            (QuestionDB.explanation.ilike(like_expr))
+            (QuestionDB. explanation.ilike(like_expr))
         )
     questions = query.all()
-return [
-    Question(
-        id=q.id,
-        text=q.text,
-        category=q.category,
-        options=[QuestionOption(**opt) for opt in q.options],
-        explanation=q.explanation,
-        image_url=q.image_url,  # ✅ AJOUTER CETTE LIGNE
-        created_at=q.created_at
-    )
-    for q in questions
-]
+    return [  # ✅ BIEN INDENTÉ (4 espaces)
+        Question(
+            id=q.id,
+            text=q.text,
+            category=q.category,
+            options=[QuestionOption(**opt) for opt in q.options],
+            explanation=q.explanation,
+            image_url=q.image_url,  # ✅ Ajout du champ image_url
+            created_at=q.created_at
+        )
+        for q in questions
+    ]
 
 
 @app.post("/api/questions", response_model=Question)
@@ -1111,7 +1111,7 @@ async def start_exam(
                 "text": q.text,
                 "category": q.category,
                 "options": q.options,
-                "image_url": None,
+                "image_url": q.image_url,
             } for q in selected
         ]
     }
