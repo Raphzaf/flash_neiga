@@ -91,12 +91,12 @@ def verify_migration(database_url: str):
             SELECT column_name 
             FROM information_schema.columns 
             WHERE table_name = 'transactions' 
-            AND column_name IN ('plan_id', 'hyp_transaction_id', 'payment_url', 'callback_data')
+            AND column_name IN ('plan_id', 'hyp_transaction_id', 'hyp_internal_deal_id', 'payment_url', 'callback_data', 'event_data')
         """)
         
         columns = [row[0] for row in cursor.fetchall()]
         
-        required_columns = ['plan_id', 'hyp_transaction_id', 'payment_url', 'callback_data']
+        required_columns = ['plan_id', 'hyp_transaction_id', 'hyp_internal_deal_id', 'payment_url', 'callback_data', 'event_data']
         missing_columns = [col for col in required_columns if col not in columns]
         
         if missing_columns:
