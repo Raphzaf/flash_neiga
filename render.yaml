@@ -15,10 +15,20 @@ services:
         fromDatabase:
           name: flash-neiga-db
           property: connectionString
-      - key: PADDLE_API_KEY
+      - key: HYP_TERMINAL_ID
+        value: "4502176330"
+      - key: HYP_USER_ID
+        value: "pveda"
+      - key: HYP_API_KEY
         sync: false  # Must be set manually in Render dashboard
-      - key: PADDLE_WEBHOOK_SECRET
-        sync: false  # Must be set manually in Render dashboard
+      - key: HYP_API_URL
+        value: "https://icom.yaad.net/p/"
+      - key: HYP_SUCCESS_URL
+        value: "https://appflashneiga.netlify.app/payment/success"
+      - key: HYP_ERROR_URL
+        value: "https://appflashneiga.netlify.app/payment/failure"
+      - key: HYP_CALLBACK_URL
+        value: "https://flash-neiga-backend.onrender.com/api/payments/hyp/callback"
       - key: ALLOWED_ORIGINS
         value: "https://appflashneiga.netlify.app,https://flash-neiga.netlify.app"
 
