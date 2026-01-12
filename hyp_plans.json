@@ -1,0 +1,60 @@
+{
+  "code_14d": {
+    "name": "Abonnement Code 14 jours",
+    "description": "Accès Web App, E-book, Questions officielles, Examens blancs, Coaching",
+    "amount": 99,
+    "currency": "ILS",
+    "duration_days": 14,
+    "type": "code"
+  },
+  "code_30d": {
+    "name": "Abonnement Code 30 jours",
+    "description": "Accès Web App, E-book, Questions officielles, Examens blancs, Coaching",
+    "amount": 159,
+    "currency": "ILS",
+    "duration_days": 30,
+    "type": "code"
+  },
+  "code_ext": {
+    "name": "Extension Code 1 semaine",
+    "description": "Prolongation d'une semaine",
+    "amount": 59,
+    "currency": "ILS",
+    "duration_days": 7,
+    "type": "code",
+    "is_extension": true
+  },
+  "video_1m": {
+    "name": "Vidéos Pédagogiques 1 mois",
+    "description": "28 objectifs + parcours examens + situations réelles",
+    "amount": 199,
+    "currency": "ILS",
+    "duration_days": 30,
+    "type": "video"
+  },
+  "video_2m": {
+    "name": "Vidéos Pédagogiques 2 mois",
+    "description": "28 objectifs + parcours examens + situations réelles",
+    "amount": 339,
+    "currency": "ILS",
+    "duration_days": 60,
+    "type": "video"
+  },
+  "video_3m": {
+    "name": "Vidéos Pédagogiques 3 mois",
+    "description": "28 objectifs + parcours examens + situations réelles",
+    "amount": 419,
+    "currency": "ILS",
+    "duration_days": 90,
+    "type": "video"
+  },
+  "video_ext": {
+    "name": "Extension Vidéos 1 semaine",
+    "description": "Prolongation d'une semaine",
+    "amount": 59,
+    "currency": "ILS",
+    "duration_days": 7,
+    "type": "video",
+    "is_extension": true
+  }
+}

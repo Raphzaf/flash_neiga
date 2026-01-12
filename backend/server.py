@@ -49,6 +49,10 @@ try:
     from routes.twocheckout import router as twocheckout_router
 except ImportError:
     from backend.routes.twocheckout import router as twocheckout_router
+try:
+    from routes.hyp_payments import router as hyp_router
+except ImportError:
+    from backend.routes.hyp_payments import router as hyp_router
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
@@ -98,6 +102,7 @@ app.add_middleware(
 # Include external routers
 app.include_router(verifone_router)
 app.include_router(twocheckout_router)
+app.include_router(hyp_router)
 
 
 # ===== Health Check Endpoint =====
