@@ -1,3 +1,11 @@
+# ⚠️ DOCUMENT HISTORIQUE - Intégration Paddle (Remplacée par HYP)
+
+> **Note**: Ce document décrit l'ancienne intégration Paddle qui a été remplacée par la plateforme de paiement HYP en janvier 2026. 
+> 
+> **Pour la documentation actuelle, consultez:** [HYP_SETUP_GUIDE.md](./HYP_SETUP_GUIDE.md)
+
+---
+
 # ✅ Intégration Paddle - Résumé d'Achèvement
 
 ## 🎯 Objectif Principal
