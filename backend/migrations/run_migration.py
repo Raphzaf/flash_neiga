@@ -55,6 +55,7 @@ def read_migration_file(migration_file: str) -> str:
 
 def run_migration(database_url: str, migration_sql: str):
     """Exécute une migration SQL"""
+    conn = None
     try:
         logger.info("🔌 Connecting to database...")
         conn = psycopg2.connect(database_url)
@@ -137,7 +138,9 @@ def main():
     
     # Récupérer l'URL de la base de données
     database_url = get_database_url()
-    logger.info(f"📍 Database: {database_url.split('@')[1] if '@' in database_url else 'local'}")
+    # Log only database type, not sensitive connection details
+    db_type = "PostgreSQL" if "postgresql://" in database_url or "postgres://" in database_url else "Local"
+    logger.info(f"📍 Database type: {db_type}")
     
     # Lire le fichier de migration
     migration_sql = read_migration_file("001_add_hyp_columns.sql")
