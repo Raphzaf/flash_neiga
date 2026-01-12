@@ -64,12 +64,12 @@ def run_migration():
     logger.info("   This may take a few seconds...")
     
     try:
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             # Pour PostgreSQL, exécuter tout le script en une fois
             # car il contient des blocs DO $$ qui doivent rester ensemble
             logger.info("   Executing migration script...")
             conn.execute(text(sql_content))
-            conn.commit()
+            # Transaction is automatically committed when exiting the 'with' block
         
         logger.info("✅ Migration completed successfully!")
         

@@ -31,6 +31,8 @@ CREATE INDEX IF NOT EXISTS idx_transactions_hyp_internal_deal_id
 ON transactions(hyp_internal_deal_id);
 
 -- Ajouter contraintes UNIQUE pour colonnes HYP (ignorer si existe déjà)
+-- Note: NULL values are allowed and treated as distinct in PostgreSQL UNIQUE constraints
+-- This allows multiple transactions without HYP IDs while ensuring uniqueness when present
 DO $$
 BEGIN
     IF NOT EXISTS (
