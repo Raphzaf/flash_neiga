@@ -110,33 +110,59 @@ def create_hyp_payment_url(
     """
     Create HYP payment URL using doDeal API
     Documentation: https://developers.hyp.co.il/payment-page-integration/integrating-hyps-payment-page-and-accepting-payment
+    
+    Note: HYP uses MD5 for signing (as per their documentation). While MD5 is cryptographically weak,
+    we must use it to remain compatible with HYP's API.
     """
+    from urllib.parse import urlencode, quote
+    
     # Convert amount to agorot (multiply by 100)
     amount_agorot = int(amount * 100)
     
-    # Build HYP payment parameters
-    params = {
-        "action": "APISign",
-        "What": "SIGN",
-        "KEY": HYP_API_KEY,
-        "PassP": f"Amount={amount_agorot}&Coin=1&Currency=1&Order={transaction_id}&Info=Flash Neiga Payment&Pritim=True&ClientName=&ClientLName=&PhoneDial=&email={user_email or ''}&street=&city=&zip=&remarks=&sendemail=true&SendHesh=true&heshDesc=&pageField=&successUrl={HYP_SUCCESS_URL}?transaction_id={transaction_id}&failureUrl={HYP_ERROR_URL}?transaction_id={transaction_id}&maxPayments=1",
-        "MoreData": "True",
-        "sign_method": "md5"
+    # Build payment parameters dictionary for better readability
+    payment_params = {
+        "Amount": str(amount_agorot),
+        "Coin": "1",
+        "Currency": "1",
+        "Order": transaction_id,
+        "Info": "Flash Neiga Payment",
+        "Pritim": "True",
+        "ClientName": "",
+        "ClientLName": "",
+        "PhoneDial": "",
+        "email": user_email or "",
+        "street": "",
+        "city": "",
+        "zip": "",
+        "remarks": "",
+        "sendemail": "true",
+        "SendHesh": "true",
+        "heshDesc": "",
+        "pageField": "",
+        "successUrl": f"{HYP_SUCCESS_URL}?transaction_id={transaction_id}",
+        "failureUrl": f"{HYP_ERROR_URL}?transaction_id={transaction_id}",
+        "maxPayments": "1"
     }
+    
+    # Create PassP parameter using proper URL encoding
+    pass_p = urlencode(payment_params)
     
     # Create request to HYP API to get signed URL
     try:
-        # First, get the signature
+        # Note: HYP requires MD5 signing method (not our choice)
+        sign_data = {
+            "action": "APISign",
+            "What": "SIGN",
+            "KEY": HYP_API_KEY,
+            "PassP": pass_p,
+            "MoreData": "True",
+            "sign_method": "md5"  # Required by HYP API
+        }
+        
+        # Request signature from HYP
         sign_response = requests.post(
-            f"{HYP_API_URL}",
-            data={
-                "action": "APISign",
-                "What": "SIGN",
-                "KEY": HYP_API_KEY,
-                "PassP": params["PassP"],
-                "MoreData": "True",
-                "sign_method": "md5"
-            },
+            HYP_API_URL,
+            data=sign_data,
             timeout=10
         )
         
@@ -144,27 +170,30 @@ def create_hyp_payment_url(
             logger.error(f"HYP sign request failed: {sign_response.text}")
             raise Exception("Failed to create HYP payment signature")
         
-        # Parse response to get signature
+        # Log response for debugging
         response_data = sign_response.text
-        logger.info(f"HYP sign response: {response_data}")
+        logger.info(f"HYP sign response received: {len(response_data)} bytes")
         
         # Build the payment URL with all required parameters
-        payment_url = (
-            f"{HYP_API_URL}?action=pay"
-            f"&Amount={amount_agorot}"
-            f"&Coin=1"
-            f"&Currency=1"
-            f"&Order={transaction_id}"
-            f"&terminalNumber={HYP_TERMINAL_ID}"
-            f"&userName={HYP_USER_ID}"
-            f"&successUrl={HYP_SUCCESS_URL}?transaction_id={transaction_id}"
-            f"&failureUrl={HYP_ERROR_URL}?transaction_id={transaction_id}"
-            f"&maxPayments=1"
-            f"&sendemail=true"
-        )
+        payment_url_params = {
+            "action": "pay",
+            "Amount": str(amount_agorot),
+            "Coin": "1",
+            "Currency": "1",
+            "Order": transaction_id,
+            "terminalNumber": HYP_TERMINAL_ID,
+            "userName": HYP_USER_ID,
+            "successUrl": f"{HYP_SUCCESS_URL}?transaction_id={transaction_id}",
+            "failureUrl": f"{HYP_ERROR_URL}?transaction_id={transaction_id}",
+            "maxPayments": "1",
+            "sendemail": "true"
+        }
         
         if user_email:
-            payment_url += f"&email={user_email}"
+            payment_url_params["email"] = user_email
+        
+        # Construct final URL
+        payment_url = f"{HYP_API_URL}?{urlencode(payment_url_params)}"
         
         return payment_url
         
@@ -173,13 +202,39 @@ def create_hyp_payment_url(
         raise Exception(f"HYP API error: {str(e)}")
 
 
+
 def verify_hyp_callback(data: Dict[str, Any]) -> bool:
     """
     Verify HYP callback signature
+    
+    This is a security-critical function. Currently returns True as a placeholder.
+    TODO: Implement proper signature verification according to HYP documentation
+    
+    HYP should send a signature/hash that can be verified using:
+    1. The API key
+    2. Transaction data
+    3. A hash algorithm (check HYP docs for the specific algorithm)
+    
+    Example implementation (to be completed based on HYP docs):
+    expected_hash = hmac.new(
+        HYP_API_KEY.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()
     """
-    # HYP sends a hash that we need to verify
-    # Documentation: https://developers.hyp.co.il/
-    # TODO: Implement proper signature verification when available in docs
+    # SECURITY WARNING: This allows any callback without verification
+    # Implement proper verification before production use
+    logger.warning("HYP callback verification not implemented - security risk!")
+    
+    # Basic validation: check required fields are present
+    required_fields = ['Order', 'CCode']
+    for field in required_fields:
+        if field not in data:
+            logger.error(f"Missing required field in callback: {field}")
+            return False
+    
+    # TODO: Add actual signature verification here
+    # For now, we accept callbacks but log a warning
     return True
 
 
@@ -375,11 +430,19 @@ async def hyp_callback(
             plan_type = plan.get("type")
             is_extension = plan.get("is_extension", False)
             
+            # Use startswith() to avoid SQL injection with LIKE
+            # Only match subscriptions where plan_id starts with plan_type
             existing_sub = db.query(SubscriptionDB).filter(
                 SubscriptionDB.user_id == transaction.user_id,
-                SubscriptionDB.plan_id.like(f"{plan_type}_%"),
                 SubscriptionDB.status == "active"
-            ).first()
+            ).all()
+            
+            # Filter in Python to avoid SQL injection
+            existing_sub = [
+                sub for sub in existing_sub 
+                if sub.plan_id and sub.plan_id.startswith(f"{plan_type}_")
+            ]
+            existing_sub = existing_sub[0] if existing_sub else None
             
             if existing_sub and is_extension:
                 # Extend existing subscription
