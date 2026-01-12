@@ -56,7 +56,7 @@ class TestAutoMigration:
         
         with patch('migrations.auto_migrate.engine', test_engine):
             result = run_hyp_migration()
-            assert result == True
+            assert result is True
     
     def test_migration_is_idempotent(self, test_engine):
         """Test that migration can be run multiple times safely"""
@@ -77,11 +77,11 @@ class TestAutoMigration:
         with patch('migrations.auto_migrate.engine', test_engine):
             # Run first time
             result1 = run_hyp_migration()
-            assert result1 == True
+            assert result1 is True
             
             # Run second time - should still succeed
             result2 = run_hyp_migration()
-            assert result2 == True
+            assert result2 is True
     
     def test_migration_adds_columns_to_transactions(self, test_engine):
         """Test that migration adds HYP columns to transactions table"""
@@ -152,7 +152,7 @@ class TestAutoMigration:
                 
                 # Should not raise, should return False
                 result = run_hyp_migration()
-                assert result == False
+                assert result is False
     
     def test_migration_creates_indexes(self, test_engine):
         """Test that migration creates necessary indexes"""

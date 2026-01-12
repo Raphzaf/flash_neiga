@@ -257,7 +257,11 @@ async def startup():
     # Step 2: Run HYP migration (adds missing columns)
     logger.info("📝 Step 2: Running HYP database migration...")
     try:
-        run_hyp_migration()
+        migration_success = run_hyp_migration()
+        if migration_success:
+            logger.info("✅ HYP migration completed successfully")
+        else:
+            logger.warning("⚠️  HYP migration completed with warnings")
     except Exception as e:
         logger.error(f"❌ HYP migration encountered an error: {e}", exc_info=True)
         logger.warning("⚠️  Continuing startup despite migration issues...")
