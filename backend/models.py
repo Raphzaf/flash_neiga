@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float, ForeignKey
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
@@ -60,19 +60,32 @@ class ExamSessionDB(Base):
 
 
 class TransactionDB(Base):
-    """Modèle pour enregistrer les transactions de paiement (Verifone/2Checkout, etc.)"""
+    """Modèle pour enregistrer les transactions de paiement (HYP, Verifone/2Checkout, etc.)"""
     __tablename__ = "transactions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, index=True, nullable=True)
+    plan_id = Column(String, index=True, nullable=True)  # code_14d, video_1m, etc.
+    
+    # Legacy Paddle fields (kept for backward compatibility)
     paddle_transaction_id = Column(String, unique=True, index=True, nullable=True)
     paddle_subscription_id = Column(String, index=True, nullable=True)
+    
+    # HYP specific fields
+    hyp_transaction_id = Column(String, unique=True, index=True, nullable=True)
+    hyp_internal_deal_id = Column(String, unique=True, index=True, nullable=True)
+    
     amount = Column(Float, nullable=True)
     currency = Column(String, nullable=True)
-    status = Column(String, index=True)  # pending, completed, failed, refunded, etc.
+    status = Column(String, index=True)  # pending, completed, failed, refunded, cancelled
     event_type = Column(String, nullable=True)  # transaction.completed, subscription.created, etc.
-    event_data = Column(JSON, nullable=True)  # Données supplémentaires de Paddle
+    event_data = Column(JSON, nullable=True)  # Données supplémentaires (Paddle/HYP)
+    
+    payment_url = Column(String, nullable=True)  # URL de paiement HYP
+    callback_data = Column(JSON, nullable=True)  # Données du callback HYP
+    
     created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -94,16 +107,25 @@ class PaymentDB(Base):
 
 
 class SubscriptionDB(Base):
-    """Abonnements/licences gérés par Verifone/2Checkout (LCN)."""
+    """Abonnements/licences gérés par HYP, Verifone/2Checkout (LCN)."""
     __tablename__ = "subscriptions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, index=True, nullable=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=True)
+    plan_id = Column(String, index=True, nullable=True)  # code_14d, video_1m, etc.
+    
+    # Legacy fields
     license_id = Column(String, index=True, nullable=True)  # LCN license/subscription id
     product_id = Column(Integer, index=True, nullable=True)
-    status = Column(String, index=True)  # active, canceled, expired, etc.
+    
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    status = Column(String, index=True)  # active, expired, cancelled
     next_renewal = Column(DateTime, nullable=True)
     canceled_at = Column(DateTime, nullable=True)
+    
+    transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -199,25 +221,66 @@ class Transaction(BaseModel):
     """Modèle Pydantic pour les transactions de paiement"""
     id: str
     user_id: Optional[str] = None
+    plan_id: Optional[str] = None
     paddle_transaction_id: Optional[str] = None
     paddle_subscription_id: Optional[str] = None
+    hyp_transaction_id: Optional[str] = None
+    hyp_internal_deal_id: Optional[str] = None
     amount: Optional[float] = None
     currency: Optional[str] = None
     status: str
     event_type: Optional[str] = None
     event_data: Optional[dict] = None
+    payment_url: Optional[str] = None
+    callback_data: Optional[dict] = None
     created_at: datetime
+    completed_at: Optional[datetime] = None
     updated_at: datetime
 
 
 class TransactionCreate(BaseModel):
     """Modèle pour créer une transaction de paiement"""
     user_id: Optional[str] = None
+    plan_id: Optional[str] = None
     paddle_transaction_id: Optional[str] = None
     paddle_subscription_id: Optional[str] = None
+    hyp_transaction_id: Optional[str] = None
+    hyp_internal_deal_id: Optional[str] = None
     amount: Optional[float] = None
     currency: Optional[str] = None
     status: str
     event_type: Optional[str] = None
     event_data: Optional[dict] = None
+    payment_url: Optional[str] = None
+    callback_data: Optional[dict] = None
+
+
+class Subscription(BaseModel):
+    """Modèle Pydantic pour les abonnements"""
+    id: str
+    user_id: Optional[str] = None
+    plan_id: Optional[str] = None
+    license_id: Optional[str] = None
+    product_id: Optional[int] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: str
+    next_renewal: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    transaction_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SubscriptionCreate(BaseModel):
+    """Modèle pour créer un abonnement"""
+    user_id: Optional[str] = None
+    plan_id: Optional[str] = None
+    license_id: Optional[str] = None
+    product_id: Optional[int] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: str
+    next_renewal: Optional[datetime] = None
+    transaction_id: Optional[str] = None
 

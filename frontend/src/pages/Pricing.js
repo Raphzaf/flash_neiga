@@ -1,47 +1,46 @@
-import React from "react";
+import React, { useState } from "react";
 import axios from "axios";
-import { VERIFONE_PLANS } from '../config/verifonePlans';
+import { HYP_CONFIG, PLAN_DETAILS, formatPrice } from '../config/hypConfig';
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 
-async function startVerifoneCheckout(plan) {
+async function startHypCheckout(planId, userEmail = null) {
   try {
-    if (!plan || !plan.amount || !plan.currency) {
-      alert('⚠️ Ce plan n\'est pas configuré correctement (montant/devise manquants).');
-      return;
-    }
+    console.log('Starting HYP checkout for plan:', planId);
+    
     const body = {
-      amount: plan.amount,
-      currency: plan.currency,
-      name: plan.name,
-      productId: plan.productId,
-      returnUrl: window.location.origin + '/subscription-success',
-      test: true,
+      plan_id: planId,
+      user_email: userEmail
     };
-    const res = await axios.post('/api/payments/verifone/create-checkout', body);
-    const checkoutUrl = res.data?.checkoutUrl || res.data?.url;
-    if (checkoutUrl) {
-      console.log('Checkout URL:', checkoutUrl);
-      try {
-        window.location.assign(checkoutUrl);
-      } catch (assignErr) {
-        console.warn('assign() failed, trying window.open', assignErr);
-        const w = window.open(checkoutUrl, '_self');
-        if (!w) {
-          alert('Impossible d\'ouvrir le paiement. URL: ' + checkoutUrl);
-        }
-      }
+    
+    const res = await axios.post('/api/payments/hyp/create-payment', body);
+    const paymentUrl = res.data?.payment_url;
+    
+    if (paymentUrl) {
+      console.log('Redirecting to HYP payment URL:', paymentUrl);
+      window.location.href = paymentUrl;
     } else {
-      alert('❌ Erreur: URL de paiement Verifone non disponible');
+      alert('❌ Erreur: URL de paiement non disponible');
     }
   } catch (e) {
-    console.error('Verifone checkout error:', e?.response?.status, e?.response?.data);
+    console.error('HYP checkout error:', e?.response?.status, e?.response?.data);
     const errorDetail = e?.response?.data?.detail || 'Erreur inconnue';
-    alert(`❌ Erreur de paiement Verifone: ${errorDetail}`);
+    alert(`❌ Erreur de paiement: ${errorDetail}`);
   }
 }
 
 function Pricing() {
+  const [loading, setLoading] = useState(null);
+
+  const handleCheckout = async (planId) => {
+    setLoading(planId);
+    try {
+      await startHypCheckout(planId);
+    } finally {
+      setLoading(null);
+    }
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-center text-slate-900 dark:text-white">Abonnements Flash Neiga</h1>
@@ -60,42 +59,59 @@ function Pricing() {
           
           <div className="space-y-3">
             <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded">
-              <div className="font-semibold text-lg text-slate-900 dark:text-white">14 jours - 119₪</div>
+              <div className="font-semibold text-lg text-slate-900 dark:text-white">
+                14 jours - {formatPrice(PLAN_DETAILS.code_14d.price)}
+              </div>
               <Button 
                 variant="outline" 
                 className="w-full mt-2" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.CODE.DAYS_14)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.CODE.DAYS_14)}
+                disabled={loading === HYP_CONFIG.plans.CODE.DAYS_14}
               >
-                Souscrire 14 jours
+                {loading === HYP_CONFIG.plans.CODE.DAYS_14 ? 'Chargement...' : 'Souscrire 14 jours'}
               </Button>
             </div>
             
             <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded border-2 border-blue-300 dark:border-blue-600">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-lg text-slate-900 dark:text-white">30 jours - 189₪</span>
-                  <span className="ml-2 line-through opacity-60 text-sm text-slate-600 dark:text-slate-400">238₪</span>
+                  <span className="font-semibold text-lg text-slate-900 dark:text-white">
+                    30 jours - {formatPrice(PLAN_DETAILS.code_30d.price)}
+                  </span>
+                  {PLAN_DETAILS.code_30d.originalPrice && (
+                    <span className="ml-2 line-through opacity-60 text-sm text-slate-600 dark:text-slate-400">
+                      {formatPrice(PLAN_DETAILS.code_30d.originalPrice)}
+                    </span>
+                  )}
                 </div>
-                <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">-21%</span>
+                {PLAN_DETAILS.code_30d.discount && (
+                  <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
+                    {PLAN_DETAILS.code_30d.discount}
+                  </span>
+                )}
               </div>
               <Button 
                 variant="default" 
                 className="w-full mt-2 bg-blue-600 hover:bg-blue-700" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.CODE.DAYS_30)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.CODE.DAYS_30)}
+                disabled={loading === HYP_CONFIG.plans.CODE.DAYS_30}
               >
-                Souscrire 30 jours
+                {loading === HYP_CONFIG.plans.CODE.DAYS_30 ? 'Chargement...' : 'Souscrire 30 jours'}
               </Button>
             </div>
             
-            <div className="p-3 bg-gray-50 rounded">
-              <div className="font-semibold">Extension hebdomadaire - 49₪</div>
+            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <div className="font-semibold text-slate-900 dark:text-white">
+                Extension hebdomadaire - {formatPrice(PLAN_DETAILS.code_ext.price)}
+              </div>
               <Button 
                 variant="outline" 
                 size="sm"
                 className="w-full mt-2" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.CODE.WEEK_EXTENSION)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.CODE.EXTENSION)}
+                disabled={loading === HYP_CONFIG.plans.CODE.EXTENSION}
               >
-                Prolonger d'une semaine
+                {loading === HYP_CONFIG.plans.CODE.EXTENSION ? 'Chargement...' : 'Prolonger d\'une semaine'}
               </Button>
             </div>
           </div>
@@ -112,59 +128,87 @@ function Pricing() {
           
           <div className="space-y-3">
             <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded">
-              <div className="font-semibold text-lg text-slate-900 dark:text-white">1 mois - 199₪</div>
+              <div className="font-semibold text-lg text-slate-900 dark:text-white">
+                1 mois - {formatPrice(PLAN_DETAILS.video_1m.price)}
+              </div>
               <Button 
                 variant="outline" 
                 className="w-full mt-2" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.MONTH_1)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.VIDEO.MONTH_1)}
+                disabled={loading === HYP_CONFIG.plans.VIDEO.MONTH_1}
               >
-                Souscrire 1 mois
+                {loading === HYP_CONFIG.plans.VIDEO.MONTH_1 ? 'Chargement...' : 'Souscrire 1 mois'}
               </Button>
             </div>
             
             <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded border-2 border-purple-300 dark:border-purple-600">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-lg text-slate-900 dark:text-white">2 mois - 349₪</span>
-                  <span className="ml-2 line-through opacity-60 text-sm text-slate-600 dark:text-slate-400">398₪</span>
+                  <span className="font-semibold text-lg text-slate-900 dark:text-white">
+                    2 mois - {formatPrice(PLAN_DETAILS.video_2m.price)}
+                  </span>
+                  {PLAN_DETAILS.video_2m.originalPrice && (
+                    <span className="ml-2 line-through opacity-60 text-sm text-slate-600 dark:text-slate-400">
+                      {formatPrice(PLAN_DETAILS.video_2m.originalPrice)}
+                    </span>
+                  )}
                 </div>
-                <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold">-12%</span>
+                {PLAN_DETAILS.video_2m.discount && (
+                  <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold">
+                    {PLAN_DETAILS.video_2m.discount}
+                  </span>
+                )}
               </div>
               <Button 
                 variant="default" 
                 className="w-full mt-2 bg-purple-600 hover:bg-purple-700" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.MONTH_2)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.VIDEO.MONTH_2)}
+                disabled={loading === HYP_CONFIG.plans.VIDEO.MONTH_2}
               >
-                Souscrire 2 mois
+                {loading === HYP_CONFIG.plans.VIDEO.MONTH_2 ? 'Chargement...' : 'Souscrire 2 mois'}
               </Button>
             </div>
             
             <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded border-2 border-purple-400 dark:border-purple-500">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-lg text-slate-900 dark:text-white">3 mois - 489₪</span>
-                  <span className="ml-2 line-through opacity-60 text-sm text-slate-600 dark:text-slate-400">597₪</span>
+                  <span className="font-semibold text-lg text-slate-900 dark:text-white">
+                    3 mois - {formatPrice(PLAN_DETAILS.video_3m.price)}
+                  </span>
+                  {PLAN_DETAILS.video_3m.originalPrice && (
+                    <span className="ml-2 line-through opacity-60 text-sm text-slate-600 dark:text-slate-400">
+                      {formatPrice(PLAN_DETAILS.video_3m.originalPrice)}
+                    </span>
+                  )}
                 </div>
-                <span className="bg-purple-700 text-white px-2 py-1 rounded text-xs font-bold">-18%</span>
+                {PLAN_DETAILS.video_3m.discount && (
+                  <span className="bg-purple-700 text-white px-2 py-1 rounded text-xs font-bold">
+                    {PLAN_DETAILS.video_3m.discount}
+                  </span>
+                )}
               </div>
               <Button 
                 variant="default" 
                 className="w-full mt-2 bg-purple-700 hover:bg-purple-800" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.MONTH_3)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.VIDEO.MONTH_3)}
+                disabled={loading === HYP_CONFIG.plans.VIDEO.MONTH_3}
               >
-                Souscrire 3 mois
+                {loading === HYP_CONFIG.plans.VIDEO.MONTH_3 ? 'Chargement...' : 'Souscrire 3 mois'}
               </Button>
             </div>
             
-            <div className="p-3 bg-gray-50 rounded">
-              <div className="font-semibold">Extension hebdomadaire - 49₪</div>
+            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <div className="font-semibold text-slate-900 dark:text-white">
+                Extension hebdomadaire - {formatPrice(PLAN_DETAILS.video_ext.price)}
+              </div>
               <Button 
                 variant="outline" 
                 size="sm"
                 className="w-full mt-2" 
-                onClick={() => startVerifoneCheckout(VERIFONE_PLANS.VIDEOS.WEEK_EXTENSION)}
+                onClick={() => handleCheckout(HYP_CONFIG.plans.VIDEO.EXTENSION)}
+                disabled={loading === HYP_CONFIG.plans.VIDEO.EXTENSION}
               >
-                Prolonger d'une semaine
+                {loading === HYP_CONFIG.plans.VIDEO.EXTENSION ? 'Chargement...' : 'Prolonger d\'une semaine'}
               </Button>
             </div>
           </div>

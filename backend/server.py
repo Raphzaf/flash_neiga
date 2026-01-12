@@ -49,6 +49,10 @@ try:
     from routes.twocheckout import router as twocheckout_router
 except ImportError:
     from backend.routes.twocheckout import router as twocheckout_router
+try:
+    from routes.hyp_payments import router as hyp_router
+except ImportError:
+    from backend.routes.hyp_payments import router as hyp_router
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
@@ -98,6 +102,7 @@ app.add_middleware(
 # Include external routers
 app.include_router(verifone_router)
 app.include_router(twocheckout_router)
+app.include_router(hyp_router)
 
 
 # ===== Health Check Endpoint =====
@@ -544,9 +549,7 @@ async def startup():
             db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
 
-    # Stripe integration removed
-
-    # Payments endpoints moved to routes.paddle_payments to avoid duplication
+    # Payment endpoints available via routes (HYP, Verifone, 2Checkout)
 
     @app.post("/api/admin/import_file")
     async def import_file(payload: dict, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):

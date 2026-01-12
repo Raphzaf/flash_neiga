@@ -2,20 +2,36 @@
 
 A comprehensive web application for preparing for driving theory exams, featuring a React frontend and FastAPI backend.
 
-## 🔥 Quick Start - Paddle Integration
+## 💳 Payment Integration - HYP
 
-**⚠️ Important:** Si vous avez des erreurs 403 avec Paddle, consultez le [Guide de Configuration Paddle](./PADDLE_SETUP_GUIDE.md) pour résoudre les problèmes de clés API et price IDs.
+**Flash Neiga** utilise la plateforme de paiement israélienne **HYP** pour gérer les abonnements.
 
-**Scripts de test disponibles:**
+**Documentation complète:** Consultez le [Guide de Configuration HYP](./HYP_SETUP_GUIDE.md) pour:
+- Configuration des identifiants HYP
+- Structure des plans et tarification
+- Flow de paiement complet
+- Endpoints API disponibles
+- Tests et débogage
+- Déploiement en production
 
-Windows (PowerShell):
-- `.\test-paddle.ps1` - Vérifier la configuration Paddle
-- `.\test-paddle-checkout.ps1 <PRICE_ID>` - Tester un checkout
-- `.\update-paddle-prices.ps1` - Mettre à jour les price IDs
+**Test de l'intégration:**
+```bash
+cd backend
+python scripts/test_hyp_integration.py
+```
 
-Linux/Mac (Bash):
-- `./test-paddle.sh` - Vérifier la configuration Paddle
-- `./test-paddle-checkout.sh <PRICE_ID>` - Tester un checkout
+### Plans disponibles
+
+**Abonnements Code:**
+- 14 jours - 99₪ (`code_14d`)
+- 30 jours - 159₪ (`code_30d`)
+- Extension 1 semaine - 59₪ (`code_ext`)
+
+**Vidéos Pédagogiques:**
+- 1 mois - 199₪ (`video_1m`)
+- 2 mois - 339₪ (`video_2m`)
+- 3 mois - 419₪ (`video_3m`)
+- Extension 1 semaine - 59₪ (`video_ext`)
 
 ## 📊 Data Enrichment
 
