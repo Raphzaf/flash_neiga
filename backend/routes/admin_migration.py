@@ -86,8 +86,8 @@ async def run_migration(current_user: User = Depends(get_current_user)):
                 'status': 'VARCHAR',
                 'next_renewal': 'TIMESTAMP',
                 'canceled_at': 'TIMESTAMP',
-                'created_at': 'TIMESTAMP DEFAULT NOW()',
-                'updated_at': 'TIMESTAMP DEFAULT NOW()'
+                'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+                'updated_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
             }
             
             with engine.connect() as conn:

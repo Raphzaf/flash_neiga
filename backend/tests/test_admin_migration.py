@@ -59,7 +59,8 @@ class TestAdminMigration:
     def test_run_migration_without_auth(self, client):
         """Test run-migration endpoint without authentication"""
         response = client.get("/api/admin/run-migration")
-        assert response.status_code == 403  # FastAPI security returns 403 for missing auth
+        # HTTPBearer with no credentials returns 403
+        assert response.status_code == 403
     
     def test_run_migration_with_auth(self, client, test_db):
         """Test run-migration endpoint with authentication"""
