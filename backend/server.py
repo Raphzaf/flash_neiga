@@ -53,6 +53,14 @@ try:
     from routes.hyp_payments import router as hyp_router
 except ImportError:
     from backend.routes.hyp_payments import router as hyp_router
+try:
+    from routes.admin_migration import router as admin_migration_router
+except ImportError:
+    from backend.routes.admin_migration import router as admin_migration_router
+try:
+    from auth import get_current_user
+except ImportError:
+    from backend.auth import get_current_user
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
@@ -103,6 +111,7 @@ app.add_middleware(
 app.include_router(verifone_router)
 app.include_router(twocheckout_router)
 app.include_router(hyp_router)
+app.include_router(admin_migration_router)
 
 
 # ===== Health Check Endpoint =====
@@ -144,39 +153,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    token = credentials.credentials
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing token",
-        )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-            )
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    
-    user = db.query(UserDB).filter(UserDB.id == user_id).first()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return User(id=user.id, email=user.email)
 
 
 # ===== Init Data =====
