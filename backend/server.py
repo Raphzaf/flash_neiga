@@ -61,6 +61,10 @@ try:
     from auth import get_current_user
 except ImportError:
     from backend.auth import get_current_user
+try:
+    from migrations.auto_migrate import run_hyp_migration
+except ImportError:
+    from backend.migrations.auto_migrate import run_hyp_migration
 
 # ===== Config =====
 ROOT_DIR = Path(__file__).parent
@@ -250,8 +254,16 @@ async def startup():
         logger.error(f"❌ Failed to initialize database: {e}", exc_info=True)
         raise
     
-    # Step 2: Check and update schema BEFORE any data operations
-    logger.info("📝 Step 2: Verifying and updating database schema...")
+    # Step 2: Run HYP migration (adds missing columns)
+    logger.info("📝 Step 2: Running HYP database migration...")
+    try:
+        run_hyp_migration()
+    except Exception as e:
+        logger.error(f"❌ HYP migration encountered an error: {e}", exc_info=True)
+        logger.warning("⚠️  Continuing startup despite migration issues...")
+    
+    # Step 3: Check and update schema BEFORE any data operations
+    logger.info("📝 Step 3: Verifying and updating database schema...")
     try:
         ensure_schema_updated()
         logger.info("✅ Database schema verified and updated")
@@ -259,8 +271,8 @@ async def startup():
         logger.error(f"❌ Failed to update schema: {e}", exc_info=True)
         logger.warning("⚠️  Continuing startup despite schema issues...")
     
-    # Step 3: Ensure admin user exists
-    logger.info("📝 Step 3: Checking admin user...")
+    # Step 4: Ensure admin user exists
+    logger.info("📝 Step 4: Checking admin user...")
     db = SessionLocal()
     try:
         # Create admin user if it doesn't exist
@@ -288,8 +300,8 @@ async def startup():
             logger.info(f"   🆔 User ID: {admin_user.id}")
             logger.warning("⚠️  IMPORTANT: Change the admin password after first login!")
         
-        # Step 4: Load questions from data_v3.json if database is empty
-        logger.info("📝 Step 4: Checking questions in database...")
+        # Step 5: Load questions from data_v3.json if database is empty
+        logger.info("📝 Step 5: Checking questions in database...")
         question_count = db.query(QuestionDB).count()
         
         if question_count == 0:
@@ -300,8 +312,8 @@ async def startup():
         else:
             logger.info(f"✅ Database already contains {question_count} questions")
 
-        # Step 5: Load traffic signs from bundled JSON if none exist
-        logger.info("📝 Step 5: Checking traffic signs in database...")
+        # Step 6: Load traffic signs from bundled JSON if none exist
+        logger.info("📝 Step 6: Checking traffic signs in database...")
         def _load_signs_from_json(db: Session) -> int:
             path = ROOT_DIR.parent / "data" / "signs_israel_fr_117.json"
             if not path.exists():
