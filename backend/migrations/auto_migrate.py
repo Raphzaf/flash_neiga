@@ -38,7 +38,9 @@ def run_hyp_migration():
                 'hyp_internal_deal_id': 'VARCHAR',
                 'payment_url': 'TEXT',
                 'callback_data': 'JSON' if is_postgresql else 'TEXT',
-                'event_data': 'JSON' if is_postgresql else 'TEXT'
+                'event_data': 'JSON' if is_postgresql else 'TEXT',
+                'completed_at': 'TIMESTAMP',
+                'updated_at': 'TIMESTAMP'
             }
             
             with engine.connect() as conn:

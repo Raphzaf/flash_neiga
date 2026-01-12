@@ -106,6 +106,11 @@ class TestAutoMigration:
         assert 'hyp_transaction_id' in columns
         assert 'hyp_internal_deal_id' in columns
         assert 'payment_url' in columns
+        assert 'event_data' in columns
+        assert 'callback_data' in columns
+        # Check for timestamp columns
+        assert 'completed_at' in columns
+        assert 'updated_at' in columns
     
     def test_migration_adds_columns_to_subscriptions(self, test_engine):
         """Test that migration adds columns to subscriptions table"""
