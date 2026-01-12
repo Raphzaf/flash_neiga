@@ -26,16 +26,14 @@ def run_migration():
         sys.exit(1)
     
     # Convertir postgres:// en postgresql:// si nécessaire
-    original_url = database_url
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     
-    # Vérifier que c'est PostgreSQL
+    # Vérifier que c'est PostgreSQL (le script SQL utilise des fonctionnalités PostgreSQL)
     if 'postgresql://' not in database_url:
-        logger.error("❌ This migration script is designed for PostgreSQL only")
-        logger.error(f"   Your database URL: {original_url}")
-        logger.info("   For SQLite, the models will automatically create the schema")
-        logger.info("   Simply delete your SQLite database and restart the server")
+        logger.error("❌ This migration script requires PostgreSQL")
+        logger.error(f"   Your database URL does not appear to be PostgreSQL")
+        logger.info("   The SQL file uses PostgreSQL-specific syntax (DO blocks, etc.)")
         sys.exit(1)
     
     logger.info(f"🔗 Connecting to database...")
@@ -63,64 +61,77 @@ def run_migration():
     
     # Exécuter la migration
     logger.info("🚀 Executing migration...")
+    logger.info("   This may take a few seconds...")
     
     try:
         with engine.begin() as conn:
-            # Séparer les commandes SQL (PostgreSQL peut avoir des problèmes avec plusieurs commandes)
-            statements = [s.strip() for s in sql_content.split(';') if s.strip()]
-            
-            executed = 0
-            for statement in statements:
-                # Skip empty statements and comments
-                if not statement or statement.startswith('--'):
-                    continue
-                
-                # Remove comments from the statement
-                lines = [line for line in statement.split('\n') if not line.strip().startswith('--')]
-                clean_statement = '\n'.join(lines).strip()
-                
-                if not clean_statement:
-                    continue
-                
-                executed += 1
-                logger.info(f"   Executing statement {executed}...")
-                conn.execute(text(clean_statement))
+            # Pour PostgreSQL, exécuter tout le script en une fois
+            # car il contient des blocs DO $$ qui doivent rester ensemble
+            logger.info("   Executing migration script...")
+            conn.execute(text(sql_content))
+            # Transaction is automatically committed when exiting the 'with' block
         
-        logger.info(f"✅ Migration completed successfully! ({executed} statements executed)")
+        logger.info("✅ Migration completed successfully!")
         
         # Vérifier les colonnes
         logger.info("\n📊 Verifying database schema...")
         
         with engine.connect() as conn:
-            # Vérifier transactions avec PostgreSQL
+            # Compter les colonnes de transactions
             result = conn.execute(text("""
-                SELECT column_name, data_type 
+                SELECT COUNT(*) as col_count
+                FROM information_schema.columns 
+                WHERE table_name = 'transactions'
+            """))
+            trans_count = result.fetchone()[0]
+            logger.info(f"\n   ✓ Table 'transactions': {trans_count} columns")
+            
+            # Vérifier les colonnes HYP spécifiques
+            result = conn.execute(text("""
+                SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_name = 'transactions' 
-                ORDER BY ordinal_position
+                AND column_name IN ('plan_id', 'hyp_transaction_id', 'payment_url', 'callback_data')
+                ORDER BY column_name
             """))
             
-            logger.info("\n   Table 'transactions' columns:")
-            for row in result:
-                logger.info(f"     - {row[0]}: {row[1]}")
+            hyp_cols = [row[0] for row in result]
+            logger.info(f"   ✓ HYP columns present: {', '.join(hyp_cols)}")
             
-            # Vérifier subscriptions
+            # Compter les colonnes de subscriptions
             result = conn.execute(text("""
-                SELECT column_name, data_type 
+                SELECT COUNT(*) as col_count
+                FROM information_schema.columns 
+                WHERE table_name = 'subscriptions'
+            """))
+            subs_count = result.fetchone()[0]
+            logger.info(f"\n   ✓ Table 'subscriptions': {subs_count} columns")
+            
+            # Vérifier les colonnes clés de subscriptions
+            result = conn.execute(text("""
+                SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_name = 'subscriptions' 
-                ORDER BY ordinal_position
+                AND column_name IN ('user_id', 'plan_id', 'status', 'start_date', 'end_date')
+                ORDER BY column_name
             """))
             
-            logger.info("\n   Table 'subscriptions' columns:")
-            for row in result:
-                logger.info(f"     - {row[0]}: {row[1]}")
+            subs_cols = [row[0] for row in result]
+            logger.info(f"   ✓ Key columns present: {', '.join(subs_cols)}")
         
         logger.info("\n🎉 Database schema is ready for HYP integration!")
+        logger.info("\n📝 Next steps:")
+        logger.info("   1. Restart your backend service on Render")
+        logger.info("   2. Test the payment endpoint")
+        logger.info("   3. Check that no 500 errors occur")
         
     except Exception as e:
         logger.error(f"❌ Migration failed: {e}")
-        logger.error(f"   Error details: {type(e).__name__}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        logger.error(f"\n💡 Troubleshooting:")
+        logger.error(f"   - Check if the database is accessible")
+        logger.error(f"   - Verify DATABASE_URL is correct")
+        logger.error(f"   - Check Render logs for more details")
         sys.exit(1)
 
 if __name__ == "__main__":

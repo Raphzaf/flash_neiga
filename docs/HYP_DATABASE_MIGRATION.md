@@ -119,3 +119,54 @@ DROP TABLE IF EXISTS subscriptions CASCADE;
 - La migration est **idempotente** : elle peut être exécutée plusieurs fois sans danger
 - Les colonnes Paddle existantes sont **conservées** pour compatibilité
 - La table `subscriptions` remplace la gestion manuelle des abonnements
+
+## 🔧 Troubleshooting
+
+### Erreur: "column does not exist" lors de la création d'index
+
+**Cause**: La table `subscriptions` existe mais il manque des colonnes.
+
+**Solution**: Le script corrigé ajoute maintenant les colonnes une par une avec `ADD COLUMN IF NOT EXISTS` avant de créer les index.
+
+### Erreur: "relation already exists"
+
+C'est normal! Le script utilise `IF NOT EXISTS` partout, donc il est sûr de le relancer plusieurs fois.
+
+### Vérifier manuellement l'état de la base
+
+```sql
+-- Lister toutes les colonnes de transactions
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'transactions' 
+ORDER BY ordinal_position;
+
+-- Lister toutes les colonnes de subscriptions
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'subscriptions' 
+ORDER BY ordinal_position;
+
+-- Vérifier les contraintes
+SELECT conname, contype 
+FROM pg_constraint 
+WHERE conrelid = 'subscriptions'::regclass;
+```
+
+### Nettoyer et recommencer (DANGER - perte de données)
+
+**⚠️ Seulement si nécessaire et que vous n'avez pas de données importantes:**
+
+```sql
+-- Supprimer la table subscriptions
+DROP TABLE IF EXISTS subscriptions CASCADE;
+
+-- Supprimer les colonnes HYP de transactions
+ALTER TABLE transactions DROP COLUMN IF EXISTS plan_id CASCADE;
+ALTER TABLE transactions DROP COLUMN IF EXISTS hyp_transaction_id CASCADE;
+ALTER TABLE transactions DROP COLUMN IF EXISTS hyp_internal_deal_id CASCADE;
+ALTER TABLE transactions DROP COLUMN IF EXISTS payment_url CASCADE;
+ALTER TABLE transactions DROP COLUMN IF EXISTS callback_data CASCADE;
+
+-- Relancer la migration
+```
