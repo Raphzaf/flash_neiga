@@ -12,6 +12,8 @@ import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
 import SubscriptionSuccess from './pages/SubscriptionSuccess';
+import PaymentSuccess from './pages/PaymentSuccess';
+import PaymentFailure from './pages/PaymentFailure';
 import { Toaster } from "sonner";
 import axios from 'axios';
 import Terms from "./pages/Terms";
@@ -33,8 +35,8 @@ function App() {
     useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const provider = params.get('provider');
-      // Allow Verifone/2Checkout provider (Paddle removed)
-      if (provider === 'verifone') {
+      // Allow Verifone/HYP providers
+      if (provider === 'verifone' || provider === 'hyp') {
         setAllowed(true);
       } else {
         setAllowed(false);
@@ -75,6 +77,10 @@ function App() {
             } />
             
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
+            
+            {/* HYP Payment Callback Routes */}
+            <Route path="/payment/success" element={<PaymentSuccess />} />
+            <Route path="/payment/failure" element={<PaymentFailure />} />
             
             <Route path="/pricing/cancel" element={
               <div className='min-h-[60vh] flex items-center justify-center p-12 text-slate-400'>
