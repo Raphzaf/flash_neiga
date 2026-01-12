@@ -55,8 +55,10 @@ Ajouter les colonnes nécessaires à PostgreSQL pour supporter l'intégration HY
 
 3. **Se connecter**:
    ```bash
-   psql "postgresql://flash_neiga_user:XbM2WHVQLhAShKB8axTj2DPkbquOxDX6@dpg-d4v0ld6uk2gs7394fbm0-a.oregon-postgres.render.com/flash_neiga"
+   psql "postgresql://YOUR_USER:YOUR_PASSWORD@YOUR_HOST/YOUR_DATABASE"
    ```
+   
+   > **Note**: Remplacez les valeurs par celles obtenues depuis le dashboard Render
 
 4. **Exécuter le SQL manuellement**:
    ```sql

@@ -26,13 +26,14 @@ def run_migration():
         sys.exit(1)
     
     # Convertir postgres:// en postgresql:// si nécessaire
+    original_url = database_url
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     
     # Vérifier que c'est PostgreSQL
-    if 'postgresql://' not in database_url and 'postgres://' not in database_url:
+    if 'postgresql://' not in database_url:
         logger.error("❌ This migration script is designed for PostgreSQL only")
-        logger.error("   Your database URL indicates SQLite or another database")
+        logger.error(f"   Your database URL: {original_url}")
         logger.info("   For SQLite, the models will automatically create the schema")
         logger.info("   Simply delete your SQLite database and restart the server")
         sys.exit(1)
@@ -90,44 +91,30 @@ def run_migration():
         # Vérifier les colonnes
         logger.info("\n📊 Verifying database schema...")
         
-        is_postgres = 'postgresql://' in database_url
-        
         with engine.connect() as conn:
-            if is_postgres:
-                # Vérifier transactions avec PostgreSQL
-                result = conn.execute(text("""
-                    SELECT column_name, data_type 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'transactions' 
-                    ORDER BY ordinal_position
-                """))
-                
-                logger.info("\n   Table 'transactions' columns:")
-                for row in result:
-                    logger.info(f"     - {row[0]}: {row[1]}")
-                
-                # Vérifier subscriptions
-                result = conn.execute(text("""
-                    SELECT column_name, data_type 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'subscriptions' 
-                    ORDER BY ordinal_position
-                """))
-                
-                logger.info("\n   Table 'subscriptions' columns:")
-                for row in result:
-                    logger.info(f"     - {row[0]}: {row[1]}")
-            else:
-                # Pour SQLite, utiliser PRAGMA
-                logger.info("\n   Table 'transactions' columns:")
-                result = conn.execute(text("PRAGMA table_info(transactions)"))
-                for row in result:
-                    logger.info(f"     - {row[1]}: {row[2]}")
-                
-                logger.info("\n   Table 'subscriptions' columns:")
-                result = conn.execute(text("PRAGMA table_info(subscriptions)"))
-                for row in result:
-                    logger.info(f"     - {row[1]}: {row[2]}")
+            # Vérifier transactions avec PostgreSQL
+            result = conn.execute(text("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'transactions' 
+                ORDER BY ordinal_position
+            """))
+            
+            logger.info("\n   Table 'transactions' columns:")
+            for row in result:
+                logger.info(f"     - {row[0]}: {row[1]}")
+            
+            # Vérifier subscriptions
+            result = conn.execute(text("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'subscriptions' 
+                ORDER BY ordinal_position
+            """))
+            
+            logger.info("\n   Table 'subscriptions' columns:")
+            for row in result:
+                logger.info(f"     - {row[0]}: {row[1]}")
         
         logger.info("\n🎉 Database schema is ready for HYP integration!")
         

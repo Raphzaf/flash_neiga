@@ -1,6 +1,7 @@
 -- Migration: Ajouter le support HYP
 -- Date: 2026-01-12
 -- Description: Ajoute les colonnes HYP à transactions et crée la table subscriptions
+-- Prérequis: Les tables 'users' et 'transactions' doivent exister
 
 -- ===== Mise à jour de la table transactions =====
 
