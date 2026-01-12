@@ -136,29 +136,3 @@ ON subscriptions(license_id);
 
 CREATE INDEX IF NOT EXISTS idx_subscriptions_product_id 
 ON subscriptions(product_id);
-
--- ===== Vérification finale =====
-
--- Afficher le résumé des colonnes de transactions
-DO $$
-DECLARE
-    col_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO col_count
-    FROM information_schema.columns 
-    WHERE table_name = 'transactions';
-    
-    RAISE NOTICE 'Table transactions: % columns', col_count;
-END $$;
-
--- Afficher le résumé des colonnes de subscriptions
-DO $$
-DECLARE
-    col_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO col_count
-    FROM information_schema.columns 
-    WHERE table_name = 'subscriptions';
-    
-    RAISE NOTICE 'Table subscriptions: % columns', col_count;
-END $$;

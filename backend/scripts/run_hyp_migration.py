@@ -29,8 +29,15 @@ def run_migration():
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     
+    # Vérifier que c'est PostgreSQL (le script SQL utilise des fonctionnalités PostgreSQL)
+    if 'postgresql://' not in database_url:
+        logger.error("❌ This migration script requires PostgreSQL")
+        logger.error(f"   Your database URL does not appear to be PostgreSQL")
+        logger.info("   The SQL file uses PostgreSQL-specific syntax (DO blocks, etc.)")
+        sys.exit(1)
+    
     logger.info(f"🔗 Connecting to database...")
-    logger.info(f"   Type: {'PostgreSQL' if 'postgresql://' in database_url else 'SQLite'}")
+    logger.info(f"   Type: PostgreSQL")
     
     # Créer le moteur
     try:
