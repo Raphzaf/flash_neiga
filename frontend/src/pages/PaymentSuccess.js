@@ -85,7 +85,7 @@ function PaymentSuccess() {
 
         {/* Success Message */}
         <h1 className="text-3xl font-bold text-white mb-4">
-          Payment Successful! 🎉
+          Payment Successful!
         </h1>
         
         <p className="text-slate-300 mb-6">
@@ -114,7 +114,7 @@ function PaymentSuccess() {
               <div className="flex justify-between">
                 <span className="text-slate-400">Date :</span>
                 <span className="font-medium text-white">
-                  {new Date(transaction.created_at || Date.now()).toLocaleDateString('fr-FR')}
+                  {new Date(transaction.created_at || Date.now()).toLocaleDateString()}
                 </span>
               </div>
               <div className="flex justify-between">

@@ -74,9 +74,12 @@ function PaymentFailure() {
             onClick={() => window.location.href = 'mailto:support@flash-neiga.com'}
             variant="outline"
             className="w-full border-white/[0.05] hover:bg-white/[0.05] transition-colors flex items-center justify-center gap-2"
+            asChild
           >
-            <Mail className="h-4 w-4" />
-            Contact Support
+            <a href="mailto:support@flash-neiga.com">
+              <Mail className="h-4 w-4" />
+              Contact Support
+            </a>
           </Button>
           
           <button
