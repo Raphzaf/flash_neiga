@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/button';
+import { XCircle, RefreshCw, Mail, Home } from 'lucide-react';
 
 function PaymentFailure() {
   const [searchParams] = useSearchParams();
@@ -15,54 +16,42 @@ function PaymentFailure() {
   }, [transactionId, errorMessage]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 dark:from-slate-900 dark:to-slate-800 p-6">
-      <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-lg shadow-xl p-8 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
+      <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] rounded-2xl shadow-xl p-8 text-center">
         {/* Error Icon */}
         <div className="mb-6">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 dark:bg-red-900">
-            <svg
-              className="h-10 w-10 text-red-600 dark:text-red-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-500/10">
+            <XCircle className="h-10 w-10 text-red-500" />
           </div>
         </div>
 
         {/* Error Message */}
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">
-          Paiement échoué
+        <h1 className="text-3xl font-bold text-white mb-4">
+          Payment Failed
         </h1>
         
-        <p className="text-slate-600 dark:text-slate-300 mb-6">
+        <p className="text-slate-300 mb-6">
           {errorMessage}
         </p>
 
         {/* Transaction ID */}
         {transactionId && (
-          <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-4 mb-6">
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+          <div className="bg-white/[0.05] backdrop-blur-sm rounded-xl p-4 mb-6 border border-white/[0.05]">
+            <p className="text-xs text-slate-400 mb-1">
               ID de transaction
             </p>
-            <p className="font-mono text-sm text-slate-900 dark:text-white">
+            <p className="font-mono text-sm text-white">
               {transactionId}
             </p>
           </div>
         )}
 
         {/* Common Reasons */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6 text-left">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2 text-sm">
+        <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.05] rounded-xl p-4 mb-6 text-left">
+          <h3 className="font-semibold text-indigo-400 mb-2 text-sm">
             Raisons courantes d'échec :
           </h3>
-          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+          <ul className="text-sm text-slate-300 space-y-1 list-disc list-inside">
             <li>Fonds insuffisants sur la carte</li>
             <li>Informations de carte incorrectes</li>
             <li>Carte expirée</li>
@@ -75,31 +64,41 @@ function PaymentFailure() {
         <div className="space-y-3">
           <Button 
             onClick={() => navigate('/pricing')} 
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
           >
-            Réessayer le paiement
+            <RefreshCw className="h-4 w-4" />
+            Retry Payment
           </Button>
           
           <Button 
-            onClick={() => navigate('/dashboard')} 
+            onClick={() => window.location.href = 'mailto:support@flash-neiga.com'}
             variant="outline"
-            className="w-full"
+            className="w-full border-white/[0.05] hover:bg-white/[0.05] transition-colors flex items-center justify-center gap-2"
           >
-            Retour au tableau de bord
+            <Mail className="h-4 w-4" />
+            Contact Support
           </Button>
+          
+          <button
+            onClick={() => navigate('/')}
+            className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
+          >
+            <Home className="h-4 w-4" />
+            Back to Home
+          </button>
         </div>
 
         {/* Support Info */}
-        <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Besoin d'aide ?
+        <div className="mt-6 pt-6 border-t border-white/[0.05]">
+          <p className="text-xs text-slate-400">
+            Nous sommes là pour vous aider. N'hésitez pas à nous contacter si vous rencontrez des difficultés.
             <br />
-            Contactez notre support à{' '}
+            Support:{' '}
             <a 
-              href="mailto:support@flashneiga.com" 
-              className="text-blue-600 dark:text-blue-400 hover:underline"
+              href="mailto:support@flash-neiga.com" 
+              className="text-indigo-400 hover:text-indigo-300 hover:underline transition-colors"
             >
-              support@flashneiga.com
+              support@flash-neiga.com
             </a>
           </p>
         </div>
