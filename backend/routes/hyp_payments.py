@@ -229,7 +229,7 @@ def verify_hyp_callback(data: Dict[str, Any]) -> bool:
     expected_hash = hashlib.md5(hash_string.encode()).hexdigest()
     
     logger.debug(f"Hash verification for order {order}:")
-    logger.debug(f"  Hash string: terminal={HYP_TERMINAL_ID}, order={order}, amount={amount}, currency={currency}, ccode={ccode}, acode={acode}")
+    logger.debug(f"  Hash string components: terminal={HYP_TERMINAL_ID}, order={order}, amount={amount}, currency={currency}, ccode={ccode}, acode={acode}")
     logger.debug(f"  Expected hash: {expected_hash}")
     logger.debug(f"  Received hash: {received_hash}")
     

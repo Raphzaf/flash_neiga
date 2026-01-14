@@ -4,6 +4,11 @@ import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { CheckCircle, Home, DollarSign, Calendar, Package } from 'lucide-react';
 
+// Constants for polling configuration
+const MAX_POLLING_ATTEMPTS = 10;
+const POLLING_INTERVAL_MS = 2000;
+const AUTO_REDIRECT_DELAY_MS = 7000;
+
 function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -27,21 +32,21 @@ function PaymentSuccess() {
         const response = await axios.get(`/api/payments/hyp/transaction/${transactionId}`);
         
         // Check if callback has been processed (transaction completed)
-        if (response.data.status === 'completed' || attempt >= 10) {
+        if (response.data.status === 'completed' || attempt >= MAX_POLLING_ATTEMPTS) {
           setTransaction(response.data);
           setLoading(false);
         } else {
-          // Transaction still pending, retry after 2 seconds
+          // Transaction still pending, retry after polling interval
           setPollAttempt(attempt + 1);
-          setTimeout(() => fetchTransaction(attempt + 1), 2000);
+          setTimeout(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
         }
       } catch (err) {
         console.error('Error fetching transaction:', err);
         
         // Retry on error if not too many attempts
-        if (attempt < 10) {
+        if (attempt < MAX_POLLING_ATTEMPTS) {
           setPollAttempt(attempt + 1);
-          setTimeout(() => fetchTransaction(attempt + 1), 2000);
+          setTimeout(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
         } else {
           setError('Erreur lors de la récupération des détails de paiement');
           setLoading(false);
@@ -51,10 +56,10 @@ function PaymentSuccess() {
 
     fetchTransaction();
 
-    // Auto-redirect to training page after 7 seconds
+    // Auto-redirect to training page after configured delay
     const timer = setTimeout(() => {
       navigate('/training');
-    }, 7000);
+    }, AUTO_REDIRECT_DELAY_MS);
 
     return () => clearTimeout(timer);
   }, [transactionId, navigate]);
@@ -78,7 +83,7 @@ function PaymentSuccess() {
           <p className="text-slate-300">Vérification du paiement...</p>
           {pollAttempt > 0 && (
             <p className="text-slate-500 text-sm mt-2">
-              Tentative {pollAttempt + 1}/10
+              Tentative {pollAttempt + 1}/{MAX_POLLING_ATTEMPTS}
             </p>
           )}
         </div>
