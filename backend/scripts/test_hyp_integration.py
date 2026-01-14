@@ -41,8 +41,24 @@ def test_config():
     
     print(f"Terminal ID: {HYP_TERMINAL_ID}")
     print(f"User ID: {HYP_USER_ID}")
-    print(f"API Key: {'✓ Set' if HYP_API_KEY else '✗ Not Set'}")
+    
+    # Show API key preview instead of just "Set"
+    if HYP_API_KEY:
+        api_key_preview = HYP_API_KEY[:10] + "..." if len(HYP_API_KEY) > 10 else HYP_API_KEY
+        print(f"API Key: {api_key_preview} (length: {len(HYP_API_KEY)})")
+    else:
+        print(f"API Key: ✗ Not Set")
+    
     print(f"Backend URL: {BACKEND_URL}")
+    
+    # Display more config details
+    print(f"\nURL Configuration:")
+    success_url = os.environ.get("HYP_SUCCESS_URL", "https://app.flash-neiga.com/payment/success")
+    error_url = os.environ.get("HYP_ERROR_URL", "https://app.flash-neiga.com/payment/failure")
+    callback_url = os.environ.get("HYP_CALLBACK_URL", "http://localhost:8000/api/payments/hyp/callback")
+    print(f"  Success URL: {success_url}")
+    print(f"  Error URL: {error_url}")
+    print(f"  Callback URL: {callback_url}")
     
     if not HYP_API_KEY:
         print("\n⚠️  WARNING: HYP_API_KEY is not set!")
@@ -103,6 +119,9 @@ def test_get_plans():
                 print(f"     Amount: {plan_info.get('amount')} {plan_info.get('currency')}")
                 print(f"     Duration: {plan_info.get('duration_days')} days")
                 print(f"     Type: {plan_info.get('type')}")
+                # Check for is_extension flag
+                if plan_info.get('is_extension'):
+                    print(f"     Extension: Yes")
             
             return True
         else:
@@ -174,6 +193,16 @@ def test_get_transaction(transaction_id):
             print(f"   Amount: {data.get('amount')} {data.get('currency')}")
             print(f"   Created: {data.get('created_at')}")
             
+            # Show subscription details if available
+            if 'subscription' in data:
+                sub = data['subscription']
+                print(f"\n   Subscription:")
+                print(f"     ID: {sub.get('id')}")
+                print(f"     Plan: {sub.get('plan_name')} ({sub.get('plan_id')})")
+                print(f"     Status: {sub.get('status')}")
+                print(f"     Start: {sub.get('start_date')}")
+                print(f"     End: {sub.get('end_date')}")
+            
             return True
         else:
             print(f"\n✗ Get transaction failed: {response.status_code}")
@@ -224,6 +253,28 @@ def main():
     
     if passed == total:
         print("\n🎉 All tests passed!")
+        print("\n" + "=" * 60)
+        print("  Next Steps")
+        print("=" * 60)
+        print("\n1. Complete a test transaction:")
+        print("   - Open the payment URL in a browser")
+        print("   - Use HYP test credit card:")
+        print("     Card: 4580458045804580")
+        print("     CVV: 123")
+        print("     Expiry: Any future date")
+        print("\n2. Verify callback is received:")
+        print(f"   - Check logs at {BACKEND_URL}")
+        print("   - Callback should be sent to /api/payments/hyp/callback")
+        print("\n3. Check subscription creation:")
+        print("   - Transaction status should become 'completed'")
+        print("   - Subscription should be created with correct dates")
+        print("\n4. Test success page:")
+        print("   - Should redirect to success page")
+        print("   - Should display subscription details")
+        print("\n5. Production deployment:")
+        print("   - Set HYP_API_KEY in Render")
+        print("   - Update callback URL in HYP dashboard")
+        print("   - Verify production URLs are correct")
         return 0
     else:
         print(f"\n⚠️  {total - passed} test(s) failed")

@@ -339,6 +339,124 @@ class TestGetTransaction:
         assert data["plan_id"] == "code_14d"
         assert data["amount"] == 99
         assert data["status"] == "completed"
+    
+    def test_get_transaction_with_subscription(self, client, test_db):
+        """Test getting transaction details with subscription information"""
+        # Create test user
+        user = UserDB(**SAMPLE_USER)
+        test_db.add(user)
+        test_db.commit()
+        
+        # Create test transaction
+        transaction = TransactionDB(
+            user_id=user.id,
+            plan_id="code_14d",
+            amount=99,
+            currency="ILS",
+            status="completed",
+            completed_at=datetime.utcnow()
+        )
+        test_db.add(transaction)
+        test_db.commit()
+        
+        # Create associated subscription
+        subscription = SubscriptionDB(
+            user_id=user.id,
+            plan_id="code_14d",
+            start_date=datetime.utcnow(),
+            end_date=datetime.utcnow() + timedelta(days=14),
+            status="active",
+            transaction_id=transaction.id
+        )
+        test_db.add(subscription)
+        test_db.commit()
+        
+        # Get transaction
+        response = client.get(f"/api/payments/hyp/transaction/{transaction.id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == transaction.id
+        assert data["status"] == "completed"
+        
+        # Verify subscription details are included
+        assert "subscription" in data
+        sub_data = data["subscription"]
+        assert sub_data["id"] == subscription.id
+        assert sub_data["plan_id"] == "code_14d"
+        assert "plan_name" in sub_data
+        assert sub_data["status"] == "active"
+        assert "start_date" in sub_data
+        assert "end_date" in sub_data
+        # Verify dates are in ISO format
+        assert "T" in sub_data["start_date"]
+        assert "T" in sub_data["end_date"]
+
+
+class TestCallbackGetMethod:
+    """Test HYP callback via GET method"""
+    
+    def test_callback_get_method(self, client, test_db):
+        """Test callback via GET with query parameters"""
+        # Create test user
+        user = UserDB(**SAMPLE_USER)
+        test_db.add(user)
+        test_db.commit()
+        
+        # Create test transaction
+        transaction = TransactionDB(
+            user_id=user.id,
+            plan_id="code_14d",
+            amount=99,
+            currency="ILS",
+            status="pending"
+        )
+        test_db.add(transaction)
+        test_db.commit()
+        
+        # Send callback via GET with query parameters
+        response = client.get(
+            f"/api/payments/hyp/callback?Order={transaction.id}&CCode=0&Id=hyp-trans-456&Amount=9900"
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        
+        # Verify transaction was updated
+        test_db.refresh(transaction)
+        assert transaction.status == "completed"
+        assert transaction.hyp_transaction_id == "hyp-trans-456"
+    
+    def test_result_endpoint(self, client, test_db):
+        """Test alternative result endpoint"""
+        # Create test user
+        user = UserDB(**SAMPLE_USER)
+        test_db.add(user)
+        test_db.commit()
+        
+        # Create test transaction
+        transaction = TransactionDB(
+            user_id=user.id,
+            plan_id="code_14d",
+            amount=99,
+            currency="ILS",
+            status="pending"
+        )
+        test_db.add(transaction)
+        test_db.commit()
+        
+        # Send result via GET
+        response = client.get(
+            f"/api/payments/hyp/result?Order={transaction.id}&CCode=0&Id=hyp-trans-789&Amount=9900"
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        
+        # Verify transaction was updated
+        test_db.refresh(transaction)
+        assert transaction.status == "completed"
 
 
 class TestGetUserSubscriptions:

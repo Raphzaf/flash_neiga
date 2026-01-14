@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
-import { CheckCircle, Home } from 'lucide-react';
+import { CheckCircle, Home, DollarSign, Calendar, Package } from 'lucide-react';
+
+// Constants for polling configuration
+const MAX_POLLING_ATTEMPTS = 10;
+const POLLING_INTERVAL_MS = 2000;
+const AUTO_REDIRECT_DELAY_MS = 7000;
 
 function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -10,12 +15,13 @@ function PaymentSuccess() {
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
 
   const transactionId = searchParams.get('transaction_id');
 
   useEffect(() => {
-    // Fetch transaction details
-    const fetchTransaction = async () => {
+    // Fetch transaction details with polling
+    const fetchTransaction = async (attempt = 0) => {
       if (!transactionId) {
         setError('ID de transaction manquant');
         setLoading(false);
@@ -24,24 +30,50 @@ function PaymentSuccess() {
 
       try {
         const response = await axios.get(`/api/payments/hyp/transaction/${transactionId}`);
-        setTransaction(response.data);
-        setLoading(false);
+        
+        // Check if callback has been processed (transaction completed)
+        if (response.data.status === 'completed' || attempt >= MAX_POLLING_ATTEMPTS) {
+          setTransaction(response.data);
+          setLoading(false);
+        } else {
+          // Transaction still pending, retry after polling interval
+          setPollAttempt(attempt + 1);
+          setTimeout(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
+        }
       } catch (err) {
         console.error('Error fetching transaction:', err);
-        setError('Erreur lors de la récupération des détails de paiement');
-        setLoading(false);
+        
+        // Retry on error if not too many attempts
+        if (attempt < MAX_POLLING_ATTEMPTS) {
+          setPollAttempt(attempt + 1);
+          setTimeout(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
+        } else {
+          setError('Erreur lors de la récupération des détails de paiement');
+          setLoading(false);
+        }
       }
     };
 
     fetchTransaction();
 
-    // Auto-redirect to training page after 5 seconds
+    // Auto-redirect to training page after configured delay
     const timer = setTimeout(() => {
       navigate('/training');
-    }, 5000);
+    }, AUTO_REDIRECT_DELAY_MS);
 
     return () => clearTimeout(timer);
   }, [transactionId, navigate]);
+
+  // Format date in French format
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  };
 
   if (loading) {
     return (
@@ -49,6 +81,11 @@ function PaymentSuccess() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
           <p className="text-slate-300">Vérification du paiement...</p>
+          {pollAttempt > 0 && (
+            <p className="text-slate-500 text-sm mt-2">
+              Tentative {pollAttempt + 1}/{MAX_POLLING_ATTEMPTS}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -99,30 +136,66 @@ function PaymentSuccess() {
               Détails de la transaction
             </h3>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Plan :</span>
-                <span className="font-medium text-white">
-                  {transaction.plan_id}
+              {/* Amount with icon */}
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Montant :
                 </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Montant :</span>
                 <span className="font-medium text-white">
                   {transaction.amount}₪
                 </span>
               </div>
+              
+              {/* Subscription info with icon */}
+              {transaction.subscription ? (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 flex items-center gap-2">
+                      <Package className="h-4 w-4" />
+                      Plan :
+                    </span>
+                    <span className="font-medium text-white">
+                      {transaction.subscription.plan_name}
+                    </span>
+                  </div>
+                  
+                  {/* End date with icon */}
+                  {transaction.subscription.end_date && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Expire le :
+                      </span>
+                      <span className="font-medium text-emerald-400">
+                        {formatDate(transaction.subscription.end_date)}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Statut :</span>
+                    <span className="font-medium text-emerald-500">
+                      {transaction.subscription.status}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Plan :</span>
+                  <span className="font-medium text-white">
+                    {transaction.plan_id}
+                  </span>
+                </div>
+              )}
+              
               <div className="flex justify-between">
                 <span className="text-slate-400">Date :</span>
                 <span className="font-medium text-white">
-                  {new Date(transaction.created_at || Date.now()).toLocaleDateString()}
+                  {formatDate(transaction.created_at || new Date().toISOString())}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Statut :</span>
-                <span className="font-medium text-emerald-500">
-                  {transaction.status}
-                </span>
-              </div>
+              
               <div className="flex justify-between">
                 <span className="text-slate-400">ID :</span>
                 <span className="font-mono text-xs text-white">
@@ -151,7 +224,7 @@ function PaymentSuccess() {
           </button>
           
           <p className="text-sm text-slate-500">
-            Redirection automatique dans 5 secondes...
+            Redirection automatique dans 7 secondes...
           </p>
         </div>
 

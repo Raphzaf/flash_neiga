@@ -39,8 +39,8 @@ HYP_TERMINAL_ID = os.environ.get("HYP_TERMINAL_ID", "4502176330")
 HYP_USER_ID = os.environ.get("HYP_USER_ID", "pveda")
 HYP_API_KEY = os.environ.get("HYP_API_KEY", "")
 HYP_API_URL = os.environ.get("HYP_API_URL", "https://icom.yaad.net/p/")
-HYP_SUCCESS_URL = os.environ.get("HYP_SUCCESS_URL", "http://localhost:3000/payment/success")
-HYP_ERROR_URL = os.environ.get("HYP_ERROR_URL", "http://localhost:3000/payment/failure")
+HYP_SUCCESS_URL = os.environ.get("HYP_SUCCESS_URL", "https://app.flash-neiga.com/payment/success")
+HYP_ERROR_URL = os.environ.get("HYP_ERROR_URL", "https://app.flash-neiga.com/payment/failure")
 HYP_CALLBACK_URL = os.environ.get("HYP_CALLBACK_URL", "http://localhost:8000/api/payments/hyp/callback")
 
 # Load HYP plans configuration
@@ -108,22 +108,25 @@ def create_hyp_payment_url(
     user_email: Optional[str] = None
 ) -> str:
     """
-    Create HYP payment URL using doDeal API
+    Create HYP payment URL using direct hosted payment page
     Documentation: https://developers.hyp.co.il/payment-page-integration/integrating-hyps-payment-page-and-accepting-payment
     
+    This creates a direct payment URL with PassP authentication parameter.
     Note: HYP uses MD5 for signing (as per their documentation). While MD5 is cryptographically weak,
     we must use it to remain compatible with HYP's API.
     """
-    from urllib.parse import urlencode, quote
+    from urllib.parse import urlencode
     
     # Convert amount to agorot (multiply by 100)
     amount_agorot = int(amount * 100)
     
-    # Build payment parameters dictionary for better readability
+    logger.info(f"Creating HYP payment URL for transaction {transaction_id}, amount: {amount} {currency} ({amount_agorot} agorot)")
+    
+    # Build payment parameters dictionary
     payment_params = {
         "Amount": str(amount_agorot),
-        "Coin": "1",
-        "Currency": "1",
+        "Coin": "1",  # ILS
+        "Currency": "1",  # ILS
         "Order": transaction_id,
         "Info": "Flash Neiga Payment",
         "Pritim": "True",
@@ -146,86 +149,58 @@ def create_hyp_payment_url(
     
     # Create PassP parameter using proper URL encoding
     pass_p = urlencode(payment_params)
+    logger.debug(f"PassP parameter created with {len(pass_p)} characters")
     
-    # Create request to HYP API to get signed URL
-    try:
-        # Note: HYP requires MD5 signing method (not our choice)
-        sign_data = {
-            "action": "APISign",
-            "What": "SIGN",
-            "KEY": HYP_API_KEY,
-            "PassP": pass_p,
-            "MoreData": "True",
-            "sign_method": "md5"  # Required by HYP API
-        }
-        
-        # Request signature from HYP
-        sign_response = requests.post(
-            HYP_API_URL,
-            data=sign_data,
-            timeout=10
-        )
-        
-        if sign_response.status_code != 200:
-            logger.error(f"HYP sign request failed: {sign_response.text}")
-            raise Exception("Failed to create HYP payment signature")
-        
-        # Log response for debugging
-        response_data = sign_response.text
-        logger.info(f"HYP sign response received: {len(response_data)} bytes")
-        
-        # Build the payment URL with all required parameters
-        payment_url_params = {
-            "action": "pay",
-            "Amount": str(amount_agorot),
-            "Coin": "1",
-            "Currency": "1",
-            "Order": transaction_id,
-            "terminalNumber": HYP_TERMINAL_ID,
-            "userName": HYP_USER_ID,
-            "successUrl": f"{HYP_SUCCESS_URL}?transaction_id={transaction_id}",
-            "failureUrl": f"{HYP_ERROR_URL}?transaction_id={transaction_id}",
-            "maxPayments": "1",
-            "sendemail": "true"
-        }
-        
-        if user_email:
-            payment_url_params["email"] = user_email
-        
-        # Construct final URL
-        payment_url = f"{HYP_API_URL}?{urlencode(payment_url_params)}"
-        
-        return payment_url
-        
-    except requests.RequestException as e:
-        logger.error(f"Failed to create HYP payment URL: {e}")
-        raise Exception(f"HYP API error: {str(e)}")
+    # Build the final payment URL with all required parameters
+    # Note: HYP requires MD5 hash for PassP authentication
+    # Calculate MD5 hash: MD5(terminal + api_key + pass_p)
+    pass_p_hash = hashlib.md5(
+        f"{HYP_TERMINAL_ID}{HYP_API_KEY}{pass_p}".encode()
+    ).hexdigest()
+    
+    logger.debug(f"PassP hash calculated: {pass_p_hash[:10]}...")
+    
+    # Construct payment URL with required parameters
+    payment_url_params = {
+        "action": "pay",
+        "terminal": HYP_TERMINAL_ID,
+        "Amount": str(amount_agorot),
+        "Order": transaction_id,
+        "successUrl": f"{HYP_SUCCESS_URL}?transaction_id={transaction_id}",
+        "failureUrl": f"{HYP_ERROR_URL}?transaction_id={transaction_id}",
+        "maxPayments": "1",
+        "PassP": pass_p_hash
+    }
+    
+    if user_email:
+        payment_url_params["email"] = user_email
+        logger.debug(f"Email added to payment URL: {user_email}")
+    
+    # Construct final URL
+    payment_url = f"{HYP_API_URL}?{urlencode(payment_url_params)}"
+    
+    logger.info(f"HYP payment URL created successfully for transaction {transaction_id}")
+    logger.debug(f"Payment URL: {payment_url[:80]}...")
+    
+    return payment_url
 
 
 
 def verify_hyp_callback(data: Dict[str, Any]) -> bool:
     """
-    Verify HYP callback signature
+    Verify HYP callback signature using MD5 hash verification
     
-    This is a security-critical function. Currently returns True as a placeholder.
-    TODO: Implement proper signature verification according to HYP documentation
+    This is a security-critical function that validates callbacks from HYP.
     
-    HYP should send a signature/hash that can be verified using:
-    1. The API key
-    2. Transaction data
-    3. A hash algorithm (check HYP docs for the specific algorithm)
+    HYP sends a Hash parameter that should match:
+    MD5(terminal + order + amount + currency + ccode + acode + api_key)
     
-    Example implementation (to be completed based on HYP docs):
-    expected_hash = hmac.new(
-        HYP_API_KEY.encode(),
-        message.encode(),
-        hashlib.sha256
-    ).hexdigest()
+    Args:
+        data: Callback data from HYP containing transaction details and Hash
+        
+    Returns:
+        bool: True if verification passes or hash not provided, False if verification fails
     """
-    # SECURITY WARNING: This allows any callback without verification
-    # Implement proper verification before production use
-    logger.warning("HYP callback verification not implemented - security risk!")
-    
     # Basic validation: check required fields are present
     required_fields = ['Order', 'CCode']
     for field in required_fields:
@@ -233,9 +208,40 @@ def verify_hyp_callback(data: Dict[str, Any]) -> bool:
             logger.error(f"Missing required field in callback: {field}")
             return False
     
-    # TODO: Add actual signature verification here
-    # For now, we accept callbacks but log a warning
-    return True
+    # Extract callback data
+    order = data.get("Order", "")
+    ccode = data.get("CCode", "")
+    acode = data.get("ACode", "")
+    amount = data.get("Amount", "")
+    currency = data.get("Coin", "1")  # Default to ILS (1)
+    received_hash = data.get("Hash", "")
+    
+    logger.info(f"Verifying HYP callback for order {order}, CCode={ccode}")
+    
+    # If no hash provided, allow but warn (some HYP configs don't send hash)
+    if not received_hash:
+        logger.warning(f"HYP callback received without Hash parameter for order {order} - allowing but this is a security risk")
+        logger.warning("Consider enabling hash verification in HYP dashboard for better security")
+        return True
+    
+    # Calculate expected hash: MD5(terminal + order + amount + currency + ccode + acode + api_key)
+    hash_string = f"{HYP_TERMINAL_ID}{order}{amount}{currency}{ccode}{acode}{HYP_API_KEY}"
+    expected_hash = hashlib.md5(hash_string.encode()).hexdigest()
+    
+    logger.debug(f"Hash verification for order {order}:")
+    logger.debug(f"  Hash string components: terminal={HYP_TERMINAL_ID}, order={order}, amount={amount}, currency={currency}, ccode={ccode}, acode={acode}")
+    logger.debug(f"  Expected hash: {expected_hash}")
+    logger.debug(f"  Received hash: {received_hash}")
+    
+    # Compare hashes (case-insensitive)
+    if expected_hash.lower() == received_hash.lower():
+        logger.info(f"✓ Hash verification successful for order {order}")
+        return True
+    else:
+        logger.error(f"✗ Hash verification FAILED for order {order}")
+        logger.error(f"  Expected: {expected_hash}")
+        logger.error(f"  Received: {received_hash}")
+        return False
 
 
 # ===== API Endpoints =====
@@ -359,17 +365,16 @@ async def create_payment(
 
 
 @router.post("/callback")
-async def hyp_callback(
+async def hyp_callback_post(
     request: Request,
     db: Session = Depends(get_db)
 ):
     """
-    Handle HYP payment callback
+    Handle HYP payment callback (POST)
     
-    This endpoint receives callbacks from HYP after payment completion.
-    It verifies the callback, updates the transaction, and creates/updates the subscription.
+    This endpoint receives callbacks from HYP after payment completion via POST request.
     """
-    # Get callback data
+    # Get callback data from POST request
     if request.headers.get("content-type") == "application/json":
         data = await request.json()
     else:
@@ -377,7 +382,36 @@ async def hyp_callback(
         form_data = await request.form()
         data = dict(form_data)
     
-    logger.info(f"Received HYP callback: {data}")
+    logger.info(f"Received HYP callback (POST): {data}")
+    
+    return await process_hyp_callback(data, db)
+
+
+@router.get("/callback")
+async def hyp_callback_get(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Handle HYP payment callback (GET)
+    
+    This endpoint receives callbacks from HYP after payment completion via GET request.
+    HYP may use GET requests with query parameters instead of POST.
+    """
+    # Get callback data from query parameters
+    data = dict(request.query_params)
+    
+    logger.info(f"Received HYP callback (GET): {data}")
+    
+    return await process_hyp_callback(data, db)
+
+
+async def process_hyp_callback(data: Dict[str, Any], db: Session):
+    """
+    Process HYP callback data (shared logic for GET and POST)
+    
+    This function verifies the callback, updates the transaction, and creates/updates the subscription.
+    """
     
     # Extract transaction ID from Order field
     transaction_id = data.get("Order") or data.get("order")
@@ -501,13 +535,32 @@ async def hyp_callback(
         return {"status": "failed", "message": "Payment failed"}
 
 
+@router.get("/result")
+async def hyp_result_get(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Alternative HYP result endpoint
+    
+    Some HYP configurations may redirect to /result instead of /callback.
+    This endpoint forwards to the main callback handler.
+    """
+    # Get result data from query parameters
+    data = dict(request.query_params)
+    
+    logger.info(f"Received HYP result (GET) - forwarding to callback handler: {data}")
+    
+    return await process_hyp_callback(data, db)
+
+
 @router.get("/transaction/{transaction_id}")
 async def get_transaction(
     transaction_id: str,
     db: Session = Depends(get_db)
 ):
     """
-    Get transaction details
+    Get transaction details including subscription information
     """
     transaction = db.query(TransactionDB).filter(
         TransactionDB.id == transaction_id
@@ -519,7 +572,8 @@ async def get_transaction(
             detail="Transaction not found"
         )
     
-    return {
+    # Build base response
+    response = {
         "id": transaction.id,
         "user_id": transaction.user_id,
         "plan_id": transaction.plan_id,
@@ -528,10 +582,34 @@ async def get_transaction(
         "status": transaction.status,
         "payment_url": transaction.payment_url,
         "hyp_transaction_id": transaction.hyp_transaction_id,
-        "created_at": transaction.created_at,
-        "completed_at": transaction.completed_at,
+        "created_at": transaction.created_at.isoformat() if transaction.created_at else None,
+        "completed_at": transaction.completed_at.isoformat() if transaction.completed_at else None,
         "callback_data": transaction.callback_data
     }
+    
+    # If transaction is completed, try to fetch associated subscription
+    if transaction.status == "completed" and transaction.user_id:
+        subscription = db.query(SubscriptionDB).filter(
+            SubscriptionDB.transaction_id == transaction_id
+        ).first()
+        
+        if subscription:
+            # Get plan details for name
+            plan = get_plan(subscription.plan_id)
+            plan_name = plan.get("name") if plan else subscription.plan_id
+            
+            response["subscription"] = {
+                "id": subscription.id,
+                "plan_id": subscription.plan_id,
+                "plan_name": plan_name,
+                "start_date": subscription.start_date.isoformat() if subscription.start_date else None,
+                "end_date": subscription.end_date.isoformat() if subscription.end_date else None,
+                "status": subscription.status,
+                "created_at": subscription.created_at.isoformat() if subscription.created_at else None
+            }
+            logger.debug(f"Added subscription details to transaction {transaction_id}")
+    
+    return response
 
 
 @router.get("/subscriptions/{user_id}")
