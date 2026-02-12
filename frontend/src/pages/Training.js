@@ -4,8 +4,10 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { CheckCircle, XCircle, Info, ArrowRight } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { CheckCircle, XCircle, Info, ArrowRight, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
 
 export default function Training() {
     const [categories, setCategories] = useState(['all']);
@@ -16,6 +18,7 @@ export default function Training() {
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [feedback, setFeedback] = useState(null); // { is_correct, explanation, correct_option_id }
     const [selectedOption, setSelectedOption] = useState(null);
+    const [selectedCourse, setSelectedCourse] = useState(null);
 
     const fetchQuestions = async () => {
         setLoading(true);
@@ -79,6 +82,15 @@ export default function Training() {
             // Restart or fetch more
             toast.info("Série terminée ! On recommence.");
             fetchQuestions();
+        }
+    };
+
+    const handleCourseClick = async (courseId) => {
+        try {
+            const res = await axios.get(`/api/courses/${courseId}`);
+            setSelectedCourse(res.data);
+        } catch (e) {
+            toast.error("Cours introuvable");
         }
     };
 
@@ -200,9 +212,12 @@ export default function Training() {
                             }`}>
                                 <div className="flex items-start gap-3">
                                     <Info className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="font-bold mb-1">{feedback.is_correct ? 'Correct !' : 'Incorrect'}</div>
-                                        <p className="text-sm opacity-90">{feedback.explanation}</p>
+                                        <ExplanationWithLinks 
+                                            explanation={feedback.explanation} 
+                                            onCourseClick={handleCourseClick}
+                                        />
                                     </div>
                                 </div>
                                 <Button onClick={nextQuestion} className="mt-4 w-full bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600">
@@ -213,6 +228,51 @@ export default function Training() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Dialog popup pour afficher le cours */}
+            {selectedCourse && (
+                <Dialog open={!!selectedCourse} onOpenChange={() => setSelectedCourse(null)}>
+                    <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <BookOpen className="h-5 w-5" />
+                                {selectedCourse.title}
+                            </DialogTitle>
+                        </DialogHeader>
+                        
+                        <div className="space-y-4">
+                            {selectedCourse.video_url && (
+                                <div className="aspect-video">
+                                    <iframe 
+                                        src={selectedCourse.video_url} 
+                                        className="w-full h-full rounded-lg" 
+                                        allowFullScreen
+                                        title={selectedCourse.title}
+                                    />
+                                </div>
+                            )}
+                            
+                            {selectedCourse.content && (
+                                <div className="prose dark:prose-invert max-w-none">
+                                    <div dangerouslySetInnerHTML={{ __html: selectedCourse.content }} />
+                                </div>
+                            )}
+
+                            {selectedCourse.pdf_url && (
+                                <a 
+                                    href={selectedCourse.pdf_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-blue-600 hover:underline"
+                                >
+                                    <BookOpen className="h-4 w-4" />
+                                    Télécharger le support PDF
+                                </a>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }

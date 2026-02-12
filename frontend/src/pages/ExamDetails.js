@@ -3,12 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { AlertTriangle, CheckCircle, ArrowLeft, BookOpen } from 'lucide-react';
+import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
+import { toast } from 'sonner';
 
 export default function ExamDetails() {
   const { id } = useParams();
   const [details, setDetails] = useState(null);
   const [filter, setFilter] = useState('all'); // all | correct | incorrect
+  const [selectedCourse, setSelectedCourse] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,6 +28,15 @@ export default function ExamDetails() {
   }, [id, navigate]);
 
   if (!details) return <div className="p-6">Chargement...</div>;
+
+  const handleCourseClick = async (courseId) => {
+    try {
+      const res = await axios.get(`/api/courses/${courseId}`);
+      setSelectedCourse(res.data);
+    } catch (e) {
+      toast.error("Cours introuvable");
+    }
+  };
 
   const total = details.total_questions || (details.questions?.length || 0);
   const correct = details.correct_answers ?? (details.questions?.filter(q => q.is_correct).length || 0);
@@ -109,7 +122,10 @@ export default function ExamDetails() {
                         {q.explanation && (
                           <div className="mt-3 p-3 rounded-lg bg-white/70 dark:bg-slate-700/70 text-slate-800 dark:text-slate-200">
                             <div className="font-semibold mb-1 text-slate-900 dark:text-white">Explication</div>
-                            <div className="opacity-90">{q.explanation}</div>
+                            <ExplanationWithLinks 
+                              explanation={q.explanation} 
+                              onCourseClick={handleCourseClick}
+                            />
                           </div>
                         )}
                       </div>
@@ -123,6 +139,51 @@ export default function ExamDetails() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog popup pour afficher le cours */}
+      {selectedCourse && (
+        <Dialog open={!!selectedCourse} onOpenChange={() => setSelectedCourse(null)}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5" />
+                {selectedCourse.title}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedCourse.video_url && (
+                <div className="aspect-video">
+                  <iframe 
+                    src={selectedCourse.video_url} 
+                    className="w-full h-full rounded-lg" 
+                    allowFullScreen
+                    title={selectedCourse.title}
+                  />
+                </div>
+              )}
+              
+              {selectedCourse.content && (
+                <div className="prose dark:prose-invert max-w-none">
+                  <div dangerouslySetInnerHTML={{ __html: selectedCourse.content }} />
+                </div>
+              )}
+
+              {selectedCourse.pdf_url && (
+                <a 
+                  href={selectedCourse.pdf_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-blue-600 hover:underline"
+                >
+                  <BookOpen className="h-4 w-4" />
+                  Télécharger le support PDF
+                </a>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

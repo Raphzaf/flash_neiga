@@ -53,11 +53,27 @@ export default function Admin() {
     const [manageSignsOffset, setManageSignsOffset] = useState(0);
     const [manageSignsHasMore, setManageSignsHasMore] = useState(false);
 
+    // Manage courses state
+    const [courses, setCourses] = useState([]);
+    const [coursesLoading, setCoursesLoading] = useState(false);
+    const [editingCourse, setEditingCourse] = useState(null);
+    const [courseForm, setCourseForm] = useState({
+        title: '',
+        description: '',
+        content: '',
+        order: 0,
+        video_url: '',
+        pdf_url: '',
+        image_url: '',
+        category: ''
+    });
+
     // Fetch stats on component mount
     useEffect(() => {
         fetchStats();
         fetchManageQuestions({ reset: true });
         fetchManageSigns({ reset: true });
+        fetchCourses();
     }, []);
 
     const fetchStats = async () => {
@@ -260,12 +276,95 @@ export default function Admin() {
         }
     };
 
+    // Course management functions
+    const fetchCourses = async () => {
+        setCoursesLoading(true);
+        try {
+            const res = await axios.get('/api/courses');
+            setCourses(res.data);
+        } catch (error) {
+            toast.error("Erreur lors du chargement des cours");
+        } finally {
+            setCoursesLoading(false);
+        }
+    };
+
+    const handleCourseFormChange = (field, value) => {
+        setCourseForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const saveCourse = async (e) => {
+        e.preventDefault();
+        try {
+            if (editingCourse) {
+                await axios.patch(`/api/courses/${editingCourse.id}`, courseForm);
+                toast.success("Cours mis à jour !");
+            } else {
+                await axios.post('/api/courses', courseForm);
+                toast.success("Cours créé !");
+            }
+            setCourseForm({
+                title: '',
+                description: '',
+                content: '',
+                order: 0,
+                video_url: '',
+                pdf_url: '',
+                image_url: '',
+                category: ''
+            });
+            setEditingCourse(null);
+            fetchCourses();
+        } catch (error) {
+            toast.error("Erreur lors de la sauvegarde du cours");
+        }
+    };
+
+    const editCourse = (course) => {
+        setEditingCourse(course);
+        setCourseForm({
+            title: course.title || '',
+            description: course.description || '',
+            content: course.content || '',
+            order: course.order || 0,
+            video_url: course.video_url || '',
+            pdf_url: course.pdf_url || '',
+            image_url: course.image_url || '',
+            category: course.category || ''
+        });
+    };
+
+    const deleteCourse = async (courseId) => {
+        if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce cours ?')) return;
+        try {
+            await axios.delete(`/api/courses/${courseId}`);
+            toast.success("Cours supprimé !");
+            fetchCourses();
+        } catch (error) {
+            toast.error("Erreur lors de la suppression du cours");
+        }
+    };
+
+    const cancelEdit = () => {
+        setEditingCourse(null);
+        setCourseForm({
+            title: '',
+            description: '',
+            content: '',
+            order: 0,
+            video_url: '',
+            pdf_url: '',
+            image_url: '',
+            category: ''
+        });
+    };
+
     return (
         <div className="max-w-4xl mx-auto p-6 min-h-screen">
             <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white">Administration (CMS)</h1>
 
             <Tabs defaultValue="question">
-                <TabsList className="grid w-full grid-cols-5 mb-8">
+                <TabsList className="grid w-full grid-cols-6 mb-8">
                     <TabsTrigger value="question">
                         <span className="flex items-center gap-2">Ajouter Question</span>
                     </TabsTrigger>
@@ -277,6 +376,9 @@ export default function Admin() {
                     </TabsTrigger>
                     <TabsTrigger value="manageSigns">
                         <span className="flex items-center gap-2">Gérer Panneaux <Badge variant="outline">{filteredManageSigns.length}</Badge></span>
+                    </TabsTrigger>
+                    <TabsTrigger value="manageCourses">
+                        <span className="flex items-center gap-2">Gérer Cours</span>
                     </TabsTrigger>
                     <TabsTrigger value="sign">
                         <span className="flex items-center gap-2">Ajouter Panneau</span>
@@ -568,6 +670,151 @@ export default function Admin() {
 
                                 <Button type="submit" className="w-full">Enregistrer la question</Button>
                             </form>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="manageCourses">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Gérer les Cours</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Course Form */}
+                            <form onSubmit={saveCourse} className="space-y-4 p-4 border rounded-lg bg-slate-50 dark:bg-slate-800">
+                                <h3 className="font-bold text-lg">{editingCourse ? 'Modifier le cours' : 'Nouveau cours'}</h3>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">Titre *</label>
+                                        <Input 
+                                            value={courseForm.title} 
+                                            onChange={e => handleCourseFormChange('title', e.target.value)} 
+                                            required 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Ordre</label>
+                                        <Input 
+                                            type="number"
+                                            value={courseForm.order} 
+                                            onChange={e => handleCourseFormChange('order', parseInt(e.target.value) || 0)} 
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-medium">Description</label>
+                                    <Textarea 
+                                        value={courseForm.description} 
+                                        onChange={e => handleCourseFormChange('description', e.target.value)}
+                                        rows={2}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-medium">Contenu (HTML)</label>
+                                    <Textarea 
+                                        value={courseForm.content} 
+                                        onChange={e => handleCourseFormChange('content', e.target.value)}
+                                        rows={4}
+                                        placeholder="<p>Contenu du cours en HTML...</p>"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">URL Vidéo</label>
+                                        <Input 
+                                            value={courseForm.video_url} 
+                                            onChange={e => handleCourseFormChange('video_url', e.target.value)}
+                                            placeholder="https://youtube.com/embed/..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">URL PDF</label>
+                                        <Input 
+                                            value={courseForm.pdf_url} 
+                                            onChange={e => handleCourseFormChange('pdf_url', e.target.value)}
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">URL Image</label>
+                                        <Input 
+                                            value={courseForm.image_url} 
+                                            onChange={e => handleCourseFormChange('image_url', e.target.value)}
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Catégorie</label>
+                                        <Input 
+                                            value={courseForm.category} 
+                                            onChange={e => handleCourseFormChange('category', e.target.value)}
+                                            placeholder="Priorités, Signalisation..."
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <Button type="submit" className="flex-1">
+                                        <Save className="mr-2 h-4 w-4" />
+                                        {editingCourse ? 'Mettre à jour' : 'Créer le cours'}
+                                    </Button>
+                                    {editingCourse && (
+                                        <Button type="button" variant="outline" onClick={cancelEdit}>
+                                            Annuler
+                                        </Button>
+                                    )}
+                                </div>
+                            </form>
+
+                            {/* Courses List */}
+                            <div className="space-y-3">
+                                <h3 className="font-bold text-lg">Cours existants ({courses.length})</h3>
+                                {coursesLoading ? (
+                                    <div>Chargement...</div>
+                                ) : courses.length === 0 ? (
+                                    <div className="text-center p-8 text-slate-600 dark:text-slate-400">Aucun cours disponible</div>
+                                ) : (
+                                    courses.map(course => (
+                                        <div 
+                                            key={course.id} 
+                                            className="p-4 border rounded-lg bg-white dark:bg-slate-800 flex justify-between items-start"
+                                        >
+                                            <div className="flex-1">
+                                                <div className="font-bold">{course.title}</div>
+                                                <div className="text-sm text-slate-600 dark:text-slate-400">
+                                                    Ordre: {course.order} | Catégorie: {course.category || '—'}
+                                                </div>
+                                                {course.description && (
+                                                    <div className="text-sm mt-1">{course.description}</div>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="outline" 
+                                                    onClick={() => editCourse(course)}
+                                                >
+                                                    Modifier
+                                                </Button>
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="destructive" 
+                                                    onClick={() => deleteCourse(course.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
