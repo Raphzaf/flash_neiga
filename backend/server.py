@@ -25,21 +25,23 @@ except ImportError:
     from backend.database import engine, SessionLocal, Base, get_db, ensure_schema_updated
 try:
     from models import (
-        UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
+        UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
-        TokenResponse
+        TokenResponse,
+        Course, CourseCreate
     )
 except ImportError:
     from backend.models import (
-        UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB,
+        UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
-        TokenResponse
+        TokenResponse,
+        Course, CourseCreate
     )
 try:
     from routes.verifone_payments import router as verifone_router
@@ -1395,6 +1397,188 @@ async def get_stats_details(
     return {
         "exams": exams_detail
     }
+
+
+# ===== Courses Endpoints =====
+@app.get("/api/courses", response_model=List[Course])
+async def get_courses(db: Session = Depends(get_db)):
+    """Get all courses, sorted by order"""
+    try:
+        courses = db.query(CourseDB).order_by(CourseDB.order).all()
+        return [
+            Course(
+                id=course.id,
+                title=course.title,
+                description=course.description,
+                content=course.content,
+                order=course.order,
+                video_url=course.video_url,
+                pdf_url=course.pdf_url,
+                image_url=course.image_url,
+                category=course.category,
+                created_at=course.created_at,
+                updated_at=course.updated_at
+            )
+            for course in courses
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/courses/{course_id}", response_model=Course)
+async def get_course(course_id: str, db: Session = Depends(get_db)):
+    """Get a specific course by ID"""
+    course = db.query(CourseDB).filter(CourseDB.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    return Course(
+        id=course.id,
+        title=course.title,
+        description=course.description,
+        content=course.content,
+        order=course.order,
+        video_url=course.video_url,
+        pdf_url=course.pdf_url,
+        image_url=course.image_url,
+        category=course.category,
+        created_at=course.created_at,
+        updated_at=course.updated_at
+    )
+
+
+@app.post("/api/courses", response_model=Course)
+async def create_course(
+    course_data: CourseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new course (admin only)"""
+    try:
+        course = CourseDB(
+            id=str(uuid.uuid4()),
+            title=course_data.title,
+            description=course_data.description,
+            content=course_data.content,
+            order=course_data.order or 0,
+            video_url=course_data.video_url,
+            pdf_url=course_data.pdf_url,
+            image_url=course_data.image_url,
+            category=course_data.category
+        )
+        db.add(course)
+        db.commit()
+        db.refresh(course)
+        
+        return Course(
+            id=course.id,
+            title=course.title,
+            description=course.description,
+            content=course.content,
+            order=course.order,
+            video_url=course.video_url,
+            pdf_url=course.pdf_url,
+            image_url=course.image_url,
+            category=course.category,
+            created_at=course.created_at,
+            updated_at=course.updated_at
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/courses/{course_id}", response_model=Course)
+async def update_course(
+    course_id: str,
+    course_data: CourseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a course (admin only)"""
+    course = db.query(CourseDB).filter(CourseDB.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    try:
+        course.title = course_data.title
+        course.description = course_data.description
+        course.content = course_data.content
+        course.order = course_data.order or 0
+        course.video_url = course_data.video_url
+        course.pdf_url = course_data.pdf_url
+        course.image_url = course_data.image_url
+        course.category = course_data.category
+        course.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(course)
+        
+        return Course(
+            id=course.id,
+            title=course.title,
+            description=course.description,
+            content=course.content,
+            order=course.order,
+            video_url=course.video_url,
+            pdf_url=course.pdf_url,
+            image_url=course.image_url,
+            category=course.category,
+            created_at=course.created_at,
+            updated_at=course.updated_at
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/courses/{course_id}")
+async def delete_course(
+    course_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a course (admin only)"""
+    course = db.query(CourseDB).filter(CourseDB.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    try:
+        db.delete(course)
+        db.commit()
+        return {"status": "ok", "message": "Course deleted"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/courses/{course_id}/order")
+async def update_course_order(
+    course_id: str,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update course order (admin only)"""
+    course = db.query(CourseDB).filter(CourseDB.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    try:
+        new_order = payload.get("order")
+        if new_order is None:
+            raise HTTPException(status_code=400, detail="Order value required")
+        
+        course.order = new_order
+        course.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return {"status": "ok", "order": course.order}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

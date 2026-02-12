@@ -130,6 +130,23 @@ class SubscriptionDB(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CourseDB(Base):
+    """Cours théoriques avec supports vidéo et PDF"""
+    __tablename__ = "courses"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    content = Column(Text, nullable=True)
+    order = Column(Integer, default=0)
+    video_url = Column(String, nullable=True)
+    pdf_url = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ===== Pydantic Models =====
 class QuestionOption(BaseModel):
     id: str
@@ -283,4 +300,23 @@ class SubscriptionCreate(BaseModel):
     status: str
     next_renewal: Optional[datetime] = None
     transaction_id: Optional[str] = None
+
+
+class CourseCreate(BaseModel):
+    """Modèle pour créer un cours"""
+    title: str
+    description: Optional[str] = None
+    content: Optional[str] = None
+    order: Optional[int] = 0
+    video_url: Optional[str] = None
+    pdf_url: Optional[str] = None
+    image_url: Optional[str] = None
+    category: Optional[str] = None
+
+
+class Course(CourseCreate):
+    """Modèle Pydantic pour les cours"""
+    id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
