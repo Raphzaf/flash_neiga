@@ -31,7 +31,7 @@ try:
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
         TokenResponse,
-        Course, CourseCreate
+        Course, CourseCreate, CourseOrderUpdate
     )
 except ImportError:
     from backend.models import (
@@ -41,7 +41,7 @@ except ImportError:
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
         TokenResponse,
-        Course, CourseCreate
+        Course, CourseCreate, CourseOrderUpdate
     )
 try:
     from routes.verifone_payments import router as verifone_router
@@ -1555,7 +1555,7 @@ async def delete_course(
 @app.patch("/api/courses/{course_id}/order")
 async def update_course_order(
     course_id: str,
-    payload: dict,
+    order_update: CourseOrderUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1565,17 +1565,11 @@ async def update_course_order(
         raise HTTPException(status_code=404, detail="Course not found")
     
     try:
-        new_order = payload.get("order")
-        if new_order is None:
-            raise HTTPException(status_code=400, detail="Order value required")
-        
-        course.order = new_order
+        course.order = order_update.order
         course.updated_at = datetime.utcnow()
         db.commit()
         
         return {"status": "ok", "order": course.order}
-    except HTTPException:
-        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

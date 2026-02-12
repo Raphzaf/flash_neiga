@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { AlertTriangle, CheckCircle, ArrowLeft, BookOpen } from 'lucide-react';
 import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
 import { toast } from 'sonner';
+import { sanitizeHtml, sanitizeVideoUrl } from '../lib/sanitize';
 
 export default function ExamDetails() {
   const { id } = useParams();
@@ -152,10 +153,10 @@ export default function ExamDetails() {
             </DialogHeader>
             
             <div className="space-y-4">
-              {selectedCourse.video_url && (
+              {selectedCourse.video_url && sanitizeVideoUrl(selectedCourse.video_url) && (
                 <div className="aspect-video">
                   <iframe 
-                    src={selectedCourse.video_url} 
+                    src={sanitizeVideoUrl(selectedCourse.video_url)} 
                     className="w-full h-full rounded-lg" 
                     allowFullScreen
                     title={selectedCourse.title}
@@ -165,7 +166,7 @@ export default function ExamDetails() {
               
               {selectedCourse.content && (
                 <div className="prose dark:prose-invert max-w-none">
-                  <div dangerouslySetInnerHTML={{ __html: selectedCourse.content }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedCourse.content) }} />
                 </div>
               )}
 

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { BookOpen, Video, FileText, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
+import { sanitizeHtml, sanitizeVideoUrl } from '../lib/sanitize';
 
 export default function Courses() {
     const [courses, setCourses] = useState([]);
@@ -129,10 +130,10 @@ export default function Courses() {
                                 </p>
                             )}
 
-                            {selectedCourse.video_url && (
+                            {selectedCourse.video_url && sanitizeVideoUrl(selectedCourse.video_url) && (
                                 <div className="aspect-video">
                                     <iframe
-                                        src={selectedCourse.video_url}
+                                        src={sanitizeVideoUrl(selectedCourse.video_url)}
                                         className="w-full h-full rounded-lg border border-slate-200 dark:border-slate-700"
                                         allowFullScreen
                                         title={selectedCourse.title}
@@ -142,7 +143,7 @@ export default function Courses() {
 
                             {selectedCourse.content && (
                                 <div className="prose dark:prose-invert max-w-none">
-                                    <div dangerouslySetInnerHTML={{ __html: selectedCourse.content }} />
+                                    <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedCourse.content) }} />
                                 </div>
                             )}
 

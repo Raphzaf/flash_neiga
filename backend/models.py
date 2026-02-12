@@ -320,3 +320,8 @@ class Course(CourseCreate):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+
+class CourseOrderUpdate(BaseModel):
+    """Modèle pour mettre à jour l'ordre d'un cours"""
+    order: int
+
