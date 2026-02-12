@@ -129,6 +129,27 @@ export default function Dashboard() {
                     </Link>
                 </div>
 
+                {/* NOUVELLE: Grande case Cours en dessous */}
+                <div className="mt-6">
+                    <Link to="/courses" className="group">
+                        <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="flex items-center text-lg text-slate-900 dark:text-white font-semibold">
+                                    <div className="p-2 rounded-lg bg-purple-100 text-purple-600 mr-3 group-hover:scale-110 transition-transform">
+                                        <BookOpen className="h-6 w-6" />
+                                    </div>
+                                    Cours
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
+                                    Accédez aux cours théoriques complets avec vidéos et supports PDF
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                </div>
+
                 {/* Recent Activity */}
                 <section>
                     <div className="flex justify-between items-center mb-4">

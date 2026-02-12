@@ -11,6 +11,7 @@ import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
+import Courses from "./pages/Courses";
 import SubscriptionSuccess from './pages/SubscriptionSuccess';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentFailure from './pages/PaymentFailure';
@@ -93,6 +94,7 @@ function App() {
               <Route path="/exam" element={<Exam />} />
               <Route path="/exam/:id" element={<ExamDetails />} />
               <Route path="/training" element={<Training />} />
+              <Route path="/courses" element={<Courses />} />
               <Route path="/signs" element={<Signs />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/admin" element={<Admin />} />
