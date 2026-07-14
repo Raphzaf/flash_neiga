@@ -130,6 +130,39 @@ def _hyp_base_params() -> Dict[str, str]:
     return params
 
 
+def _build_sign_params(
+    order: str,
+    amount: float,
+    currency: str = "ILS",
+    info: str = "Flash Neiga",
+    user_email: Optional[str] = None,
+) -> Dict[str, str]:
+    """Build the parameter set for an APISign SIGN request (shared by the payment
+    URL builder and the /test-connection diagnostic)."""
+    amount_value = float(amount)
+    amount_str = str(int(amount_value)) if amount_value.is_integer() else f"{amount_value:.2f}"
+
+    params = {
+        "action": "APISign",
+        "What": "SIGN",
+        "Sign": "True",
+        "Amount": amount_str,
+        "Coin": str(_hyp_coin(currency)),
+        "Order": order,
+        "Info": info,
+        "Tash": "1",
+        "UTF8": "True",
+        "UTF8out": "True",
+        "PageLang": HYP_PAGE_LANG,
+        "sendemail": "True",
+        "MoreData": "True",
+    }
+    params.update(_hyp_base_params())
+    if user_email:
+        params["email"] = user_email
+    return params
+
+
 def create_hyp_payment_url(
     transaction_id: str,
     amount: float,
@@ -155,32 +188,17 @@ def create_hyp_payment_url(
     if not HYP_API_KEY:
         raise RuntimeError("HYP_API_KEY is not configured")
 
-    # Yaad expects a plain amount in the currency's major unit.
-    amount_value = float(amount)
-    amount_str = str(int(amount_value)) if amount_value.is_integer() else f"{amount_value:.2f}"
-
-    sign_params = {
-        "action": "APISign",
-        "What": "SIGN",
-        "Sign": "True",
-        "Amount": amount_str,
-        "Coin": str(_hyp_coin(currency)),
-        "Order": transaction_id,
-        "Info": info,
-        "Tash": "1",
-        "UTF8": "True",
-        "UTF8out": "True",
-        "PageLang": HYP_PAGE_LANG,
-        "sendemail": "True",
-        "MoreData": "True",
-    }
-    sign_params.update(_hyp_base_params())
-    if user_email:
-        sign_params["email"] = user_email
+    sign_params = _build_sign_params(
+        order=transaction_id,
+        amount=amount,
+        currency=currency,
+        info=info,
+        user_email=user_email,
+    )
 
     logger.info(
         f"Requesting HYP APISign signature for order {transaction_id} "
-        f"(amount={amount_str}, coin={sign_params['Coin']})"
+        f"(amount={sign_params['Amount']}, coin={sign_params['Coin']})"
     )
 
     resp = requests.get(HYP_API_URL, params=sign_params, timeout=20)
@@ -278,6 +296,61 @@ async def verify_hyp_config():
         )
     
     return config_status
+
+
+@router.get("/test-connection")
+async def test_hyp_connection():
+    """
+    Live connectivity/credentials test against the HYP APISign endpoint.
+
+    Performs a real SIGN dry-run (amount = 1 ILS, throwaway order) and reports
+    whether the terminal credentials produce a valid signature. This is the
+    definitive "is my HYP configuration correct?" check — call it after setting
+    HYP_API_KEY / HYP_PASSP.
+    """
+    diagnostics: Dict[str, Any] = {
+        "api_url": HYP_API_URL,
+        "terminal_id": HYP_TERMINAL_ID,
+        "api_key_configured": bool(HYP_API_KEY),
+        "passp_configured": bool(HYP_PASSP),
+        "require_signature": HYP_REQUIRE_SIGNATURE,
+        "page_lang": HYP_PAGE_LANG,
+    }
+
+    if not HYP_API_KEY:
+        diagnostics["ok"] = False
+        diagnostics["message"] = "HYP_API_KEY is not configured"
+        return JSONResponse(status_code=500, content=diagnostics)
+
+    sign_params = _build_sign_params(
+        order="test-connection",
+        amount=1,
+        currency="ILS",
+        info="Flash Neiga connection test",
+    )
+
+    try:
+        resp = requests.get(HYP_API_URL, params=sign_params, timeout=20)
+        resp.raise_for_status()
+    except Exception as e:
+        diagnostics["ok"] = False
+        diagnostics["message"] = f"Could not reach HYP APISign endpoint: {e}"
+        return JSONResponse(status_code=502, content=diagnostics)
+
+    parsed = dict(parse_qsl(resp.text.strip()))
+
+    if parsed.get("signature"):
+        diagnostics["ok"] = True
+        diagnostics["message"] = "APISign signature generated successfully — HYP credentials are valid."
+        diagnostics["signature_preview"] = parsed["signature"][:12] + "..."
+        return diagnostics
+
+    # HYP returns an error code (e.g. CCode=902 for bad terminal/key) instead of a signature.
+    diagnostics["ok"] = False
+    diagnostics["message"] = "HYP did not return a signature — check terminal, KEY and PassP."
+    diagnostics["hyp_ccode"] = parsed.get("CCode")
+    diagnostics["hyp_response"] = resp.text.strip()[:300]
+    return JSONResponse(status_code=502, content=diagnostics)
 
 
 @router.get("/plans")
