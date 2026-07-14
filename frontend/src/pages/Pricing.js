@@ -3,16 +3,18 @@ import axios from "axios";
 import { HYP_CONFIG, PLAN_DETAILS, formatPrice } from '../config/hypConfig';
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
+import { useAuth } from "../context/AuthContext";
 
-async function startHypCheckout(planId, userEmail = null) {
+async function startHypCheckout(planId, userEmail = null, userId = null) {
   try {
     console.log('Starting HYP checkout for plan:', planId);
-    
+
     const body = {
       plan_id: planId,
-      user_email: userEmail
+      user_email: userEmail,
+      user_id: userId
     };
-    
+
     const res = await axios.post('/api/payments/hyp/create-payment', body);
     const paymentUrl = res.data?.payment_url;
     
@@ -31,11 +33,14 @@ async function startHypCheckout(planId, userEmail = null) {
 
 function Pricing() {
   const [loading, setLoading] = useState(null);
+  const { user } = useAuth();
 
   const handleCheckout = async (planId) => {
     setLoading(planId);
     try {
-      await startHypCheckout(planId);
+      // Pass the logged-in user's id/email so the subscription is linked to
+      // their account once the payment is confirmed by HYP.
+      await startHypCheckout(planId, user?.email || null, user?.id || null);
     } finally {
       setLoading(null);
     }

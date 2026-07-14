@@ -17,9 +17,25 @@ function PaymentSuccess() {
   const [error, setError] = useState(null);
   const [pollAttempt, setPollAttempt] = useState(0);
 
-  const transactionId = searchParams.get('transaction_id');
+  // HYP returns the internal order id in `Order`; our own success URL uses
+  // `transaction_id`. Support both.
+  const transactionId = searchParams.get('transaction_id') || searchParams.get('Order');
 
   useEffect(() => {
+    // If HYP redirected the browser here with a result payload (CCode present),
+    // forward it to the backend callback so the subscription is provisioned even
+    // when the server-to-server notification is not configured. Verification is
+    // still performed server-side via HYP APISign VERIFY.
+    const notifyBackend = async () => {
+      if (searchParams.get('CCode') === null) return;
+      try {
+        const params = Object.fromEntries(searchParams.entries());
+        await axios.post('/api/payments/hyp/callback', params);
+      } catch (err) {
+        console.warn('Backend callback notification failed (will rely on polling):', err?.response?.status);
+      }
+    };
+
     // Fetch transaction details with polling
     const fetchTransaction = async (attempt = 0) => {
       if (!transactionId) {
@@ -54,7 +70,8 @@ function PaymentSuccess() {
       }
     };
 
-    fetchTransaction();
+    // Trigger provisioning first (best-effort), then start polling.
+    notifyBackend().finally(() => fetchTransaction());
 
     // Auto-redirect to training page after configured delay
     const timer = setTimeout(() => {
@@ -62,7 +79,7 @@ function PaymentSuccess() {
     }, AUTO_REDIRECT_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [transactionId, navigate]);
+  }, [transactionId, navigate, searchParams]);
 
   // Format date in French format
   const formatDate = (dateString) => {
