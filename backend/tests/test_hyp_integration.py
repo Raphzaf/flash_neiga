@@ -73,7 +73,9 @@ class TestHypConfig:
     
     def test_verify_config_with_api_key(self, client):
         """Test verify-config endpoint when API key is set"""
-        with patch.dict('os.environ', {'HYP_API_KEY': 'test-key'}):
+        # HYP_API_KEY is read into a module-level constant at import time, so
+        # patch the constant directly rather than os.environ.
+        with patch('routes.hyp_payments.HYP_API_KEY', 'test-key'):
             response = client.get("/api/payments/hyp/verify-config")
             assert response.status_code == 200
             data = response.json()
@@ -119,7 +121,7 @@ class TestCreatePayment:
         assert response.status_code == 404
         assert "User not found" in response.json()["detail"]
     
-    @patch('backend.routes.hyp_payments.create_hyp_payment_url')
+    @patch('routes.hyp_payments.create_hyp_payment_url')
     def test_create_payment_success(self, mock_create_url, client, test_db):
         """Test successful payment creation"""
         # Setup mock

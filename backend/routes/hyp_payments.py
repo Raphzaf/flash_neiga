@@ -14,9 +14,8 @@ from datetime import datetime, timedelta
 import os
 import json
 import logging
-import hashlib
-import hmac
 import requests
+from urllib.parse import parse_qsl
 from pathlib import Path
 
 # Support imports both when running from backend/ and from repo root
@@ -35,13 +34,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/payments/hyp", tags=["HYP Payments"])
 
 # HYP Configuration
+# HYP (Yaad Sarig) uses two credentials for the APISign flow:
+#   - KEY   : the API signing key           -> HYP_API_KEY
+#   - PassP : the terminal API password      -> HYP_PASSP (optional on some terminals)
+#   - Masof : the terminal number            -> HYP_TERMINAL_ID
 HYP_TERMINAL_ID = os.environ.get("HYP_TERMINAL_ID", "4502176330")
 HYP_USER_ID = os.environ.get("HYP_USER_ID", "pveda")
 HYP_API_KEY = os.environ.get("HYP_API_KEY", "")
+HYP_PASSP = os.environ.get("HYP_PASSP", "")
 HYP_API_URL = os.environ.get("HYP_API_URL", "https://icom.yaad.net/p/")
+HYP_PAGE_LANG = os.environ.get("HYP_PAGE_LANG", "ENG")  # HYP supports HEB or ENG
+# When enabled, callbacks without a valid signature are rejected. Default off so
+# terminals that are not configured to sign their notifications keep working.
+HYP_REQUIRE_SIGNATURE = os.environ.get("HYP_REQUIRE_SIGNATURE", "false").lower() in ("1", "true", "yes")
 HYP_SUCCESS_URL = os.environ.get("HYP_SUCCESS_URL", "https://app.flash-neiga.com/payment/success")
 HYP_ERROR_URL = os.environ.get("HYP_ERROR_URL", "https://app.flash-neiga.com/payment/failure")
 HYP_CALLBACK_URL = os.environ.get("HYP_CALLBACK_URL", "http://localhost:8000/api/payments/hyp/callback")
+
+# HYP currency code (Coin) mapping
+CURRENCY_TO_COIN = {"ILS": 1, "NIS": 1, "USD": 2, "EUR": 3, "GBP": 4}
 
 # Load HYP plans configuration
 PLANS_FILE = Path(__file__).parent.parent.parent / "hyp_plans.json"
@@ -101,147 +112,146 @@ def calculate_subscription_dates(plan_id: str, start_date: Optional[datetime] = 
     return start_date, end_date
 
 
+def _hyp_coin(currency: str) -> int:
+    """Map an ISO currency code to the HYP `Coin` code (defaults to ILS)."""
+    return CURRENCY_TO_COIN.get((currency or "ILS").upper(), 1)
+
+
+def _hyp_base_params() -> Dict[str, str]:
+    """Common authentication parameters for APISign requests."""
+    params = {
+        "KEY": HYP_API_KEY,
+        "Masof": HYP_TERMINAL_ID,
+    }
+    # PassP is required by some terminals and unused by others; only send it when
+    # configured so we don't break terminals that sign with KEY + Masof alone.
+    if HYP_PASSP:
+        params["PassP"] = HYP_PASSP
+    return params
+
+
 def create_hyp_payment_url(
     transaction_id: str,
     amount: float,
     currency: str = "ILS",
-    user_email: Optional[str] = None
+    user_email: Optional[str] = None,
+    info: str = "Flash Neiga",
 ) -> str:
     """
-    Create HYP payment URL using direct hosted payment page
-    Documentation: https://developers.hyp.co.il/payment-page-integration/integrating-hyps-payment-page-and-accepting-payment
-    
-    This creates a direct payment URL with PassP authentication parameter.
-    Note: HYP uses MD5 for signing (as per their documentation). While MD5 is cryptographically weak,
-    we must use it to remain compatible with HYP's API.
-    """
-    from urllib.parse import urlencode
-    
-    # Convert amount to agorot (multiply by 100)
-    amount_agorot = int(amount * 100)
-    
-    logger.info(f"Creating HYP payment URL for transaction {transaction_id}, amount: {amount} {currency} ({amount_agorot} agorot)")
-    
-    # Build payment parameters dictionary
-    payment_params = {
-        "Amount": str(amount_agorot),
-        "Coin": "1",  # ILS
-        "Currency": "1",  # ILS
-        "Order": transaction_id,
-        "Info": "Flash Neiga Payment",
-        "Pritim": "True",
-        "ClientName": "",
-        "ClientLName": "",
-        "PhoneDial": "",
-        "email": user_email or "",
-        "street": "",
-        "city": "",
-        "zip": "",
-        "remarks": "",
-        "sendemail": "true",
-        "SendHesh": "true",
-        "heshDesc": "",
-        "pageField": "",
-        "successUrl": f"{HYP_SUCCESS_URL}?transaction_id={transaction_id}",
-        "failureUrl": f"{HYP_ERROR_URL}?transaction_id={transaction_id}",
-        "maxPayments": "1"
-    }
-    
-    # Create PassP parameter using proper URL encoding
-    pass_p = urlencode(payment_params)
-    logger.debug(f"PassP parameter created with {len(pass_p)} characters")
-    
-    # Build the final payment URL with all required parameters
-    # Note: HYP requires MD5 hash for PassP authentication
-    # Calculate MD5 hash: MD5(terminal + api_key + pass_p)
-    pass_p_hash = hashlib.md5(
-        f"{HYP_TERMINAL_ID}{HYP_API_KEY}{pass_p}".encode()
-    ).hexdigest()
-    
-    logger.debug(f"PassP hash calculated: {pass_p_hash[:10]}...")
-    
-    # Construct payment URL with required parameters
-    payment_url_params = {
-        "action": "pay",
-        "terminal": HYP_TERMINAL_ID,
-        "Amount": str(amount_agorot),
-        "Order": transaction_id,
-        "successUrl": f"{HYP_SUCCESS_URL}?transaction_id={transaction_id}",
-        "failureUrl": f"{HYP_ERROR_URL}?transaction_id={transaction_id}",
-        "maxPayments": "1",
-        "PassP": pass_p_hash
-    }
-    
-    if user_email:
-        payment_url_params["email"] = user_email
-        logger.debug(f"Email added to payment URL: {user_email}")
-    
-    # Construct final URL
-    payment_url = f"{HYP_API_URL}?{urlencode(payment_url_params)}"
-    
-    logger.info(f"HYP payment URL created successfully for transaction {transaction_id}")
-    logger.debug(f"Payment URL: {payment_url[:80]}...")
-    
-    return payment_url
+    Create a HYP (Yaad Sarig) hosted payment-page URL using the official APISign flow.
 
+    Documentation: https://developers.hyp.co.il/
+
+    Flow:
+      1. GET <HYP_API_URL>?action=APISign&What=SIGN&... which returns a URL-encoded
+         query string containing every input parameter plus a `signature`.
+      2. The customer's browser is redirected to <HYP_API_URL>?<signed-query-string>
+         (the returned query string already carries action=pay).
+
+    Notes:
+      - `Amount` must be sent in the main currency unit (shekels), NOT agorot.
+      - `Order` is our internal transaction id so we can reconcile the callback.
+    """
+    if not HYP_API_KEY:
+        raise RuntimeError("HYP_API_KEY is not configured")
+
+    # Yaad expects a plain amount in the currency's major unit.
+    amount_value = float(amount)
+    amount_str = str(int(amount_value)) if amount_value.is_integer() else f"{amount_value:.2f}"
+
+    sign_params = {
+        "action": "APISign",
+        "What": "SIGN",
+        "Sign": "True",
+        "Amount": amount_str,
+        "Coin": str(_hyp_coin(currency)),
+        "Order": transaction_id,
+        "Info": info,
+        "Tash": "1",
+        "UTF8": "True",
+        "UTF8out": "True",
+        "PageLang": HYP_PAGE_LANG,
+        "sendemail": "True",
+        "MoreData": "True",
+    }
+    sign_params.update(_hyp_base_params())
+    if user_email:
+        sign_params["email"] = user_email
+
+    logger.info(
+        f"Requesting HYP APISign signature for order {transaction_id} "
+        f"(amount={amount_str}, coin={sign_params['Coin']})"
+    )
+
+    resp = requests.get(HYP_API_URL, params=sign_params, timeout=20)
+    resp.raise_for_status()
+    signed_qs = resp.text.strip()
+
+    if "signature=" not in signed_qs:
+        logger.error(f"HYP APISign returned no signature for order {transaction_id}: {signed_qs[:300]}")
+        raise RuntimeError(f"HYP signing failed: {signed_qs[:200]}")
+
+    # APISign returns the query string with action=pay already set; be defensive.
+    if "action=pay" not in signed_qs:
+        signed_qs = "action=pay&" + signed_qs
+
+    payment_url = f"{HYP_API_URL}?{signed_qs}"
+    logger.info(f"HYP payment URL created successfully for order {transaction_id}")
+    return payment_url
 
 
 def verify_hyp_callback(data: Dict[str, Any]) -> bool:
     """
-    Verify HYP callback signature using MD5 hash verification
-    
-    This is a security-critical function that validates callbacks from HYP.
-    
-    HYP sends a Hash parameter that should match:
-    MD5(terminal + order + amount + currency + ccode + acode + api_key)
-    
-    Args:
-        data: Callback data from HYP containing transaction details and Hash
-        
-    Returns:
-        bool: True if verification passes or hash not provided, False if verification fails
+    Verify a HYP callback/redirect using the official APISign VERIFY endpoint.
+
+    HYP appends a `Sign` (signature) parameter to the transaction result. We
+    resend the received parameters to `action=APISign&What=VERIFY`; HYP replies
+    with `CCode=0` when the signature is authentic.
+
+    Backward-compatible behaviour: if no signature is present we allow the
+    callback (with a warning) unless HYP_REQUIRE_SIGNATURE is enabled, so that
+    terminals not configured to sign notifications keep working.
     """
-    # Basic validation: check required fields are present
-    required_fields = ['Order', 'CCode']
-    for field in required_fields:
-        if field not in data:
-            logger.error(f"Missing required field in callback: {field}")
+    order = data.get("Order") or data.get("order")
+    signature = data.get("Sign") or data.get("signature") or data.get("Signature")
+
+    if not signature:
+        if HYP_REQUIRE_SIGNATURE:
+            logger.error(f"HYP callback for order {order} rejected: signature required but missing")
             return False
-    
-    # Extract callback data
-    order = data.get("Order", "")
-    ccode = data.get("CCode", "")
-    acode = data.get("ACode", "")
-    amount = data.get("Amount", "")
-    currency = data.get("Coin", "1")  # Default to ILS (1)
-    received_hash = data.get("Hash", "")
-    
-    logger.info(f"Verifying HYP callback for order {order}, CCode={ccode}")
-    
-    # If no hash provided, allow but warn (some HYP configs don't send hash)
-    if not received_hash:
-        logger.warning(f"HYP callback received without Hash parameter for order {order} - allowing but this is a security risk")
-        logger.warning("Consider enabling hash verification in HYP dashboard for better security")
+        logger.warning(
+            f"HYP callback for order {order} received without a signature - allowing "
+            "(set HYP_REQUIRE_SIGNATURE=true to enforce)"
+        )
         return True
-    
-    # Calculate expected hash: MD5(terminal + order + amount + currency + ccode + acode + api_key)
-    hash_string = f"{HYP_TERMINAL_ID}{order}{amount}{currency}{ccode}{acode}{HYP_API_KEY}"
-    expected_hash = hashlib.md5(hash_string.encode()).hexdigest()
-    
-    logger.debug(f"Hash verification for order {order}:")
-    logger.debug(f"  Hash string components: terminal={HYP_TERMINAL_ID}, order={order}, amount={amount}, currency={currency}, ccode={ccode}, acode={acode}")
-    logger.debug(f"  Expected hash: {expected_hash}")
-    logger.debug(f"  Received hash: {received_hash}")
-    
-    # Compare hashes (case-insensitive)
-    if expected_hash.lower() == received_hash.lower():
-        logger.info(f"✓ Hash verification successful for order {order}")
-        return True
-    else:
-        logger.error(f"✗ Hash verification FAILED for order {order}")
-        logger.error(f"  Expected: {expected_hash}")
-        logger.error(f"  Received: {received_hash}")
+
+    if not HYP_API_KEY:
+        logger.error("Cannot verify HYP callback: HYP_API_KEY not configured")
         return False
+
+    # Forward the exact result fields HYP signed, adding our auth params.
+    control_fields = {"action", "What", "KEY", "PassP", "Masof", "transaction_id"}
+    verify_params = {"action": "APISign", "What": "VERIFY"}
+    verify_params.update(_hyp_base_params())
+    for key, value in data.items():
+        if key not in control_fields:
+            verify_params[key] = value
+
+    try:
+        resp = requests.get(HYP_API_URL, params=verify_params, timeout=20)
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error(f"HYP VERIFY request failed for order {order}: {e}")
+        return False
+
+    verify_result = dict(parse_qsl(resp.text.strip()))
+    ccode = verify_result.get("CCode")
+    if ccode == "0":
+        logger.info(f"✓ HYP signature verified for order {order}")
+        return True
+
+    logger.error(f"✗ HYP signature verification failed for order {order}: CCode={ccode}")
+    return False
 
 
 # ===== API Endpoints =====
@@ -335,7 +345,8 @@ async def create_payment(
             transaction_id=transaction.id,
             amount=plan["amount"],
             currency=plan["currency"],
-            user_email=user_email
+            user_email=user_email,
+            info=plan.get("name", "Flash Neiga"),
         )
         
         # Update transaction with payment URL
@@ -434,7 +445,7 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
             detail="Transaction not found"
         )
     
-    # Verify callback (TODO: implement proper signature verification)
+    # Verify callback authenticity via HYP APISign VERIFY
     if not verify_hyp_callback(data):
         logger.error("Invalid callback signature")
         raise HTTPException(

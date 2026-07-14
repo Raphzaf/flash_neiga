@@ -21,8 +21,12 @@ services:
         value: "pveda"
       - key: HYP_API_KEY
         sync: false  # Must be set manually in Render dashboard
+      - key: HYP_PASSP
+        sync: false  # Terminal API password (PassP); set manually in Render dashboard
       - key: HYP_API_URL
         value: "https://icom.yaad.net/p/"
+      - key: HYP_REQUIRE_SIGNATURE
+        value: "false"  # Set to "true" once the terminal signs its notifications
       - key: HYP_SUCCESS_URL
         value: "https://appflashneiga.netlify.app/payment/success"
       - key: HYP_ERROR_URL
