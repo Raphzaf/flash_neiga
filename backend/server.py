@@ -64,6 +64,14 @@ try:
 except ImportError:
     from backend.routes.mistakes import router as mistakes_router, record_mistake
 try:
+    from routes.ai_coach import router as ai_coach_router
+except ImportError:
+    from backend.routes.ai_coach import router as ai_coach_router
+try:
+    from routes.trap_questions import router as trap_questions_router
+except ImportError:
+    from backend.routes.trap_questions import router as trap_questions_router
+try:
     from auth import get_current_user, get_current_user_optional
 except ImportError:
     from backend.auth import get_current_user, get_current_user_optional
@@ -123,6 +131,8 @@ app.include_router(twocheckout_router)
 app.include_router(hyp_router)
 app.include_router(admin_migration_router)
 app.include_router(mistakes_router)
+app.include_router(ai_coach_router)
+app.include_router(trap_questions_router)
 
 
 # ===== Health Check Endpoint =====
@@ -1056,6 +1066,7 @@ async def get_signs(db: Session = Depends(get_db)):
 @app.post("/api/exam/start")
 async def start_exam(
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     import random
     # Fetch all questions and filter for playable ones (>=2 options, at least one correct)
@@ -1087,11 +1098,11 @@ async def start_exam(
     selected_count = min(30, len(selected_pool))
     selected = random.sample(selected_pool, selected_count) if selected_count > 0 else []
     
-    # Create exam session
+    # Create exam session — associée à l'élève connecté (sinon "guest" pour l'anonyme)
     exam_id = str(uuid.uuid4())
     exam = ExamSessionDB(
         id=exam_id,
-        user_id="guest",
+        user_id=current_user.id if current_user else "guest",
         status="in_progress",
         answers={},
         question_ids=[q.id for q in selected]
@@ -1316,9 +1327,10 @@ async def check_training_answer(
 @app.get("/api/stats/summary")
 async def get_stats_summary(
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    # For now, use guest user
-    user_id = "guest"
+    # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
+    user_id = current_user.id if current_user else "guest"
     exams = db.query(ExamSessionDB).filter(
         and_(
             ExamSessionDB.user_id == user_id,
@@ -1362,9 +1374,10 @@ async def get_stats_summary(
 @app.get("/api/stats/details")
 async def get_stats_details(
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    # For now, use guest user
-    user_id = "guest"
+    # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
+    user_id = current_user.id if current_user else "guest"
     exams = db.query(ExamSessionDB).filter(
         and_(
             ExamSessionDB.user_id == user_id,

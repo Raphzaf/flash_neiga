@@ -186,6 +186,27 @@ export default function Dashboard() {
                     </Link>
                 </div>
 
+                {/* Rubrique « Questions pièges les plus fréquentes » */}
+                <div className="mt-6">
+                    <Link to="/questions-pieges" className="group">
+                        <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700" data-testid="trap-questions-card">
+                            <CardHeader>
+                                <CardTitle className="flex items-center text-lg text-slate-900 dark:text-white font-semibold">
+                                    <div className="p-2 rounded-lg bg-amber-100 text-amber-600 mr-3 group-hover:scale-110 transition-transform">
+                                        <AlertTriangle className="h-6 w-6" />
+                                    </div>
+                                    Questions pièges les plus fréquentes
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
+                                    Les questions qui piègent le plus les élèves, avec la synthèse de ton prof pour ne plus tomber dedans.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                </div>
+
                 {/* Recent Activity */}
                 <section>
                     <div className="flex justify-between items-center mb-4">

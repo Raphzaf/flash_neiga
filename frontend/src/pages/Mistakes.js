@@ -8,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { CheckCircle, XCircle, Info, ArrowLeft, RefreshCw, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
+import AiLesson from '../components/AiLesson';
 
 // Carte d'une question à retravailler, rejouable sur place.
 function MistakeCard({ item, onMastered }) {
@@ -112,6 +113,15 @@ function MistakeCard({ item, onMastered }) {
                                 <ExplanationWithLinks explanation={feedback.explanation} onCourseClick={() => {}} />
                             </div>
                         </div>
+                        {!feedback.is_correct && (
+                            <div className="mt-3">
+                                <AiLesson
+                                    questionId={q.id}
+                                    selectedOptionId={selected}
+                                    className="w-full justify-center"
+                                />
+                            </div>
+                        )}
                         {!feedback.mastered && (
                             <Button
                                 onClick={retry}

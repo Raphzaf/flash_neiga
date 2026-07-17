@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { AlertTriangle, CheckCircle, ArrowLeft, BookOpen } from 'lucide-react';
 import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
+import AiLesson from '../components/AiLesson';
 import { toast } from 'sonner';
 import { sanitizeHtml, sanitizeVideoUrl } from '../lib/sanitize';
 
@@ -123,9 +124,17 @@ export default function ExamDetails() {
                         {q.explanation && (
                           <div className="mt-3 p-3 rounded-lg bg-white/70 dark:bg-slate-700/70 text-slate-800 dark:text-slate-200">
                             <div className="font-semibold mb-1 text-slate-900 dark:text-white">Explication</div>
-                            <ExplanationWithLinks 
-                              explanation={q.explanation} 
+                            <ExplanationWithLinks
+                              explanation={q.explanation}
                               onCourseClick={handleCourseClick}
+                            />
+                          </div>
+                        )}
+                        {!isCorrect && q.selected_option_id && (
+                          <div className="mt-3">
+                            <AiLesson
+                              questionId={q.question_id}
+                              selectedOptionId={q.selected_option_id}
                             />
                           </div>
                         )}
