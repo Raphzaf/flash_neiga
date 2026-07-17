@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
@@ -128,6 +128,26 @@ class SubscriptionDB(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserMistakeDB(Base):
+    """Mémoire des erreurs d'un élève : chaque question ratée est enregistrée ici
+    pour pouvoir être retravaillée depuis la rubrique « Mes questions à retravailler ».
+    """
+    __tablename__ = "user_mistakes"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True, nullable=False)
+    question_id = Column(String, index=True, nullable=False)
+    times_wrong = Column(Integer, default=0)          # nb total de fois où l'élève s'est trompé
+    times_correct_since = Column(Integer, default=0)  # série de bonnes réponses consécutives en révision
+    mastered = Column(Boolean, default=False)         # True après 2 bonnes réponses consécutives
+    first_wrong_at = Column(DateTime, default=datetime.utcnow)
+    last_wrong_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "question_id", name="uq_user_mistake"),
+    )
 
 
 class CourseDB(Base):
@@ -324,4 +344,18 @@ class Course(CourseCreate):
 class CourseOrderUpdate(BaseModel):
     """Modèle pour mettre à jour l'ordre d'un cours"""
     order: int
+
+
+class MistakeReviewRequest(BaseModel):
+    """Réponse soumise en mode révision depuis « Mes questions à retravailler »."""
+    question_id: str
+    selected_option_id: str
+
+
+class MistakeReviewResponse(BaseModel):
+    is_correct: bool
+    correct_option_id: Optional[str] = None
+    explanation: Optional[str] = None
+    mastered: bool = False
+    times_correct_since: int = 0
 

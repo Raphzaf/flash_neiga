@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
+from typing import Optional
 import os
 
 # Support imports both when running from backend/ and from repo root
@@ -55,4 +56,35 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    return User(id=user.id, email=user.email)
+
+
+# Version « soft » de l'authentification : ne lève jamais d'erreur.
+# Utilisée sur des endpoints publics (entraînement) où l'on veut savoir
+# qui est l'élève s'il est connecté, sans bloquer l'accès anonyme.
+optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Retourne l'utilisateur courant si un token JWT valide est présent, sinon None.
+
+    Ne lève jamais d'exception : un token absent ou invalide donne simplement None,
+    ce qui permet de conserver l'accès anonyme aux endpoints d'entraînement.
+    """
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+    except JWTError:
+        return None
+
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if user is None:
+        return None
     return User(id=user.id, email=user.email)
