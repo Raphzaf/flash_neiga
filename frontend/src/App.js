@@ -7,6 +7,8 @@ import Dashboard from "./pages/Dashboard";
 import Exam from "./pages/Exam";
 import ExamDetails from "./pages/ExamDetails";
 import Training from "./pages/Training";
+import Mistakes from "./pages/Mistakes";
+import TrapQuestions from "./pages/TrapQuestions";
 import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
@@ -94,6 +96,8 @@ function App() {
               <Route path="/exam" element={<Exam />} />
               <Route path="/exam/:id" element={<ExamDetails />} />
               <Route path="/training" element={<Training />} />
+              <Route path="/mistakes" element={<Mistakes />} />
+              <Route path="/questions-pieges" element={<TrapQuestions />} />
               <Route path="/courses" element={<Courses />} />
               <Route path="/signs" element={<Signs />} />
               <Route path="/stats" element={<Stats />} />

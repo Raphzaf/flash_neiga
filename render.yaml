@@ -35,6 +35,19 @@ services:
         value: "https://flash-neiga-backend.onrender.com/api/payments/hyp/callback"
       - key: ALLOWED_ORIGINS
         value: "https://app.flash-neiga.com,https://appflashneiga.netlify.app"
+      # ===== Coach IA (Claude) =====
+      # Mode Google Cloud Vertex AI (le projet fournit une credential GCP).
+      # Définir aussi l'auth GCP : GOOGLE_APPLICATION_CREDENTIALS (JSON de compte
+      # de service) OU GOOGLE_APPLICATION_CREDENTIALS_JSON selon ton setup Render.
+      - key: ANTHROPIC_VERTEX_PROJECT_ID
+        sync: false  # ex: 239164849877 — à définir dans le dashboard Render
+      - key: CLOUD_ML_REGION
+        sync: false  # région Vertex où claude-opus-4-8 est activé (ex: europe-west1)
+      # Alternative API première partie (si tu utilises une clé sk-ant-... à la place) :
+      # - key: ANTHROPIC_API_KEY
+      #   sync: false
+      - key: ADMIN_TOKEN
+        sync: false  # protège /api/admin/* (dont la synthèse des questions pièges)
 
 databases:
   - name: flash-neiga-db

@@ -6,6 +6,7 @@ import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
 import { toast } from 'sonner';
 import { Clock, ArrowLeft, ArrowRight, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import SeriesReport from '../components/SeriesReport';
 
 export default function Exam() {
     const [examSession, setExamSession] = useState(null);
@@ -194,7 +195,7 @@ export default function Exam() {
 
     if (isFinished && result) {
         return (
-            <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
+            <div className="min-h-screen flex flex-col items-center justify-start gap-6 p-4 py-8 bg-slate-50 dark:bg-slate-950 overflow-y-auto">
                 <Card className="w-full max-w-2xl p-6 md:p-8 text-center space-y-6">
                     <div className="flex justify-center">
                         {result.passed ? (
@@ -250,6 +251,13 @@ export default function Exam() {
                         )}
                     </div>
                 </Card>
+
+                {/* Bilan du prof IA */}
+                {(examSession?.id || result?.id) && (
+                    <div className="w-full max-w-2xl">
+                        <SeriesReport sessionId={examSession?.id || result?.id} />
+                    </div>
+                )}
             </div>
         );
     }

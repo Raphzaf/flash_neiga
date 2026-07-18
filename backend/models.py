@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
@@ -128,6 +128,65 @@ class SubscriptionDB(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserMistakeDB(Base):
+    """Mémoire des erreurs d'un élève : chaque question ratée est enregistrée ici
+    pour pouvoir être retravaillée depuis la rubrique « Mes questions à retravailler ».
+    """
+    __tablename__ = "user_mistakes"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True, nullable=False)
+    question_id = Column(String, index=True, nullable=False)
+    times_wrong = Column(Integer, default=0)          # nb total de fois où l'élève s'est trompé
+    times_correct_since = Column(Integer, default=0)  # série de bonnes réponses consécutives en révision
+    mastered = Column(Boolean, default=False)         # True après 2 bonnes réponses consécutives
+    first_wrong_at = Column(DateTime, default=datetime.utcnow)
+    last_wrong_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "question_id", name="uq_user_mistake"),
+    )
+
+
+class AILessonDB(Base):
+    """Cache des mini-leçons générées par le coach IA pour une (question, mauvaise réponse).
+    Une leçon est réutilisable pour tous les élèves → coût API quasi nul en régime de croisière.
+    """
+    __tablename__ = "ai_lessons"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    question_id = Column(String, index=True, nullable=False)
+    selected_option_id = Column(String, nullable=False)
+    lesson_json = Column(Text, nullable=False)  # JSON: explication, regle, erreurs_a_eviter, schema_svg
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("question_id", "selected_option_id", name="uq_ai_lesson"),
+    )
+
+
+class SeriesReportDB(Base):
+    """Cache du bilan de série généré par le coach IA après un examen/série."""
+    __tablename__ = "series_reports"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, index=True, nullable=False)
+    session_id = Column(String, unique=True, index=True, nullable=False)
+    report_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TrapSynthesisDB(Base):
+    """Synthèse pédagogique (générée par Claude) des questions pièges les plus fréquentes.
+    Régénérable par l'admin ; on ne garde que la dernière version.
+    """
+    __tablename__ = "trap_synthesis"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    synthesis_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class CourseDB(Base):
@@ -324,4 +383,18 @@ class Course(CourseCreate):
 class CourseOrderUpdate(BaseModel):
     """Modèle pour mettre à jour l'ordre d'un cours"""
     order: int
+
+
+class MistakeReviewRequest(BaseModel):
+    """Réponse soumise en mode révision depuis « Mes questions à retravailler »."""
+    question_id: str
+    selected_option_id: str
+
+
+class MistakeReviewResponse(BaseModel):
+    is_correct: bool
+    correct_option_id: Optional[str] = None
+    explanation: Optional[str] = None
+    mastered: bool = False
+    times_correct_since: int = 0
 

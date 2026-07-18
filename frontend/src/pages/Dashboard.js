@@ -3,13 +3,15 @@ import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Play, BookOpen, AlertTriangle, BarChart3, History, LogOut, User } from 'lucide-react';
+import { Play, BookOpen, AlertTriangle, BarChart3, History, LogOut, User, RotateCcw } from 'lucide-react';
+import { Badge } from '../components/ui/badge';
 import axios from 'axios';
 
 export default function Dashboard() {
     const { user, logout } = useAuth();
     const [stats, setStats] = useState(null);
     const [recent, setRecent] = useState([]);
+    const [mistakesCount, setMistakesCount] = useState(0);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -22,6 +24,12 @@ export default function Dashboard() {
                 setRecent((detailsRes.data?.exams || []).slice(0, 6));
             } catch (e) {
                 console.error("Failed to fetch stats");
+            }
+            try {
+                const mc = await axios.get('/api/mistakes/count');
+                setMistakesCount(mc.data?.count || 0);
+            } catch (e) {
+                // Rubrique optionnelle : on ignore silencieusement si indisponible
             }
         };
         fetchStats();
@@ -129,6 +137,34 @@ export default function Dashboard() {
                     </Link>
                 </div>
 
+                {/* Rubrique « Mes questions à retravailler » */}
+                <div className="mt-6">
+                    <Link to="/mistakes" className="group">
+                        <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700" data-testid="mistakes-card">
+                            <CardHeader>
+                                <CardTitle className="flex items-center justify-between text-lg text-slate-900 dark:text-white font-semibold">
+                                    <span className="flex items-center">
+                                        <div className="p-2 rounded-lg bg-red-100 text-red-600 mr-3 group-hover:scale-110 transition-transform">
+                                            <RotateCcw className="h-6 w-6" />
+                                        </div>
+                                        Mes questions à retravailler
+                                    </span>
+                                    {mistakesCount > 0 && (
+                                        <Badge variant="destructive" className="text-sm">{mistakesCount}</Badge>
+                                    )}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
+                                    {mistakesCount > 0
+                                        ? `Tu as ${mistakesCount} question${mistakesCount > 1 ? 's' : ''} à revoir. Retravaille-les quand tu veux jusqu'à les maîtriser.`
+                                        : "Tes erreurs d'entraînement et d'examen s'enregistrent ici pour que tu puisses les revoir quand tu veux."}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                </div>
+
                 {/* NOUVELLE: Grande case Cours en dessous */}
                 <div className="mt-6">
                     <Link to="/courses" className="group">
@@ -144,6 +180,27 @@ export default function Dashboard() {
                             <CardContent>
                                 <p className="text-sm text-slate-600 dark:text-slate-300">
                                     Accédez aux cours théoriques complets avec vidéos et supports PDF
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                </div>
+
+                {/* Rubrique « Questions pièges les plus fréquentes » */}
+                <div className="mt-6">
+                    <Link to="/questions-pieges" className="group">
+                        <Card className="h-full hover:border-primary/50 transition-all hover:shadow-md cursor-pointer border-slate-200 dark:border-slate-700" data-testid="trap-questions-card">
+                            <CardHeader>
+                                <CardTitle className="flex items-center text-lg text-slate-900 dark:text-white font-semibold">
+                                    <div className="p-2 rounded-lg bg-amber-100 text-amber-600 mr-3 group-hover:scale-110 transition-transform">
+                                        <AlertTriangle className="h-6 w-6" />
+                                    </div>
+                                    Questions pièges les plus fréquentes
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
+                                    Les questions qui piègent le plus les élèves, avec la synthèse de ton prof pour ne plus tomber dedans.
                                 </p>
                             </CardContent>
                         </Card>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { CheckCircle, XCircle, Info, ArrowRight, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
+import AiLesson from '../components/AiLesson';
 import { sanitizeHtml, sanitizeVideoUrl } from '../lib/sanitize';
 
 export default function Training() {
@@ -215,12 +216,21 @@ export default function Training() {
                                     <Info className="h-5 w-5 mt-0.5 flex-shrink-0" />
                                     <div className="flex-1">
                                         <div className="font-bold mb-1">{feedback.is_correct ? 'Correct !' : 'Incorrect'}</div>
-                                        <ExplanationWithLinks 
-                                            explanation={feedback.explanation} 
+                                        <ExplanationWithLinks
+                                            explanation={feedback.explanation}
                                             onCourseClick={handleCourseClick}
                                         />
                                     </div>
                                 </div>
+                                {!feedback.is_correct && (
+                                    <div className="mt-4">
+                                        <AiLesson
+                                            questionId={currentQ.id}
+                                            selectedOptionId={selectedOption}
+                                            className="w-full justify-center"
+                                        />
+                                    </div>
+                                )}
                                 <Button onClick={nextQuestion} className="mt-4 w-full bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600">
                                     Question Suivante <ArrowRight className="ml-2 h-4 w-4" />
                                 </Button>
