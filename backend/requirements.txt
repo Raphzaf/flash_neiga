@@ -19,6 +19,7 @@ psycopg2-binary>=2.9.9
 python-dotenv>=1.0.0
 pytest>=7.4.0
 httpx>=0.24.1
-# Coach IA — SDK officiel Claude. L'extra [vertex] ajoute le support Google Cloud
-# Vertex AI (google-auth) utilisé quand ANTHROPIC_VERTEX_PROJECT_ID est défini.
-anthropic[vertex]>=0.40.0
+# Coach IA — Google AI / Gemini (fournisseur par défaut).
+google-genai>=1.0.0
+# Optionnel : fournisseur Claude (AI_PROVIDER=claude). Décommenter si besoin.
+# anthropic[vertex]>=0.40.0
