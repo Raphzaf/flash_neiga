@@ -104,6 +104,46 @@ def ai_configured() -> bool:
     return _claude_configured() if _provider() == "claude" else _gemini_configured()
 
 
+def diagnostics() -> Dict[str, Any]:
+    """État de configuration du coach IA — sans jamais exposer de secret.
+    Sert à comprendre un 503 en production (SDK manquant ? clé absente ?)."""
+    provider = _provider()
+    if provider == "claude":
+        sdk_installed = _anthropic is not None
+        use_vertex = _claude_use_vertex()
+        has_credentials = bool(
+            os.environ.get("ANTHROPIC_API_KEY")
+            or (use_vertex and os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID"))
+        )
+        sdk_name = "anthropic"
+        model = CLAUDE_MODEL
+    else:
+        sdk_installed = _genai is not None
+        use_vertex = _gemini_use_vertex()
+        has_credentials = bool(
+            (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+            or (use_vertex and os.environ.get("GOOGLE_CLOUD_PROJECT") and os.environ.get("GOOGLE_CLOUD_LOCATION"))
+        )
+        sdk_name = "google-genai"
+        model = GEMINI_MODEL
+
+    reason = "ok"
+    if not sdk_installed:
+        reason = f"SDK '{sdk_name}' non installé sur le serveur"
+    elif not has_credentials:
+        reason = "credentials manquantes (clé API ou config Vertex non définie)"
+
+    return {
+        "provider": provider,
+        "model": model,
+        "sdk_installed": sdk_installed,
+        "has_credentials": has_credentials,
+        "use_vertex": use_vertex,
+        "configured": ai_configured(),
+        "reason": reason,
+    }
+
+
 # ===== Construction du client =====
 def get_client():
     """Retourne (et met en cache) le client IA adapté au fournisseur/config."""
