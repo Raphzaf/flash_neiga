@@ -70,7 +70,7 @@ LESSON_SCHEMA: Dict[str, Any] = {
         "erreurs_a_eviter": {"type": "array", "items": {"type": "string"}},
         "schema_svg": {"type": ["string", "null"]},
     },
-    "required": ["explication", "regle", "erreurs_a_eviter", "schema_svg"],
+    "required": ["explication", "regle", "erreurs_a_eviter"],
     "additionalProperties": False,
 }
 

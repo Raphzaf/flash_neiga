@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { GraduationCap, BookOpen, AlertTriangle, Lightbulb, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { sanitizeSvg } from '../lib/sanitize';
+import InlineChat from './InlineChat';
 
 /**
  * Bouton « Petite leçon de code sur ce sujet » + dialog affichant la mini-leçon
@@ -119,6 +120,14 @@ export default function AiLesson({ questionId, selectedOptionId, label, variant 
                                     />
                                 </section>
                             )}
+
+                            {/* Discussion contextuelle : l'élève peut approfondir avec le prof */}
+                            <section className="pt-1">
+                                <InlineChat
+                                    context={`Leçon en cours pour l'élève.\nExplication : ${lesson.explication}\nRègle : ${lesson.regle}`}
+                                    title="💬 Poser une question sur cette leçon"
+                                />
+                            </section>
                         </div>
                     ) : null}
                 </DialogContent>
