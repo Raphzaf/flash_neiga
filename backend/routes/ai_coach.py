@@ -153,7 +153,7 @@ def get_or_create_lesson(db: Session, question: QuestionDB, selected_option_id: 
         system=PROF_SYSTEM_PROMPT,
         user_content=user_content,
         schema=LESSON_SCHEMA,
-        max_tokens=2048,
+        max_tokens=8192,  # marge pour un éventuel schéma SVG (tokens lourds)
     )
 
     try:
@@ -274,8 +274,8 @@ async def generate_lesson(
 
     try:
         return get_or_create_lesson(db, question, selected_option_id)
-    except AICoachUnavailable:
-        raise HTTPException(status_code=503, detail=AI_UNAVAILABLE_MSG)
+    except AICoachUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{str(exc)[:300]}]")
 
 
 @router.post("/series-report")
@@ -385,8 +385,8 @@ async def series_report(
             schema=SERIES_REPORT_SCHEMA,
             max_tokens=8000,
         )
-    except AICoachUnavailable:
-        raise HTTPException(status_code=503, detail=AI_UNAVAILABLE_MSG)
+    except AICoachUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{str(exc)[:300]}]")
 
     try:
         db.add(SeriesReportDB(
