@@ -7,6 +7,7 @@ import { BookOpen, Video, FileText, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { sanitizeHtml, sanitizeVideoUrl } from '../lib/sanitize';
+import InlineChat from '../components/InlineChat';
 
 export default function Courses() {
     const [courses, setCourses] = useState([]);
@@ -158,6 +159,16 @@ export default function Courses() {
                                     Télécharger le support PDF
                                 </a>
                             )}
+
+                            {/* Discussion contextuelle avec le prof, sur ce cours */}
+                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                <InlineChat
+                                    context={`Cours consulté par l'élève : "${selectedCourse.title}".\n`
+                                        + `${selectedCourse.description || ''}\n`
+                                        + `${(selectedCourse.content || '').replace(/<[^>]+>/g, ' ').slice(0, 1500)}`}
+                                    title="💬 Une question sur ce cours ? Demande à ton prof"
+                                />
+                            </div>
                         </div>
                     </DialogContent>
                 </Dialog>

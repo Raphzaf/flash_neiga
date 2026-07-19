@@ -196,12 +196,49 @@ def _thinking_budget() -> int:
         return 0
 
 
-def _gemini_config(system: str, max_tokens: int, with_thinking: bool):
+_GEMINI_TYPE_MAP = {
+    "object": "OBJECT", "string": "STRING", "array": "ARRAY",
+    "boolean": "BOOLEAN", "integer": "INTEGER", "number": "NUMBER",
+}
+
+
+def _to_gemini_schema(schema: Any) -> Any:
+    """Convertit un JSON Schema (le nôtre) vers le format response_schema de Gemini :
+    types en MAJUSCULES, `["string","null"]` -> nullable, sans additionalProperties.
+    Garantit un JSON de sortie bien formé (le SDK gère l'échappement, ex. SVG)."""
+    if not isinstance(schema, dict):
+        return schema
+    out: Dict[str, Any] = {}
+    t = schema.get("type")
+    nullable = False
+    if isinstance(t, list):
+        nullable = "null" in t
+        non_null = [x for x in t if x != "null"]
+        t = non_null[0] if non_null else "string"
+    if isinstance(t, str):
+        out["type"] = _GEMINI_TYPE_MAP.get(t.lower(), t.upper())
+    if nullable:
+        out["nullable"] = True
+    if "enum" in schema:
+        out["enum"] = schema["enum"]
+    if "properties" in schema:
+        out["properties"] = {k: _to_gemini_schema(v) for k, v in schema["properties"].items()}
+        out["propertyOrdering"] = list(schema["properties"].keys())
+    if "required" in schema:
+        out["required"] = schema["required"]
+    if "items" in schema:
+        out["items"] = _to_gemini_schema(schema["items"])
+    return out
+
+
+def _gemini_config(system: str, max_tokens: int, with_thinking: bool, response_schema=None):
     kwargs: Dict[str, Any] = dict(
         system_instruction=system,
         response_mime_type="application/json",
         max_output_tokens=max_tokens,
     )
+    if response_schema is not None:
+        kwargs["response_schema"] = response_schema
     if with_thinking and hasattr(_genai_types, "ThinkingConfig"):
         kwargs["thinking_config"] = _genai_types.ThinkingConfig(thinking_budget=_thinking_budget())
     return _genai_types.GenerateContentConfig(**kwargs)
@@ -234,22 +271,34 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
         f"{json.dumps(schema, ensure_ascii=False)}"
     )
 
-    def _do(with_thinking: bool):
+    gemini_schema = _to_gemini_schema(schema)
+
+    def _do(with_thinking: bool, response_schema):
         return client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config=_gemini_config(system, max_tokens, with_thinking),
+            config=_gemini_config(system, max_tokens, with_thinking, response_schema),
         )
 
-    try:
-        response = _do(with_thinking=True)
-    except Exception as exc:
-        # Certains modèles (ex: 2.0) refusent thinking_config → réessai sans.
+    # Ordre des tentatives : JSON structuré natif (fiable) → sans thinking_config
+    # (modèles 2.0) → JSON mode simple (schéma décrit dans le prompt) en dernier recours.
+    attempts = [
+        (True, gemini_schema),
+        (False, gemini_schema),
+        (False, None),
+    ]
+    last_exc = None
+    response = None
+    for with_thinking, rs in attempts:
         try:
-            response = _do(with_thinking=False)
-        except Exception as exc2:
-            logger.warning("Appel Gemini en échec : %s", exc2)
-            raise AICoachUnavailable(str(exc2)) from exc2
+            response = _do(with_thinking, rs)
+            break
+        except Exception as exc:
+            last_exc = exc
+            continue
+    if response is None:
+        logger.warning("Appel Gemini en échec : %s", last_exc)
+        raise AICoachUnavailable(str(last_exc))
 
     text = getattr(response, "text", None)
     if not text:
