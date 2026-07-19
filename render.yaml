@@ -35,6 +35,22 @@ services:
         value: "https://flash-neiga-backend.onrender.com/api/payments/hyp/callback"
       - key: ALLOWED_ORIGINS
         value: "https://app.flash-neiga.com,https://appflashneiga.netlify.app"
+      # ===== Coach IA — Google AI / Gemini =====
+      - key: AI_PROVIDER
+        value: "gemini"
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"   # ou gemini-2.5-pro pour plus de qualité
+      - key: GEMINI_API_KEY
+        sync: false  # clé Google AI Studio — à définir dans le dashboard Render
+      # Alternative Vertex AI (au lieu de la clé AI Studio) :
+      # - key: GOOGLE_GENAI_USE_VERTEXAI
+      #   value: "true"
+      # - key: GOOGLE_CLOUD_PROJECT
+      #   value: "239164849877"
+      # - key: GOOGLE_CLOUD_LOCATION
+      #   value: "europe-west1"
+      - key: ADMIN_TOKEN
+        sync: false  # protège /api/admin/* (dont la synthèse des questions pièges)
 
 databases:
   - name: flash-neiga-db

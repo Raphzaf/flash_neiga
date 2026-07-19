@@ -36,6 +36,7 @@ export default function Admin() {
         database_type: ''
     });
     const [isLoadingStats, setIsLoadingStats] = useState(false);
+    const [isGeneratingSynthesis, setIsGeneratingSynthesis] = useState(false);
 
     // Manage questions state
     const [manageLoading, setManageLoading] = useState(false);
@@ -207,6 +208,18 @@ export default function Admin() {
             fetchStats();
         } catch (error) {
             toast.error('Error importing questions: ' + (error.response?.data?.message || error.message));
+        }
+    };
+
+    const handleGenerateTrapSynthesis = async () => {
+        setIsGeneratingSynthesis(true);
+        try {
+            await axios.post('/api/admin/trap-questions/synthesis');
+            toast.success('Synthèse des questions pièges générée ✅');
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Erreur lors de la génération de la synthèse');
+        } finally {
+            setIsGeneratingSynthesis(false);
         }
     };
 
@@ -433,8 +446,16 @@ export default function Admin() {
                                 >
                                     🔄 Actualiser les statistiques
                                 </Button>
-                                <Button 
-                                    onClick={handleClearDatabase} 
+                                <Button
+                                    onClick={handleGenerateTrapSynthesis}
+                                    className="w-full"
+                                    variant="secondary"
+                                    disabled={isGeneratingSynthesis}
+                                >
+                                    {isGeneratingSynthesis ? '⏳ Génération…' : '🧠 Générer la synthèse des questions pièges (IA)'}
+                                </Button>
+                                <Button
+                                    onClick={handleClearDatabase}
                                     className="w-full"
                                     variant="destructive"
                                 >

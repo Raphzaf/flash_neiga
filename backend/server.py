@@ -60,9 +60,21 @@ try:
 except ImportError:
     from backend.routes.admin_migration import router as admin_migration_router
 try:
-    from auth import get_current_user
+    from routes.mistakes import router as mistakes_router, record_mistake
 except ImportError:
-    from backend.auth import get_current_user
+    from backend.routes.mistakes import router as mistakes_router, record_mistake
+try:
+    from routes.ai_coach import router as ai_coach_router
+except ImportError:
+    from backend.routes.ai_coach import router as ai_coach_router
+try:
+    from routes.trap_questions import router as trap_questions_router
+except ImportError:
+    from backend.routes.trap_questions import router as trap_questions_router
+try:
+    from auth import get_current_user, get_current_user_optional
+except ImportError:
+    from backend.auth import get_current_user, get_current_user_optional
 try:
     from migrations.auto_migrate import run_hyp_migration
 except ImportError:
@@ -118,6 +130,9 @@ app.include_router(verifone_router)
 app.include_router(twocheckout_router)
 app.include_router(hyp_router)
 app.include_router(admin_migration_router)
+app.include_router(mistakes_router)
+app.include_router(ai_coach_router)
+app.include_router(trap_questions_router)
 
 
 # ===== Health Check Endpoint =====
@@ -1051,6 +1066,7 @@ async def get_signs(db: Session = Depends(get_db)):
 @app.post("/api/exam/start")
 async def start_exam(
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     import random
     # Fetch all questions and filter for playable ones (>=2 options, at least one correct)
@@ -1082,11 +1098,11 @@ async def start_exam(
     selected_count = min(30, len(selected_pool))
     selected = random.sample(selected_pool, selected_count) if selected_count > 0 else []
     
-    # Create exam session
+    # Create exam session — associée à l'élève connecté (sinon "guest" pour l'anonyme)
     exam_id = str(uuid.uuid4())
     exam = ExamSessionDB(
         id=exam_id,
-        user_id="guest",
+        user_id=current_user.id if current_user else "guest",
         status="in_progress",
         answers={},
         question_ids=[q.id for q in selected]
@@ -1187,11 +1203,16 @@ async def finish_exam(
     for question_id, selected_option_id in exam.answers.items():
         question = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
         if question:
+            answered_correct = False
             for opt in question.options:
                 if opt["id"] == selected_option_id and opt["is_correct"]:
+                    answered_correct = True
                     correct_count += 1
                     break
-    
+            # Mémoire des erreurs : toute réponse fausse en examen est enregistrée.
+            if not answered_correct and exam.user_id:
+                record_mistake(db, exam.user_id, question_id, commit=False)
+
     score = int((correct_count / total_count) * 100)
     passed = correct_count >= 25  # 25/30 minimum
     
@@ -1270,26 +1291,31 @@ async def get_exam_details(
 @app.post("/api/training/check", response_model=TrainingResponse)
 async def check_training_answer(
     answer: TrainingAnswerRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     question = db.query(QuestionDB).filter(QuestionDB.id == answer.question_id).first()
-    
+
     if not question:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question not found"
         )
-    
+
     is_correct = False
     correct_option_id = None
-    
+
     for opt in question.options:
         if opt["is_correct"]:
             correct_option_id = opt["id"]
             if opt["id"] == answer.selected_option_id:
                 is_correct = True
             break
-    
+
+    # Mémoire des erreurs : on enregistre la faute si l'élève est connecté.
+    if not is_correct and current_user is not None:
+        record_mistake(db, current_user.id, answer.question_id)
+
     return TrainingResponse(
         is_correct=is_correct,
         explanation=question.explanation,
@@ -1301,9 +1327,10 @@ async def check_training_answer(
 @app.get("/api/stats/summary")
 async def get_stats_summary(
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    # For now, use guest user
-    user_id = "guest"
+    # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
+    user_id = current_user.id if current_user else "guest"
     exams = db.query(ExamSessionDB).filter(
         and_(
             ExamSessionDB.user_id == user_id,
@@ -1347,9 +1374,10 @@ async def get_stats_summary(
 @app.get("/api/stats/details")
 async def get_stats_details(
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    # For now, use guest user
-    user_id = "guest"
+    # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
+    user_id = current_user.id if current_user else "guest"
     exams = db.query(ExamSessionDB).filter(
         and_(
             ExamSessionDB.user_id == user_id,
