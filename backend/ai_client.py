@@ -291,10 +291,23 @@ def _parse_json(text: str) -> Dict[str, Any]:
         if text.lower().startswith("json"):
             text = text[4:]
         text = text.strip()
+
+    decoder = json.JSONDecoder()
+    # 1) Premier objet JSON à partir du début (ignore tout "Extra data" qui suit).
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise AICoachUnavailable(f"JSON invalide renvoyé par le modèle : {exc}") from exc
+        obj, _ = decoder.raw_decode(text)
+        return obj
+    except json.JSONDecodeError:
+        pass
+    # 2) Sinon, on cherche le premier '{' (au cas où le modèle ajoute du texte avant).
+    start = text.find("{")
+    if start != -1:
+        try:
+            obj, _ = decoder.raw_decode(text[start:])
+            return obj
+        except json.JSONDecodeError as exc:
+            raise AICoachUnavailable(f"JSON invalide renvoyé par le modèle : {exc}") from exc
+    raise AICoachUnavailable("Réponse du modèle sans JSON exploitable.")
 
 
 def call_structured(

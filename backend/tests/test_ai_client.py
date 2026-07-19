@@ -69,6 +69,19 @@ def test_call_structured_parses_fenced_json(monkeypatch):
     assert ai_client.call_structured("s", "u", {}, client=client) == {"a": 1}
 
 
+def test_call_structured_ignores_extra_data(monkeypatch):
+    # Le modèle renvoie un objet valide puis du contenu en trop -> on garde le 1er objet.
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    client = _FakeGeminiClient('{"a": 1, "b": "x"}\n\nvoici mon explication en trop')
+    assert ai_client.call_structured("s", "u", {}, client=client) == {"a": 1, "b": "x"}
+
+
+def test_call_structured_handles_leading_text(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    client = _FakeGeminiClient('Bien sûr !\n{"a": 1}')
+    assert ai_client.call_structured("s", "u", {}, client=client) == {"a": 1}
+
+
 def test_call_structured_empty_response_raises(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "gemini")
     client = _FakeGeminiClient(None)
