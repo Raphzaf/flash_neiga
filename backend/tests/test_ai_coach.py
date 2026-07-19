@@ -144,6 +144,40 @@ def test_lesson_missing_question(db):
     assert r.status_code == 404
 
 
+# ===== Chatbot =====
+def test_chat_reply(db, monkeypatch):
+    captured = {}
+
+    def fake_chat(system, history, **kwargs):
+        captured["system"] = system
+        captured["history"] = history
+        return "En Israël, la priorité à droite s'applique sauf panneau contraire."
+
+    monkeypatch.setattr(ai_coach, "call_chat", fake_chat)
+
+    r = client.post("/api/ai-coach/chat", json={
+        "messages": [
+            {"role": "user", "content": "C'est quoi la priorité à droite ?"},
+        ],
+    })
+    assert r.status_code == 200
+    assert "priorité" in r.json()["reply"].lower()
+    assert captured["history"][-1]["role"] == "user"
+
+
+def test_chat_requires_last_user_message(db):
+    r = client.post("/api/ai-coach/chat", json={
+        "messages": [{"role": "assistant", "content": "Bonjour"}],
+    })
+    assert r.status_code == 400
+
+
+def test_chat_503_when_ai_unavailable(db, monkeypatch):
+    monkeypatch.setattr(ai_coach, "ai_configured", lambda: False)
+    r = client.post("/api/ai-coach/chat", json={"messages": [{"role": "user", "content": "salut"}]})
+    assert r.status_code == 503
+
+
 # ===== Phase 3 : bilan de série + encouragement chiffré =====
 def test_series_report_and_encouragement(db, monkeypatch):
     now = datetime.utcnow()
