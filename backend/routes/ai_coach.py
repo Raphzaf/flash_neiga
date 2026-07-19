@@ -259,6 +259,10 @@ async def series_report(
     if not exam:
         raise HTTPException(status_code=404, detail="Série introuvable")
 
+    # L'élève ne peut demander que le bilan de ses propres séries (ou d'une série anonyme).
+    if exam.user_id not in (current_user.id, "guest"):
+        raise HTTPException(status_code=403, detail="Accès refusé à cette série")
+
     # Progression chiffrée : toujours recalculée en SQL (chiffres exacts).
     encouragement = _weekly_success_rate(db, exam.user_id)
 
