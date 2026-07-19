@@ -213,6 +213,34 @@ async def ai_health():
     return diagnostics()
 
 
+@router.get("/selftest")
+async def ai_selftest(current_user: User = Depends(get_current_user)):
+    """Fait un mini-appel réel au modèle et renvoie le VRAI message d'erreur si ça
+    échoue (clé invalide, modèle non autorisé, quota…). Utile pour diagnostiquer
+    un 503 sans fouiller les logs. Ne renvoie jamais la clé.
+    """
+    if not ai_configured():
+        return {"ok": False, "error": "non configuré", "diagnostics": diagnostics()}
+    schema = {
+        "type": "object",
+        "properties": {"ok": {"type": "boolean"}},
+        "required": ["ok"],
+        "additionalProperties": False,
+    }
+    try:
+        result = call_structured(
+            system="Tu réponds en JSON.",
+            user_content="Renvoie simplement {\"ok\": true}.",
+            schema=schema,
+            max_tokens=100,
+        )
+        return {"ok": True, "model_reply": result, "diagnostics": diagnostics()}
+    except AICoachUnavailable as exc:
+        return {"ok": False, "error": str(exc)[:500], "diagnostics": diagnostics()}
+    except Exception as exc:  # filet de sécurité : on renvoie l'erreur au lieu d'un 500 opaque
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:500]}", "diagnostics": diagnostics()}
+
+
 @router.post("/lesson")
 async def generate_lesson(
     payload: dict,

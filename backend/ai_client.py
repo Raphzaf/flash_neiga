@@ -187,6 +187,43 @@ def get_client():
 
 
 # ===== Appels structurés (JSON) =====
+def _thinking_budget() -> int:
+    # 0 = thinking désactivé (défaut) : sur les modèles 2.5 (flash/flash-latest),
+    # le "thinking" consomme le budget de sortie et peut vider la réponse JSON.
+    try:
+        return int(os.environ.get("GEMINI_THINKING_BUDGET", "0"))
+    except ValueError:
+        return 0
+
+
+def _gemini_config(system: str, max_tokens: int, with_thinking: bool):
+    kwargs: Dict[str, Any] = dict(
+        system_instruction=system,
+        response_mime_type="application/json",
+        max_output_tokens=max_tokens,
+    )
+    if with_thinking and hasattr(_genai_types, "ThinkingConfig"):
+        kwargs["thinking_config"] = _genai_types.ThinkingConfig(thinking_budget=_thinking_budget())
+    return _genai_types.GenerateContentConfig(**kwargs)
+
+
+def _describe_empty(response) -> str:
+    parts = []
+    try:
+        pf = getattr(response, "prompt_feedback", None)
+        if pf and getattr(pf, "block_reason", None):
+            parts.append(f"block_reason={pf.block_reason}")
+    except Exception:
+        pass
+    try:
+        cands = getattr(response, "candidates", None) or []
+        if cands and getattr(cands[0], "finish_reason", None):
+            parts.append(f"finish_reason={cands[0].finish_reason}")
+    except Exception:
+        pass
+    return ", ".join(parts) or "aucun texte renvoyé"
+
+
 def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client) -> Dict[str, Any]:
     # JSON mode + schéma décrit dans le prompt : robuste quelle que soit la
     # version du SDK, sans dépendre du format de response_schema propre à Gemini.
@@ -196,24 +233,27 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
         "respectant exactement ce schéma JSON :\n"
         f"{json.dumps(schema, ensure_ascii=False)}"
     )
-    try:
-        response = client.models.generate_content(
+
+    def _do(with_thinking: bool):
+        return client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config=_genai_types.GenerateContentConfig(
-                system_instruction=system,
-                response_mime_type="application/json",
-                max_output_tokens=max_tokens,
-            ),
+            config=_gemini_config(system, max_tokens, with_thinking),
         )
+
+    try:
+        response = _do(with_thinking=True)
     except Exception as exc:
-        logger.warning("Appel Gemini en échec : %s", exc)
-        raise AICoachUnavailable(str(exc)) from exc
+        # Certains modèles (ex: 2.0) refusent thinking_config → réessai sans.
+        try:
+            response = _do(with_thinking=False)
+        except Exception as exc2:
+            logger.warning("Appel Gemini en échec : %s", exc2)
+            raise AICoachUnavailable(str(exc2)) from exc2
 
     text = getattr(response, "text", None)
     if not text:
-        # Réponse bloquée (sécurité) ou vide
-        raise AICoachUnavailable("Réponse Gemini vide ou bloquée.")
+        raise AICoachUnavailable(f"Réponse Gemini vide ou bloquée ({_describe_empty(response)}).")
     return _parse_json(text)
 
 
