@@ -310,6 +310,78 @@ def _parse_json(text: str) -> Dict[str, Any]:
     raise AICoachUnavailable("Réponse du modèle sans JSON exploitable.")
 
 
+def _chat_gemini(system: str, history: list, max_tokens: int, client) -> str:
+    contents = []
+    for msg in history:
+        role = "model" if msg.get("role") == "assistant" else "user"
+        text = (msg.get("content") or "").strip()
+        if not text:
+            continue
+        contents.append(_genai_types.Content(role=role, parts=[_genai_types.Part(text=text)]))
+    if not contents:
+        raise AICoachUnavailable("Message vide.")
+
+    def _cfg(with_thinking: bool):
+        kwargs: Dict[str, Any] = dict(system_instruction=system, max_output_tokens=max_tokens)
+        if with_thinking and hasattr(_genai_types, "ThinkingConfig"):
+            kwargs["thinking_config"] = _genai_types.ThinkingConfig(thinking_budget=_thinking_budget())
+        return _genai_types.GenerateContentConfig(**kwargs)
+
+    def _do(with_thinking: bool):
+        return client.models.generate_content(model=GEMINI_MODEL, contents=contents, config=_cfg(with_thinking))
+
+    try:
+        response = _do(with_thinking=True)
+    except Exception:
+        try:
+            response = _do(with_thinking=False)
+        except Exception as exc2:
+            logger.warning("Chat Gemini en échec : %s", exc2)
+            raise AICoachUnavailable(str(exc2)) from exc2
+
+    text = getattr(response, "text", None)
+    if not text:
+        raise AICoachUnavailable(f"Réponse Gemini vide ou bloquée ({_describe_empty(response)}).")
+    return text.strip()
+
+
+def _chat_claude(system: str, history: list, max_tokens: int, client) -> str:
+    messages = [
+        {"role": ("assistant" if m.get("role") == "assistant" else "user"), "content": m.get("content") or ""}
+        for m in history if (m.get("content") or "").strip()
+    ]
+    if not messages:
+        raise AICoachUnavailable("Message vide.")
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            messages=messages,
+        )
+    except Exception as exc:
+        logger.warning("Chat Claude en échec : %s", exc)
+        raise AICoachUnavailable(str(exc)) from exc
+    if getattr(response, "stop_reason", None) == "refusal":
+        raise AICoachUnavailable("La réponse a été refusée par le modèle.")
+    for block in getattr(response, "content", []) or []:
+        if getattr(block, "type", None) == "text":
+            return block.text.strip()
+    raise AICoachUnavailable("Réponse Claude vide.")
+
+
+def call_chat(system: str, history: list, max_tokens: int = 2048, client=None) -> str:
+    """Conversation libre (multi-tours) avec le prof IA.
+
+    `history` : liste de {role: "user"|"assistant", content: str}, se terminant
+    par le dernier message de l'élève. Renvoie la réponse texte du prof.
+    """
+    cli = client or get_client()
+    if _provider() == "claude":
+        return _chat_claude(system, history, max_tokens, cli)
+    return _chat_gemini(system, history, max_tokens, cli)
+
+
 def call_structured(
     system: str,
     user_content: str,

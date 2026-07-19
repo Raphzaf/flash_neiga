@@ -9,6 +9,7 @@ import ExamDetails from "./pages/ExamDetails";
 import Training from "./pages/Training";
 import Mistakes from "./pages/Mistakes";
 import TrapQuestions from "./pages/TrapQuestions";
+import ChatWidget from "./components/ChatWidget";
 import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
@@ -28,8 +29,13 @@ const ProtectedRoute = () => {
     const { isAuthenticated, loading } = useAuth();
     
     if (loading) return <div className="flex h-screen items-center justify-center text-slate-900 dark:text-white">Chargement...</div>;
-    
-    return isAuthenticated ? <Outlet /> : <Navigate to="/login" />;
+
+    return isAuthenticated ? (
+        <>
+            <Outlet />
+            <ChatWidget />
+        </>
+    ) : <Navigate to="/login" />;
 };
 
 function App() {

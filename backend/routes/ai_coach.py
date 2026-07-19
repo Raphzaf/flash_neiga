@@ -23,14 +23,14 @@ try:
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
     )
     from auth import get_current_user
-    from ai_client import call_structured, ai_configured, AICoachUnavailable, diagnostics
+    from ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
     )
     from backend.auth import get_current_user
-    from backend.ai_client import call_structured, ai_configured, AICoachUnavailable, diagnostics
+    from backend.ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,19 @@ PROF_SYSTEM_PROMPT = (
     "question fournit une explication officielle, appuie-toi dessus en "
     "priorité. Ne mentionne jamais que tu es une IA."
 )
+
+CHAT_SYSTEM_PROMPT = (
+    "Tu es le prof de code de la route israélien de l'élève, disponible 24h/24 "
+    "sur le site Flash Neiga. Tu réponds en français, tu tutoies l'élève, avec "
+    "des réponses claires, courtes et concrètes, toujours exactes vis-à-vis du "
+    "code de la route et de la conduite en Israël. Utilise des exemples et, si "
+    "utile, des listes à puces. Si la question n'a rien à voir avec la conduite, "
+    "le code de la route israélien ou la préparation à l'examen, recentre "
+    "gentiment l'élève sur ces sujets. Ne donne jamais de conseils dangereux ou "
+    "illégaux. Ne mentionne jamais que tu es une IA."
+)
+
+MAX_CHAT_HISTORY = 20  # nombre de messages récents conservés par tour
 
 # ===== Schémas structured outputs =====
 LESSON_SCHEMA: Dict[str, Any] = {
@@ -239,6 +252,46 @@ async def ai_selftest(current_user: User = Depends(get_current_user)):
         return {"ok": False, "error": str(exc)[:500], "diagnostics": diagnostics()}
     except Exception as exc:  # filet de sécurité : on renvoie l'erreur au lieu d'un 500 opaque
         return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:500]}", "diagnostics": diagnostics()}
+
+
+@router.post("/chat")
+async def chat(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Chatbot « prof 24h/24 » : conversation libre en français.
+
+    Body : { messages: [{role: "user"|"assistant", content: str}], context?: str }
+    Le backend est sans état : le front renvoie l'historique récent à chaque tour.
+    """
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(status_code=400, detail="messages requis")
+
+    # Nettoyage + on ne garde que les derniers échanges
+    history = [
+        {"role": ("assistant" if m.get("role") == "assistant" else "user"),
+         "content": str(m.get("content") or "").strip()}
+        for m in messages if str(m.get("content") or "").strip()
+    ][-MAX_CHAT_HISTORY:]
+    if not history or history[-1]["role"] != "user":
+        raise HTTPException(status_code=400, detail="Le dernier message doit venir de l'élève.")
+
+    if not ai_configured():
+        raise HTTPException(status_code=503, detail=AI_UNAVAILABLE_MSG)
+
+    system = CHAT_SYSTEM_PROMPT
+    context = str(payload.get("context") or "").strip()
+    if context:
+        system += f"\n\nContexte de l'élève (question en cours) : {context[:1500]}"
+
+    try:
+        reply = call_chat(system=system, history=history, max_tokens=2048)
+    except AICoachUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{str(exc)[:300]}]")
+
+    return {"reply": reply}
 
 
 @router.post("/lesson")
