@@ -182,8 +182,8 @@ async def generate_trap_synthesis(
             schema=SYNTHESIS_SCHEMA,
             max_tokens=8000,
         )
-    except AICoachUnavailable:
-        raise HTTPException(status_code=503, detail=AI_UNAVAILABLE_MSG)
+    except AICoachUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{str(exc)[:300]}]")
 
     try:
         # On ne garde que la dernière synthèse
