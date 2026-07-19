@@ -23,14 +23,14 @@ try:
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
     )
     from auth import get_current_user
-    from ai_client import call_structured, ai_configured, AICoachUnavailable
+    from ai_client import call_structured, ai_configured, AICoachUnavailable, diagnostics
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
     )
     from backend.auth import get_current_user
-    from backend.ai_client import call_structured, ai_configured, AICoachUnavailable
+    from backend.ai_client import call_structured, ai_configured, AICoachUnavailable, diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +207,12 @@ def _weekly_success_rate(db: Session, user_id: str) -> Dict[str, Any]:
 
 
 # ===== Endpoints =====
+@router.get("/health")
+async def ai_health():
+    """État de configuration du coach IA (pour diagnostiquer un 503). Sans secret."""
+    return diagnostics()
+
+
 @router.post("/lesson")
 async def generate_lesson(
     payload: dict,
