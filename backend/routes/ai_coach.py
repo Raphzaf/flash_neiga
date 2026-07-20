@@ -68,7 +68,6 @@ LESSON_SCHEMA: Dict[str, Any] = {
         "explication": {"type": "string"},
         "regle": {"type": "string"},
         "erreurs_a_eviter": {"type": "array", "items": {"type": "string"}},
-        "schema_svg": {"type": ["string", "null"]},
     },
     "required": ["explication", "regle", "erreurs_a_eviter"],
     "additionalProperties": False,
@@ -156,10 +155,9 @@ def get_or_create_lesson(db: Session, question: QuestionDB, selected_option_id: 
     if question.explanation:
         user_content += f"\nExplication officielle : {question.explanation}\n"
     user_content += (
-        "\nProduis une mini-leçon. Le champ schema_svg doit contenir un schéma SVG "
-        "autonome (balise <svg> complète, ~300x200, texte en français) UNIQUEMENT si "
-        "un schéma aide vraiment (priorités, distances, intersections, panneaux) ; "
-        "sinon mets-le à null."
+        "\nProduis une mini-leçon uniquement en texte : une explication claire, "
+        "un rappel de la règle, et les erreurs à éviter. N'inclus aucune image, "
+        "aucun schéma, aucun SVG."
     )
 
     lesson = call_structured(
