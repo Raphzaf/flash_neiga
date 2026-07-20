@@ -4,7 +4,6 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { GraduationCap, BookOpen, AlertTriangle, Lightbulb, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { sanitizeSvg } from '../lib/sanitize';
 import InlineChat from './InlineChat';
 
 /**
@@ -40,8 +39,6 @@ export default function AiLesson({ questionId, selectedOptionId, label, variant 
             setLoading(false);
         }
     };
-
-    const cleanSvg = lesson?.schema_svg ? sanitizeSvg(lesson.schema_svg) : '';
 
     return (
         <>
@@ -107,17 +104,6 @@ export default function AiLesson({ questionId, selectedOptionId, label, variant 
                                             </li>
                                         ))}
                                     </ul>
-                                </section>
-                            )}
-
-                            {/* Schéma SVG (optionnel) */}
-                            {cleanSvg && (
-                                <section>
-                                    <h4 className="font-semibold text-slate-900 dark:text-white mb-2">Le schéma</h4>
-                                    <div
-                                        className="flex justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-3"
-                                        dangerouslySetInnerHTML={{ __html: cleanSvg }}
-                                    />
                                 </section>
                             )}
 
