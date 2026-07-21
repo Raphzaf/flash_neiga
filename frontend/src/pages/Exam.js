@@ -410,19 +410,24 @@ export default function Exam() {
                         <ArrowLeft className="mr-2 h-4 w-4" /> Précédent
                     </Button>
 
-                    <div className="flex gap-1">
-                       {questions.map((_, idx) => (
-                           <div 
-                                key={idx} 
-                                className={`w-2 h-2 rounded-full transition-all ${
-                                    idx === currentQIndex 
-                                        ? 'bg-primary w-6' 
-                                        : answersArr.some(a => a.question_id === questions[idx]?.question_id)
-                                        ? 'bg-emerald-400 dark:bg-emerald-500' 
-                                        : 'bg-slate-200 dark:bg-slate-700'
-                                }`}
-                           />
-                       ))}
+                    <div className="flex flex-col items-center gap-1">
+                       <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                           {answersArr.length}/{questions.length} répondues
+                       </span>
+                       <div className="flex gap-1">
+                          {questions.map((_, idx) => (
+                              <div
+                                   key={idx}
+                                   className={`w-2 h-2 rounded-full transition-all ${
+                                       idx === currentQIndex
+                                           ? 'bg-primary w-6'
+                                           : answersArr.some(a => a.question_id === questions[idx]?.question_id)
+                                           ? 'bg-emerald-400 dark:bg-emerald-500'
+                                           : 'bg-slate-200 dark:bg-slate-700'
+                                   }`}
+                              />
+                          ))}
+                       </div>
                     </div>
 
                     <Button 

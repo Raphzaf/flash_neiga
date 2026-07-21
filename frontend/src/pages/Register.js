@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
@@ -12,12 +12,17 @@ export default function Register() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const { register } = useAuth();
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (password.length < 6) {
+            toast.error("Ton mot de passe doit contenir au moins 6 caractères.");
+            return;
+        }
         setIsLoading(true);
         try {
             await register(email, password, fullName);
@@ -46,10 +51,12 @@ export default function Register() {
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="fullname">Nom complet</Label>
-                            <Input 
-                                id="fullname" 
-                                type="text" 
-                                placeholder="John Doe"
+                            <Input
+                                id="fullname"
+                                type="text"
+                                placeholder="Ex : Sarah Cohen"
+                                autoComplete="name"
+                                autoFocus
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
                                 required
@@ -58,34 +65,52 @@ export default function Register() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
-                            <Input 
-                                id="email" 
-                                type="email" 
-                                placeholder="votre@email.com" 
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="votre@email.com"
+                                autoComplete="email"
+                                inputMode="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 data-testid="register-email-input"
                             />
+                            <p className="text-xs text-muted-foreground">Tu recevras tes accès et le suivi de ta progression sur cet email.</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password">Mot de passe</Label>
-                            <Input 
-                                id="password" 
-                                type="password" 
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                data-testid="register-password-input"
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="Au moins 6 caractères"
+                                    autoComplete="new-password"
+                                    minLength={6}
+                                    className="pr-10"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    data-testid="register-password-input"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((v) => !v)}
+                                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Choisis un mot de passe d'au moins 6 caractères.</p>
                         </div>
-                        <Button 
-                            type="submit" 
-                            className="w-full" 
-                            disabled={isLoading}
+                        <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={isLoading || !fullName || !email || !password}
                             data-testid="register-submit-button"
                         >
-                            {isLoading ? 'Chargement...' : "S'inscrire"}
+                            {isLoading ? 'Création du compte…' : "Créer mon compte"}
                         </Button>
                     </form>
                 </CardContent>
