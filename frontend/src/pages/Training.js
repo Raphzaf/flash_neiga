@@ -87,6 +87,16 @@ export default function Training() {
         }
     };
 
+    // Après une réponse, la touche Entrée passe à la question suivante (confort clavier).
+    useEffect(() => {
+        if (!feedback) return;
+        const onKey = (e) => {
+            if (e.key === 'Enter') nextQuestion();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [feedback, currentIndex, questions.length]);
+
     const handleCourseClick = async (courseId) => {
         try {
             const res = await axios.get(`/api/courses/${courseId}`);
@@ -101,7 +111,7 @@ export default function Training() {
     if (questions.length === 0) return (
         <div className="p-8 text-center">
             <p className="mb-4">Aucune question disponible dans cette catégorie.</p>
-            <Button onClick={() => setCategory('all')}>Voir toutes les questions</Button>
+            <Button onClick={() => setCategories(['all'])}>Voir toutes les questions</Button>
         </div>
     );
 
@@ -163,6 +173,15 @@ export default function Training() {
 
             {/* Question Card */}
             <div className="flex-1 flex flex-col justify-center">
+                {/* Progression + rappel du fonctionnement */}
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                        Question {currentIndex + 1} sur {questions.length}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 text-right">
+                        Choisis une réponse pour voir la correction — en cas d'erreur, demande ta « petite leçon ».
+                    </span>
+                </div>
                 <Card className="border-0 shadow-lg overflow-hidden bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     {currentQ.image_url && (
                         <div className="h-64 bg-black flex items-center justify-center">
@@ -232,7 +251,7 @@ export default function Training() {
                                     </div>
                                 )}
                                 <Button onClick={nextQuestion} className="mt-4 w-full bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600">
-                                    Question Suivante <ArrowRight className="ml-2 h-4 w-4" />
+                                    {currentIndex < questions.length - 1 ? 'Question suivante' : 'Terminer la série'} <ArrowRight className="ml-2 h-4 w-4" />
                                 </Button>
                             </div>
                         )}

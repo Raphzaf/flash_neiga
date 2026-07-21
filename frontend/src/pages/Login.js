@@ -7,13 +7,14 @@ import { Card, CardHeader, CardContent, CardFooter } from '../components/ui/card
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
-import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react'; // Icônes pour le "cachet"
+import { Mail, Lock, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react'; // Icônes pour le "cachet"
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({ email: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
@@ -75,6 +76,10 @@ export default function Login() {
                   id="email"
                   type="email"
                   placeholder="nom@exemple.com"
+                  autoFocus
+                  autoComplete="email"
+                  inputMode="email"
+                  required
                   className="pl-10 bg-white/[0.15] border-white/[0.25] text-white placeholder:text-white/50 rounded-xl h-12 transition-all duration-300 focus:border-yellow-400/50 focus:ring-4 focus:ring-yellow-400/20 focus:bg-white/[0.20] focus:shadow-[0_0_20px_rgba(251,191,36,0.15)] hover:border-white/[0.35]"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -92,11 +97,22 @@ export default function Login() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-yellow-400 transition-all duration-300 group-focus-within:drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
                 <Input
                   id="password"
-                  type="password"
-                  className="pl-10 bg-white/[0.15] border-white/[0.25] text-white placeholder:text-white/50 rounded-xl h-12 transition-all duration-300 focus:border-yellow-400/50 focus:ring-4 focus:ring-yellow-400/20 focus:bg-white/[0.20] focus:shadow-[0_0_20px_rgba(251,191,36,0.15)] hover:border-white/[0.35]"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Votre mot de passe"
+                  autoComplete="current-password"
+                  required
+                  className="pl-10 pr-11 bg-white/[0.15] border-white/[0.25] text-white placeholder:text-white/50 rounded-xl h-12 transition-all duration-300 focus:border-yellow-400/50 focus:ring-4 focus:ring-yellow-400/20 focus:bg-white/[0.20] focus:shadow-[0_0_20px_rgba(251,191,36,0.15)] hover:border-white/[0.35]"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
@@ -109,7 +125,7 @@ export default function Login() {
 
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !email || !password}
               className="w-full h-12 rounded-xl bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 hover:from-yellow-300 hover:via-amber-300 hover:to-yellow-400 text-slate-900 font-bold text-base shadow-[0_0_30px_rgba(251,191,36,0.5)] transition-all duration-300 active:scale-[0.98] hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(251,191,36,0.7)] relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
@@ -128,7 +144,7 @@ export default function Login() {
           <div className="w-full text-center">
             <p className="text-sm text-gray-200">
               Nouveau ici ?{' '}
-              <Link to="/register" className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors underline-offset-4 hover:underline">
+              <Link to="/register" className="font-semibold text-yellow-300 hover:text-yellow-200 transition-colors underline underline-offset-4">
                 Créer un compte
               </Link>
             </p>
