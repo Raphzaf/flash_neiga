@@ -42,7 +42,7 @@ export default function Dashboard() {
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">Flash Neiga</h1>
                     <div className="flex items-center gap-4">
-                        <span className="hidden md:inline-block font-medium text-sm text-slate-900 dark:text-white">{user?.full_name}</span>
+                        <span className="hidden md:inline-block font-medium text-sm text-slate-900 dark:text-white">{user?.full_name || user?.email}</span>
                         <Button variant="ghost" size="icon" onClick={logout} data-testid="logout-btn">
                             <LogOut className="h-5 w-5" />
                         </Button>

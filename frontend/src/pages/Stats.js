@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { BarChart3, TrendingUp, AlertCircle, CheckCircle, BookOpen } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { BarChart3, TrendingUp, AlertCircle, CheckCircle, BookOpen, ArrowLeft } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Link } from 'react-router-dom';
 
@@ -53,8 +54,20 @@ export default function Stats() {
         : 0;
 
     return (
-        <div className="max-w-5xl mx-auto p-6 min-h-screen space-y-8">
-            <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white">Vos Statistiques</h1>
+        <div className="min-h-screen pb-10">
+            {/* En-tête cohérent + retour accueil */}
+            <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 p-4">
+                <div className="max-w-5xl mx-auto flex items-center gap-3">
+                    <Link to="/">
+                        <Button variant="ghost" size="icon" aria-label="Retour à l'accueil">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Button>
+                    </Link>
+                    <h1 className="text-xl font-heading font-bold text-slate-900 dark:text-white">Vos Statistiques</h1>
+                </div>
+            </header>
+
+            <div className="max-w-5xl mx-auto p-6 space-y-8">
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
@@ -227,6 +240,7 @@ export default function Stats() {
                     </div>
                 </TabsContent>
             </Tabs>
+            </div>
         </div>
     );
 }

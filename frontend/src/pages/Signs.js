@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
-import { Search, Triangle, Circle, Octagon, Square } from 'lucide-react';
+import { Search, Triangle, Circle, Octagon, Square, ArrowLeft } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 // Map sign categories to shapes (based on Israeli road signs)
@@ -57,13 +59,25 @@ export default function Signs() {
     });
 
     return (
-        <div className="max-w-6xl mx-auto p-6 min-h-screen">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white">Panneaux de Signalisation</h1>
-                <div className="relative w-full md:w-64">
+        <div className="min-h-screen pb-10">
+            {/* En-tête cohérent + retour accueil */}
+            <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 p-4">
+                <div className="max-w-6xl mx-auto flex items-center gap-3">
+                    <Link to="/">
+                        <Button variant="ghost" size="icon" aria-label="Retour à l'accueil">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Button>
+                    </Link>
+                    <h1 className="text-xl font-heading font-bold text-slate-900 dark:text-white">Panneaux de Signalisation</h1>
+                </div>
+            </header>
+
+            <div className="max-w-6xl mx-auto p-6">
+            <div className="mb-8 flex justify-end">
+                <div className="relative w-full md:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 dark:text-slate-400" />
-                    <Input 
-                        placeholder="Rechercher un panneau..." 
+                    <Input
+                        placeholder="Rechercher un panneau..."
                         className="pl-9 rounded-full"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -162,6 +176,7 @@ export default function Signs() {
                     </div>
                 </DialogContent>
             </Dialog>
+            </div>
         </div>
     );
 }
