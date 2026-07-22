@@ -9,6 +9,7 @@ import ExamDetails from "./pages/ExamDetails";
 import Training from "./pages/Training";
 import Mistakes from "./pages/Mistakes";
 import TrapQuestions from "./pages/TrapQuestions";
+import Profile from "./pages/Profile";
 import ChatWidget from "./components/ChatWidget";
 import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
@@ -104,6 +105,7 @@ function App() {
               <Route path="/training" element={<Training />} />
               <Route path="/mistakes" element={<Mistakes />} />
               <Route path="/questions-pieges" element={<TrapQuestions />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/courses" element={<Courses />} />
               <Route path="/signs" element={<Signs />} />
               <Route path="/stats" element={<Stats />} />

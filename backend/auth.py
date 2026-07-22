@@ -56,7 +56,12 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
-    return User(id=user.id, email=user.email)
+    return User(
+        id=user.id,
+        email=user.email,
+        first_name=getattr(user, "first_name", None),
+        last_name=getattr(user, "last_name", None),
+    )
 
 
 # Version « soft » de l'authentification : ne lève jamais d'erreur.
