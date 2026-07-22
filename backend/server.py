@@ -72,6 +72,10 @@ try:
 except ImportError:
     from backend.routes.trap_questions import router as trap_questions_router
 try:
+    from routes.profile import router as profile_router
+except ImportError:
+    from backend.routes.profile import router as profile_router
+try:
     from auth import get_current_user, get_current_user_optional
 except ImportError:
     from backend.auth import get_current_user, get_current_user_optional
@@ -133,6 +137,7 @@ app.include_router(admin_migration_router)
 app.include_router(mistakes_router)
 app.include_router(ai_coach_router)
 app.include_router(trap_questions_router)
+app.include_router(profile_router)
 
 
 # ===== Health Check Endpoint =====
@@ -639,12 +644,22 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
     
+    # Prénom / nom : champs dédiés, avec repli sur l'ancien "full_name"
+    first_name = (user_in.first_name or "").strip() or None
+    last_name = (user_in.last_name or "").strip() or None
+    if not first_name and not last_name and user_in.full_name:
+        parts = user_in.full_name.strip().split(" ", 1)
+        first_name = parts[0] or None
+        last_name = parts[1].strip() if len(parts) > 1 else None
+
     # Create new user
     user_id = str(uuid.uuid4())
     user = UserDB(
         id=user_id,
         email=user_in.email,
-        hashed_password=hash_password(user_in.password)
+        hashed_password=hash_password(user_in.password),
+        first_name=first_name,
+        last_name=last_name,
     )
     db.add(user)
     db.commit()

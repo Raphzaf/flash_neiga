@@ -11,7 +11,8 @@ import { toast } from 'sonner';
 export default function Register() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const { register } = useAuth();
     const navigate = useNavigate();
@@ -25,7 +26,7 @@ export default function Register() {
         }
         setIsLoading(true);
         try {
-            await register(email, password, fullName);
+            await register(email, password, firstName, lastName);
             toast.success("Compte créé avec succès !");
             navigate('/');
         } catch (error) {
@@ -49,19 +50,34 @@ export default function Register() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="fullname">Nom complet</Label>
-                            <Input
-                                id="fullname"
-                                type="text"
-                                placeholder="Ex : Sarah Cohen"
-                                autoComplete="name"
-                                autoFocus
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                required
-                                data-testid="register-name-input"
-                            />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="firstname">Prénom</Label>
+                                <Input
+                                    id="firstname"
+                                    type="text"
+                                    placeholder="Ex : Sarah"
+                                    autoComplete="given-name"
+                                    autoFocus
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    required
+                                    data-testid="register-firstname-input"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="lastname">Nom</Label>
+                                <Input
+                                    id="lastname"
+                                    type="text"
+                                    placeholder="Ex : Cohen"
+                                    autoComplete="family-name"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    required
+                                    data-testid="register-lastname-input"
+                                />
+                            </div>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
@@ -107,7 +123,7 @@ export default function Register() {
                         <Button
                             type="submit"
                             className="w-full"
-                            disabled={isLoading || !fullName || !email || !password}
+                            disabled={isLoading || !firstName || !lastName || !email || !password}
                             data-testid="register-submit-button"
                         >
                             {isLoading ? 'Création du compte…' : "Créer mon compte"}

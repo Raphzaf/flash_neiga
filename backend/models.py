@@ -21,6 +21,8 @@ class UserDB(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class QuestionDB(Base):
@@ -240,6 +242,9 @@ class TrafficSign(TrafficSignCreate):
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    full_name: Optional[str] = None  # compat ascendante (ancien formulaire)
 
 
 class UserInDB(UserCreate):
@@ -249,6 +254,13 @@ class UserInDB(UserCreate):
 class User(BaseModel):
     id: str
     email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+
+class ProfileUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
 
 class ExamSession(BaseModel):

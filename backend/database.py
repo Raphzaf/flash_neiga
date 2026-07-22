@@ -59,6 +59,7 @@ def ensure_schema_updated():
         expected_columns = {
             'traffic_signs': ['id', 'number', 'name', 'description', 'image_url', 'category', 'explanation', 'created_at'],
             'questions': ['id', 'text', 'category', 'options', 'explanation', 'created_at'],
+            'users': ['id', 'email', 'hashed_password', 'first_name', 'last_name', 'created_at'],
         }
         
         # Check each table
