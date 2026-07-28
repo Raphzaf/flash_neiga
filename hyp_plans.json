@@ -1,4 +1,36 @@
 {
+  "standard_14d": {
+    "name": "Formule Standard — 14 jours",
+    "description": "Questions officielles, correction immédiate, explications après chaque erreur, plateforme e-learning complète, historique des erreurs à retravailler.",
+    "amount": 79,
+    "currency": "ILS",
+    "duration_days": 14,
+    "type": "standard"
+  },
+  "standard_30d": {
+    "name": "Formule Standard — 30 jours",
+    "description": "Questions officielles, correction immédiate, explications après chaque erreur, plateforme e-learning complète, historique des erreurs à retravailler.",
+    "amount": 129,
+    "currency": "ILS",
+    "duration_days": 30,
+    "type": "standard"
+  },
+  "premium_14d": {
+    "name": "Formule Premium — 14 jours",
+    "description": "Tout le contenu Standard + suivi personnalisé + Coach IA personnel disponible 24h/24 et 7j/7.",
+    "amount": 109,
+    "currency": "ILS",
+    "duration_days": 14,
+    "type": "premium"
+  },
+  "premium_30d": {
+    "name": "Formule Premium — 30 jours",
+    "description": "Tout le contenu Standard + suivi personnalisé + Coach IA personnel disponible 24h/24 et 7j/7.",
+    "amount": 159,
+    "currency": "ILS",
+    "duration_days": 30,
+    "type": "premium"
+  },
   "code_14d": {
     "name": "Abonnement Code 14 jours",
     "description": "Accès Web App, E-book, Questions officielles, Examens blancs, Coaching",
