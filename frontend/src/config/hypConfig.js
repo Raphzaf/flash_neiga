@@ -4,6 +4,14 @@
 export const HYP_CONFIG = {
   backendUrl: process.env.REACT_APP_BACKEND_URL || '/api',
   plans: {
+    STANDARD: {
+      DAYS_14: 'standard_14d',
+      DAYS_30: 'standard_30d',
+    },
+    PREMIUM: {
+      DAYS_14: 'premium_14d',
+      DAYS_30: 'premium_30d',
+    },
     CODE: {
       DAYS_14: 'code_14d',
       DAYS_30: 'code_30d',
@@ -19,6 +27,10 @@ export const HYP_CONFIG = {
 };
 
 export const PLAN_DETAILS = {
+  standard_14d: { name: 'Formule Standard', price: 79, currency: 'ILS', duration: '14 jours' },
+  standard_30d: { name: 'Formule Standard', price: 129, currency: 'ILS', duration: '30 jours' },
+  premium_14d: { name: 'Formule Premium', price: 109, currency: 'ILS', duration: '14 jours' },
+  premium_30d: { name: 'Formule Premium', price: 159, currency: 'ILS', duration: '30 jours' },
   code_14d: {
     name: 'Code 14 jours',
     price: 99,
