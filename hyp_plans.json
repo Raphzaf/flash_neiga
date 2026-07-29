@@ -1,32 +1,48 @@
 {
-  "standard_14d": {
-    "name": "Formule Standard — 14 jours",
-    "description": "Questions officielles, correction immédiate, explications après chaque erreur, plateforme e-learning complète, historique des erreurs à retravailler.",
-    "amount": 79,
+  "basic_14d": {
+    "name": "Formule Basic — 14 jours",
+    "description": "Questions officielles, dizaines de séries, historique, fiches & cours, suivi de progression, correction immédiate, plateforme e-learning, interface claire.",
+    "amount": 99,
     "currency": "ILS",
     "duration_days": 14,
-    "type": "standard"
+    "type": "basic"
   },
-  "standard_30d": {
-    "name": "Formule Standard — 30 jours",
-    "description": "Questions officielles, correction immédiate, explications après chaque erreur, plateforme e-learning complète, historique des erreurs à retravailler.",
-    "amount": 129,
+  "basic_21d": {
+    "name": "Formule Basic — 21 jours",
+    "description": "Questions officielles, dizaines de séries, historique, fiches & cours, suivi de progression, correction immédiate, plateforme e-learning, interface claire.",
+    "amount": 139,
+    "currency": "ILS",
+    "duration_days": 21,
+    "type": "basic"
+  },
+  "basic_30d": {
+    "name": "Formule Basic — 30 jours",
+    "description": "Questions officielles, dizaines de séries, historique, fiches & cours, suivi de progression, correction immédiate, plateforme e-learning, interface claire.",
+    "amount": 179,
     "currency": "ILS",
     "duration_days": 30,
-    "type": "standard"
+    "type": "basic"
   },
   "premium_14d": {
     "name": "Formule Premium — 14 jours",
-    "description": "Tout le contenu Standard + suivi personnalisé + Coach IA personnel disponible 24h/24 et 7j/7.",
-    "amount": 109,
+    "description": "Tout le contenu Basic + Coach IA pédagogique personnel 24h/24 + suivi personnalisé + historique des erreurs à retravailler.",
+    "amount": 139,
     "currency": "ILS",
     "duration_days": 14,
     "type": "premium"
   },
+  "premium_21d": {
+    "name": "Formule Premium — 21 jours",
+    "description": "Tout le contenu Basic + Coach IA pédagogique personnel 24h/24 + suivi personnalisé + historique des erreurs à retravailler.",
+    "amount": 189,
+    "currency": "ILS",
+    "duration_days": 21,
+    "type": "premium"
+  },
   "premium_30d": {
     "name": "Formule Premium — 30 jours",
-    "description": "Tout le contenu Standard + suivi personnalisé + Coach IA personnel disponible 24h/24 et 7j/7.",
-    "amount": 159,
+    "description": "Tout le contenu Basic + Coach IA pédagogique personnel 24h/24 + suivi personnalisé + historique des erreurs à retravailler.",
+    "amount": 229,
     "currency": "ILS",
     "duration_days": 30,
     "type": "premium"
