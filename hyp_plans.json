@@ -1,48 +1,48 @@
 {
   "basic_14d": {
-    "name": "Formule Basic — 14 jours",
-    "description": "Questions officielles, dizaines de séries, historique, fiches & cours, suivi de progression, correction immédiate, plateforme e-learning, interface claire.",
-    "amount": 99,
+    "name": "Formule Standard — 14 jours",
+    "description": "Questions officielles du Code de la route en Israël, plateforme e-learning (cours de code, explications illustrées, préparation à l'examen théorique), correction automatique et immédiate, suivi personnalisé de ta progression, « Pourquoi ai-je fait cette erreur ? » ta mini leçon explicative, historique de toutes tes erreurs pour les retravailler.",
+    "amount": 69,
     "currency": "ILS",
     "duration_days": 14,
     "type": "basic"
   },
   "basic_21d": {
-    "name": "Formule Basic — 21 jours",
-    "description": "Questions officielles, dizaines de séries, historique, fiches & cours, suivi de progression, correction immédiate, plateforme e-learning, interface claire.",
-    "amount": 139,
+    "name": "Formule Standard — 21 jours",
+    "description": "Questions officielles du Code de la route en Israël, plateforme e-learning (cours de code, explications illustrées, préparation à l'examen théorique), correction automatique et immédiate, suivi personnalisé de ta progression, « Pourquoi ai-je fait cette erreur ? » ta mini leçon explicative, historique de toutes tes erreurs pour les retravailler.",
+    "amount": 89,
     "currency": "ILS",
     "duration_days": 21,
     "type": "basic"
   },
   "basic_30d": {
-    "name": "Formule Basic — 30 jours",
-    "description": "Questions officielles, dizaines de séries, historique, fiches & cours, suivi de progression, correction immédiate, plateforme e-learning, interface claire.",
-    "amount": 179,
+    "name": "Formule Standard — 30 jours",
+    "description": "Questions officielles du Code de la route en Israël, plateforme e-learning (cours de code, explications illustrées, préparation à l'examen théorique), correction automatique et immédiate, suivi personnalisé de ta progression, « Pourquoi ai-je fait cette erreur ? » ta mini leçon explicative, historique de toutes tes erreurs pour les retravailler.",
+    "amount": 99,
     "currency": "ILS",
     "duration_days": 30,
     "type": "basic"
   },
   "premium_14d": {
     "name": "Formule Premium — 14 jours",
-    "description": "Tout le contenu Basic + Coach IA pédagogique personnel 24h/24 + suivi personnalisé + historique des erreurs à retravailler.",
-    "amount": 139,
+    "description": "Toutes les offres de la formule Standard incluses + FLASH Premium : questions illimitées 24/24 7/7 et ton professeur de code te répond sous forme de mini leçon précise, illustrée et mise en situation réelle.",
+    "amount": 119,
     "currency": "ILS",
     "duration_days": 14,
     "type": "premium"
   },
   "premium_21d": {
     "name": "Formule Premium — 21 jours",
-    "description": "Tout le contenu Basic + Coach IA pédagogique personnel 24h/24 + suivi personnalisé + historique des erreurs à retravailler.",
-    "amount": 189,
+    "description": "Toutes les offres de la formule Standard incluses + FLASH Premium : questions illimitées 24/24 7/7 et ton professeur de code te répond sous forme de mini leçon précise, illustrée et mise en situation réelle.",
+    "amount": 139,
     "currency": "ILS",
     "duration_days": 21,
     "type": "premium"
   },
   "premium_30d": {
     "name": "Formule Premium — 30 jours",
-    "description": "Tout le contenu Basic + Coach IA pédagogique personnel 24h/24 + suivi personnalisé + historique des erreurs à retravailler.",
-    "amount": 229,
+    "description": "Toutes les offres de la formule Standard incluses + FLASH Premium : questions illimitées 24/24 7/7 et ton professeur de code te répond sous forme de mini leçon précise, illustrée et mise en situation réelle.",
+    "amount": 149,
     "currency": "ILS",
     "duration_days": 30,
     "type": "premium"

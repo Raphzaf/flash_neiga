@@ -29,12 +29,12 @@ export const HYP_CONFIG = {
 };
 
 export const PLAN_DETAILS = {
-  basic_14d: { name: 'Formule Basic', price: 99, currency: 'ILS', duration: '14 jours' },
-  basic_21d: { name: 'Formule Basic', price: 139, currency: 'ILS', duration: '21 jours' },
-  basic_30d: { name: 'Formule Basic', price: 179, currency: 'ILS', duration: '30 jours' },
-  premium_14d: { name: 'Formule Premium', price: 139, currency: 'ILS', duration: '14 jours' },
-  premium_21d: { name: 'Formule Premium', price: 189, currency: 'ILS', duration: '21 jours' },
-  premium_30d: { name: 'Formule Premium', price: 229, currency: 'ILS', duration: '30 jours' },
+  basic_14d: { name: 'Formule Standard', price: 69, currency: 'ILS', duration: '14 jours' },
+  basic_21d: { name: 'Formule Standard', price: 89, currency: 'ILS', duration: '21 jours' },
+  basic_30d: { name: 'Formule Standard', price: 99, currency: 'ILS', duration: '30 jours' },
+  premium_14d: { name: 'Formule Premium', price: 119, currency: 'ILS', duration: '14 jours' },
+  premium_21d: { name: 'Formule Premium', price: 139, currency: 'ILS', duration: '21 jours' },
+  premium_30d: { name: 'Formule Premium', price: 149, currency: 'ILS', duration: '30 jours' },
   code_14d: {
     name: 'Code 14 jours',
     price: 99,
