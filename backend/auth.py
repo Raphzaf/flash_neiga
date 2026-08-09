@@ -93,3 +93,33 @@ async def get_current_user_optional(
     if user is None:
         return None
     return User(id=user.id, email=user.email)
+
+
+# ===== Administration =====
+# Les comptes administrateurs sont désignés par leur email via ADMIN_EMAILS
+# (liste séparée par des virgules). Valeur par défaut : le compte admin créé
+# au démarrage. Aucun secret n'est codé en dur.
+DEFAULT_ADMIN_EMAILS = "admin@gmail.com"
+
+
+def admin_emails() -> set:
+    raw = os.environ.get("ADMIN_EMAILS") or DEFAULT_ADMIN_EMAILS
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
+def is_admin_email(email: Optional[str]) -> bool:
+    return bool(email) and email.strip().lower() in admin_emails()
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Autorise uniquement les comptes administrateurs.
+
+    À utiliser sur toute route exposant des données personnelles (CRM) :
+    l'utilisateur doit être authentifié ET figurer dans ADMIN_EMAILS.
+    """
+    if not is_admin_email(current_user.email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
+    return current_user

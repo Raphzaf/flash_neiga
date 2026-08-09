@@ -49,8 +49,18 @@ services:
       #   value: "239164849877"
       # - key: GOOGLE_CLOUD_LOCATION
       #   value: "europe-west1"
+      # ===== Coach IA — Kimi / Moonshot AI (alternative) =====
+      # Pour basculer sur Kimi : mettre AI_PROVIDER=moonshot ci-dessus.
+      - key: MOONSHOT_BASE_URL
+        value: "https://api.moonshot.ai/v1"
+      - key: MOONSHOT_MODEL
+        value: "kimi-k3"   # kimi-k2.7-code | kimi-k2.6 | kimi-k2.5 (moins chers)
+      - key: MOONSHOT_API_KEY
+        sync: false  # SECRET — à saisir dans le dashboard Render, jamais dans ce fichier
       - key: ADMIN_TOKEN
         sync: false  # protège /api/admin/* (dont la synthèse des questions pièges)
+      - key: ADMIN_EMAILS
+        value: "admin@gmail.com"  # comptes autorisés sur le CMS et le CRM (séparés par des virgules)
 
 databases:
   - name: flash-neiga-db

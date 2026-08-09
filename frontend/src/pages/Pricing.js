@@ -3,9 +3,9 @@ import axios from "axios";
 import { HYP_CONFIG } from '../config/hypConfig';
 import { useAuth } from "../context/AuthContext";
 import {
-  Zap, FileCheck, Layers, LineChart, BookOpen, Sparkles, History,
-  Crown, Check, Star, ShieldCheck, MonitorSmartphone, GraduationCap, Car, Gift,
-  ArrowRight, Loader2, MessageCircle, BadgeCheck,
+  Zap, FileCheck, LineChart, BookOpen, HelpCircle, History,
+  Crown, Check, Star, ShieldCheck, MonitorSmartphone, GraduationCap,
+  ArrowRight, Loader2, BadgeCheck,
 } from "lucide-react";
 
 async function startHypCheckout(planId, userEmail = null, userId = null) {
@@ -25,49 +25,45 @@ async function startHypCheckout(planId, userEmail = null, userId = null) {
 }
 
 const HIGHLIGHTS = [
-  { icon: FileCheck, label: "Questions officielles du Code de la route israélien" },
-  { icon: Layers, label: "Des dizaines de séries de code" },
-  { icon: LineChart, label: "Suivi intelligent et individualisé" },
-  { icon: BookOpen, label: "Cours clairs et fiches de code" },
-  { icon: Sparkles, label: "Flashcards pour réviser l'essentiel" },
-  { icon: History, label: "Historique des questions" },
+  { icon: FileCheck, label: "Questions officielles du Code de la route en Israël" },
+  { icon: HelpCircle, label: "« Pourquoi ai-je fait cette erreur ? » Ta mini leçon de code explicative pour corriger ton erreur." },
+  { icon: History, label: "Historique de TOUTES tes erreurs pour les revoir et les retravailler !" },
+  { icon: LineChart, label: "Suis ta progression depuis le début !" },
+  { icon: BookOpen, label: "Cours de code et Flashcards pour mémoriser l'essentiel." },
 ];
 
 const PROF_TOPICS = [
-  "Comprendre une règle de priorité.",
-  "Interpréter un panneau de signalisation.",
-  "Analyser une erreur commise pendant un exercice.",
-  "Répondre à toutes tes questions sur le Code de la route israélien.",
+  "Les règles de priorités",
+  "Les intersections",
+  "Les limitations de vitesses",
+  "Les différentes familles de panneaux de signalisation",
+  "Les dépassements",
+  "Les erreurs les plus fréquentes aux examens",
 ];
 
-const BASIC_FEATURES = [
-  { text: "Questions officielles du Code de la route israélien" },
-  { text: "Des dizaines de séries de code" },
-  { text: "Historique des questions" },
-  { text: "Fiches de révision et cours" },
-  { text: "Suivi de progression" },
-  { text: "Correction automatique et immédiate après chaque erreur commise" },
+const STANDARD_FEATURES = [
+  { text: "Questions officielles du Code de la route en Israël" },
   {
-    text: "Plateforme e-learning complète",
-    sub: ["Cours de code de la route", "Fiches de révision", "Préparation à l'examen théorique et aux leçons de conduite"],
+    text: "Plateforme E-Learning avec",
+    sub: ["Cours de Code", "Explications illustrées", "Interface claire et intuitive", "Préparation à l'Examen Théorique"],
   },
-  { text: "Interface claire et intuitive" },
+  { text: "Correction automatique et immédiate de ton erreur" },
+  { text: "Suivi personnalisé de ta progression !" },
+  { text: "« Pourquoi ai-je fait cette erreur ? » Ta mini leçon explicative de ton erreur !" },
+  { text: "Historique de toutes tes erreurs pour les retravailler !" },
 ];
 
 const PREMIUM_FEATURES = [
-  { text: "Tout le contenu de la formule Basic", strong: true },
-  { text: "Coach IA pédagogique personnel — un prof de conduite disponible 24h/24", strong: true },
+  { text: "Toutes les offres de la formule Standard sont incluses.", strong: true },
   {
-    text: "Plateforme e-learning complète",
-    sub: ["Cours de code de la route", "Fiches de révision", "Préparation à l'examen théorique et aux leçons de conduite"],
+    text: "FLASH Premium : pose tes questions illimitées 24/24 7/7 et ton professeur de code te répond directement et clairement sous forme de mini leçon de code de façon précise, avec des illustrations et des mises en situations réelles, ce qui te garantira une progression rapide et une forte probabilité de réussite à ton examen théorique !",
+    strong: true,
   },
-  { text: "Suivi personnalisé de votre progression" },
-  { text: "Historique de toutes tes erreurs pour les retravailler jusqu'à leur parfaite maîtrise" },
 ];
 
 const TRUST = [
   { icon: BadgeCheck, title: "Contenu parfait en français", desc: "100 % conforme au Code de la route israélien" },
-  { icon: ShieldCheck, title: "Plateforme sécurisée", desc: "Données protégées" },
+  { icon: ShieldCheck, title: "Plateforme sécurisée", desc: "Paiement sécurisé et données protégées" },
   { icon: MonitorSmartphone, title: "Accessible partout", desc: "Ordinateur et smartphone, 24h/24" },
   { icon: GraduationCap, title: "Pédagogie française de référence", desc: "Méthode nouvelle, moderne et vivante" },
 ];
@@ -121,7 +117,7 @@ function DurationOptions({ options, selected, onSelect, accent }) {
 function Pricing() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(null);
-  const [basicSel, setBasicSel] = useState(HYP_CONFIG.plans.BASIC.DAYS_30);
+  const [standardSel, setStandardSel] = useState(HYP_CONFIG.plans.BASIC.DAYS_30);
   const [premiumSel, setPremiumSel] = useState(HYP_CONFIG.plans.PREMIUM.DAYS_30);
 
   const checkout = async (planId) => {
@@ -133,15 +129,15 @@ function Pricing() {
     }
   };
 
-  const basicOptions = [
-    { planId: HYP_CONFIG.plans.BASIC.DAYS_14, price: 99, duration: '14 jours' },
-    { planId: HYP_CONFIG.plans.BASIC.DAYS_21, price: 139, duration: '21 jours' },
-    { planId: HYP_CONFIG.plans.BASIC.DAYS_30, price: 179, duration: '30 jours' },
+  const standardOptions = [
+    { planId: HYP_CONFIG.plans.BASIC.DAYS_14, price: 69, duration: '14 jours' },
+    { planId: HYP_CONFIG.plans.BASIC.DAYS_21, price: 89, duration: '21 jours' },
+    { planId: HYP_CONFIG.plans.BASIC.DAYS_30, price: 99, duration: '30 jours' },
   ];
   const premiumOptions = [
-    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_14, price: 139, duration: '14 jours' },
-    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_21, price: 189, duration: '21 jours' },
-    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_30, price: 229, duration: '30 jours' },
+    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_14, price: 119, duration: '14 jours' },
+    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_21, price: 139, duration: '21 jours' },
+    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_30, price: 149, duration: '30 jours' },
   ];
 
   return (
@@ -161,7 +157,7 @@ function Pricing() {
                 <Zap className="h-5 w-5 text-slate-900" />
               </div>
               <div className="leading-tight">
-                <div className="text-lg font-extrabold">FlashNeiga</div>
+                <div className="text-lg font-extrabold">FLASHNEIGA</div>
                 <div className="text-[11px] text-yellow-300 font-semibold uppercase tracking-wide">
                   LA plateforme de référence
                 </div>
@@ -171,15 +167,21 @@ function Pricing() {
           </div>
 
           <div className="max-w-2xl">
+            <p className="text-sm md:text-base text-white/80 mb-4">
+              La <strong>Plateforme de Référence</strong> des francophones pour réussir rapidement le Code de la route
+              en Israël.
+            </p>
             <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">
-              Apprends plus <span className="text-yellow-400">vite</span>.<br />
-              Comprends <span className="text-yellow-400">mieux</span>.<br />
-              Réussis du premier coup.
+              Apprends <span className="text-yellow-400">mieux</span>.<br />
+              Comprends <span className="text-yellow-400">tes erreurs</span>.<br />
+              Réussis ton code du premier coup !
             </h1>
             <p className="mt-4 text-sm md:text-base text-white/75">
-              FlashNeiga est <strong>LA</strong> plateforme de référence dédiée aux francophones. Portée par une pédagogie
-              française reconnue pour son excellence, nous accompagnons et formons les élèves en Israël, en France et
-              partout dans le monde vers la réussite du Code de la route israélien.
+              FLASHNEIGA est heureux de vous faire découvrir sa <strong>Formation Théorique au Code de la route en
+              Israël</strong>. Nous accompagnons et formons nos élèves francophones à l'apprentissage continu des
+              différentes règles du Code de la route en Israël (signalisation, panneaux, règles de priorité...) grâce à
+              notre pédagogie et notre méthode d'enseignement à la française jusqu'à l'obtention du code en un minimum
+              de temps.
             </p>
           </div>
         </div>
@@ -196,33 +198,27 @@ function Pricing() {
           ))}
         </div>
 
-        {/* Professeur de conduite particulier */}
+        {/* Professeur particulier */}
         <div className="rounded-3xl bg-white/[0.06] border border-white/10 p-6 md:p-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-12 w-12 rounded-2xl bg-yellow-400 text-slate-900 flex items-center justify-center shadow-lg shadow-yellow-400/30">
               <GraduationCap className="h-6 w-6" />
             </div>
-            <h2 className="text-2xl font-extrabold">Ton professeur de conduite particulier</h2>
+            <h2 className="text-2xl font-extrabold">
+              Ton professeur particulier <em className="italic text-yellow-300">24/24 7/7</em>
+            </h2>
           </div>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-white/80 mb-3">Ton professeur est là pour t'aider sur différentes notions comme :</p>
-              <ul className="space-y-2">
-                {PROF_TOPICS.map((t, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-white/90">
-                    <Check className="h-4 w-4 mt-0.5 shrink-0 text-yellow-400" /> {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="rounded-2xl bg-gradient-to-br from-sky-500/20 to-yellow-400/10 border border-white/10 p-5 flex flex-col justify-center">
-              <MessageCircle className="h-7 w-7 text-yellow-300 mb-2" />
-              <p className="text-sm text-white/90">
-                Pose tes questions à ton professeur de conduite <strong>sous forme de chat</strong> : questions
-                <strong> illimitées</strong> et réponses sous forme de leçon de code claires et précises, pour un meilleur apprentissage.
-              </p>
-            </div>
-          </div>
+          <p className="text-white/80 mb-4">
+            t'accompagne pour te faire progresser rapidement sur toutes les notions importantes pour réussir ton
+            Examen Théorique du Code comme notamment :
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+            {PROF_TOPICS.map((t, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-white/90">
+                <Check className="h-4 w-4 mt-0.5 shrink-0 text-yellow-400" /> {t}
+              </li>
+            ))}
+          </ul>
         </div>
 
         {/* Formules */}
@@ -233,24 +229,24 @@ function Pricing() {
 
           <div className="grid md:grid-cols-2 gap-6 items-start">
 
-            {/* BASIC */}
+            {/* STANDARD */}
             <div className="rounded-3xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-6 shadow-xl border border-white/10">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-11 w-11 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center">
                   <Zap className="h-6 w-6" />
                 </div>
-                <h3 className="text-xl font-extrabold">Formule Basic</h3>
+                <h3 className="text-xl font-extrabold">Formule Standard</h3>
               </div>
-              <DurationOptions options={basicOptions} selected={basicSel} onSelect={setBasicSel} accent="sky" />
+              <DurationOptions options={standardOptions} selected={standardSel} onSelect={setStandardSel} accent="sky" />
               <ul className="mt-5 space-y-3">
-                {BASIC_FEATURES.map((f, i) => <FeatureItem key={i} item={f} accent="sky" />)}
+                {STANDARD_FEATURES.map((f, i) => <FeatureItem key={i} item={f} accent="sky" />)}
               </ul>
               <button
-                onClick={() => checkout(basicSel)}
-                disabled={loading === basicSel}
+                onClick={() => checkout(standardSel)}
+                disabled={loading === standardSel}
                 className="mt-6 w-full rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 uppercase tracking-wide transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {loading === basicSel ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Je commence <ArrowRight className="h-4 w-4" /></>}
+                {loading === standardSel ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Je commence <ArrowRight className="h-4 w-4" /></>}
               </button>
             </div>
 
@@ -279,22 +275,8 @@ function Pricing() {
             </div>
           </div>
 
-          {/* Offre spéciale */}
-          <div className="mt-6 rounded-3xl bg-gradient-to-r from-yellow-400 to-amber-400 text-slate-900 p-5 md:p-6 flex flex-col md:flex-row items-center gap-4 shadow-lg shadow-yellow-400/20">
-            <div className="h-14 w-14 rounded-2xl bg-slate-900/10 flex items-center justify-center shrink-0">
-              <Gift className="h-7 w-7" />
-            </div>
-            <div className="flex-1 text-center md:text-left">
-              <div className="text-xs font-bold uppercase tracking-wide">Offre spéciale — Premium 30 jours</div>
-              <div className="text-lg font-extrabold flex items-center justify-center md:justify-start gap-2">
-                <Car className="h-5 w-5" /> 1 séance de conduite offerte
-              </div>
-              <div className="text-sm">pour les 100 premiers utilisateurs de l'offre Premium 30 jours !</div>
-            </div>
-          </div>
-
-          <p className="mt-4 text-center text-sm text-white/70">
-            Le prix moyen par jour est entre <strong className="text-yellow-300">5 et 9 ₪</strong> selon la formule choisie.
+          <p className="mt-6 text-center text-sm text-white/70">
+            Le prix moyen par jour est entre <strong className="text-yellow-300">3 et 9 ₪</strong> selon la formule choisie.
           </p>
         </div>
 
@@ -310,8 +292,9 @@ function Pricing() {
         </div>
 
         {/* CTA bas de page */}
-        <div className="rounded-3xl bg-yellow-400 text-slate-900 p-6 text-center font-extrabold text-lg md:text-xl">
-          Rejoins FlashNeiga dès aujourd'hui et prends la route de la réussite ! 🚗💨
+        <div className="rounded-3xl bg-yellow-400 text-slate-900 p-6 text-center font-extrabold text-lg md:text-xl flex flex-wrap items-center justify-center gap-2">
+          <span>Rejoins FLASHNEIGA et obtiens ton code à la vitesse de l'éclair</span>
+          <Zap className="h-6 w-6 fill-slate-900" aria-hidden="true" />
         </div>
       </div>
     </div>

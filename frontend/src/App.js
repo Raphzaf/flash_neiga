@@ -14,6 +14,7 @@ import ChatWidget from "./components/ChatWidget";
 import Signs from "./pages/Signs";
 import Stats from "./pages/Stats";
 import Admin from "./pages/Admin";
+import AdminCRM from "./pages/AdminCRM";
 import Pricing from "./pages/Pricing";
 import Courses from "./pages/Courses";
 import SubscriptionSuccess from './pages/SubscriptionSuccess';
@@ -110,6 +111,7 @@ function App() {
               <Route path="/signs" element={<Signs />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/crm" element={<AdminCRM />} />
             </Route>
           </Routes>
         </main>

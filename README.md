@@ -908,6 +908,84 @@ curl -X POST http://localhost:8000/api/payments/paddle/webhook \
 ### Health
 - `GET /health` - Health check endpoint
 
+### CRM administrateur (`/api/admin/crm/*`)
+Réservé aux comptes dont l'email figure dans `ADMIN_EMAILS`. Toute autre session
+authentifiée reçoit un `403`.
+
+- `GET /api/admin/crm/stats` — comptes, abonnements actifs, chiffre d'affaires, paiements en attente
+- `GET /api/admin/crm/users` — liste des élèves (recherche, filtre actif/inactif, pagination)
+- `GET /api/admin/crm/users/{id}` — fiche complète : abonnements, paiements, progression
+- `PATCH /api/admin/crm/users/{id}` — modifier prénom / nom / email
+- `DELETE /api/admin/crm/users/{id}` — supprimer le compte et ses données personnelles
+- `POST /api/admin/crm/users/{id}/password` — réinitialiser le mot de passe
+- `POST /api/admin/crm/users/{id}/subscriptions` — accorder ou prolonger un abonnement
+- `POST /api/admin/crm/subscriptions/{id}/cancel` — résilier un abonnement
+- `GET /api/admin/crm/transactions` — historique des paiements
+- `GET /api/admin/crm/plans` — catalogue des formules
+
+Interface : bouton **« Ouvrir le CRM »** en haut de la page `/admin` (CMS), ou
+directement `/admin/crm`.
+
+## 🤖 Kimi (Moonshot AI) sur Render
+
+Le coach IA accepte Kimi comme fournisseur, en plus de Gemini (défaut) et Claude.
+L'API Moonshot est compatible OpenAI : côté backend Python c'est le SDK `openai`
+qui est utilisé (`backend/ai_client.py`), et `lib/kimi.ts` fournit le même client
+pour un usage Node **côté serveur uniquement**.
+
+### Activation
+
+1. Créer une clé sur [platform.moonshot.ai](https://platform.moonshot.ai).
+2. **Créditer le compte d'au moins 1 $** : une clé sur un compte à 0 $ n'est pas activée
+   et renvoie `401`.
+3. Dans le dashboard Render → service `flash-neiga-backend` → **Environment** :
+
+   | Variable | Valeur | Type |
+   |---|---|---|
+   | `MOONSHOT_API_KEY` | ta clé `sk-…` | **secret** (`sync: false`, à saisir à la main) |
+   | `MOONSHOT_BASE_URL` | `https://api.moonshot.ai/v1` | déjà dans `render.yaml` |
+   | `MOONSHOT_MODEL` | `kimi-k3` | déjà dans `render.yaml` |
+   | `AI_PROVIDER` | `moonshot` | à passer de `gemini` à `moonshot` pour basculer |
+
+   `render.yaml` déclare déjà ces quatre entrées ; seule `MOONSHOT_API_KEY` est marquée
+   `sync: false`, c'est-à-dire **jamais stockée dans le dépôt** — Render demande sa valeur
+   dans l'interface. Après modification, un **Manual Deploy → Clear build cache & deploy**
+   garantit que `openai` est bien installé.
+
+4. Vérifier : `GET /api/ai-coach/health` renvoie le fournisseur et l'état de configuration.
+
+### Modèles disponibles
+
+| Modèle | Contexte | Usage |
+|---|---|---|
+| `kimi-k3` | 1M | Flagship, raisonnement toujours actif, le plus cher |
+| `kimi-k2.7-code` | 262k | Orienté code, rapide |
+| `kimi-k2.6` | 262k | Généraliste multimodal |
+| `kimi-k2.5` | 262k | Économique |
+
+### Pièges à connaître
+
+- **Moonshot calcule les tokens à l'avance** : le quota consommé est
+  `tokens d'entrée + max_completion_tokens`, avant même la génération.
+- **Ne pas mettre `max_completion_tokens` trop haut**, sinon `429` immédiat
+  même sans trafic. La valeur par défaut ici est `4096`.
+- **`max_completion_tokens` remplace `max_tokens`**, qui est déprécié.
+- **`maxRetries: 0` est obligatoire** : les relances automatiques du SDK OpenAI
+  amplifient les `429` (chaque tentative reréserve le quota) au lieu de les absorber.
+- **Tier 0 (compte neuf) = limites très faibles.** Prévoir un rechargement de 10 $
+  pour passer au Tier 1.
+- **Plusieurs clés API n'augmentent pas les limites** : elles sont fixées *par compte*,
+  pas par clé.
+
+### Sécurité
+
+- `MOONSHOT_API_KEY` n'est lue que côté serveur (backend Python, scripts Node).
+  Elle n'est **jamais** préfixée `REACT_APP_` et n'entre donc jamais dans le bundle React.
+- `lib/kimi.ts` ne doit jamais être importé depuis `frontend/src/**`.
+- `.env.local` et `.env` sont ignorés par git ; seuls les `.env.example` sont versionnés.
+- Toutes les routes qui appellent l'IA (`/api/ai-coach/*`) exigent un JWT valide
+  (`Depends(get_current_user)`) : aucun appel anonyme ne peut consommer le quota.
+
 ## 📚 Question Management
 
 ### Automatic Import on First Startup
