@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { Switch } from '../components/ui/switch';
 import { Skeleton } from '../components/ui/skeleton';
-import { Search, RefreshCw, Trash2, Save } from 'lucide-react';
+import { Search, RefreshCw, Trash2, Save, Users } from 'lucide-react';
 
 export default function Admin() {
     const [qText, setQText] = useState('');
@@ -374,7 +375,14 @@ export default function Admin() {
 
     return (
         <div className="max-w-4xl mx-auto p-6 min-h-screen">
-            <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white">Administration (CMS)</h1>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Administration (CMS)</h1>
+                <Link to="/admin/crm">
+                    <Button variant="default" className="gap-2">
+                        <Users className="h-4 w-4" /> Ouvrir le CRM (comptes & abonnements)
+                    </Button>
+                </Link>
+            </div>
 
             <Tabs defaultValue="question">
                 <TabsList className="grid w-full grid-cols-6 mb-8">

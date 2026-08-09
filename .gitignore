@@ -88,6 +88,9 @@ android-sdk/ -e
 # Environment files (do not commit secrets)
 *.env
 *.env.*
+.env
+.env.local
+.env.*.local
 !*.env.example
 !backend/.env.example
 !frontend/.env.example

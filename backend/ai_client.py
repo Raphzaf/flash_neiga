@@ -4,9 +4,12 @@ Client IA partagé pour le coach (Flash Neiga).
 Fournisseur par défaut : **Google AI / Gemini** (SDK `google-genai`).
 Un fournisseur Claude (SDK `anthropic`) reste disponible via AI_PROVIDER=claude.
 
+Un fournisseur Kimi / Moonshot AI (API compatible OpenAI) est disponible via
+AI_PROVIDER=moonshot.
+
 Configuration par variables d'environnement (aucune clé n'est jamais codée en dur) :
 
-  AI_PROVIDER   = gemini (défaut) | claude
+  AI_PROVIDER   = gemini (défaut) | claude | moonshot
   GEMINI_MODEL  = gemini-2.5-flash (défaut) | gemini-2.5-pro | ...
 
   # --- Google AI Studio (chemin simple, recommandé) ---
@@ -21,6 +24,11 @@ Configuration par variables d'environnement (aucune clé n'est jamais codée en 
   # --- Claude (optionnel, AI_PROVIDER=claude) ---
   ANTHROPIC_API_KEY = sk-ant-...
   # ou Vertex : ANTHROPIC_VERTEX_PROJECT_ID + CLOUD_ML_REGION
+
+  # --- Kimi / Moonshot AI (optionnel, AI_PROVIDER=moonshot) ---
+  MOONSHOT_API_KEY  = sk-...                        (obligatoire)
+  MOONSHOT_BASE_URL = https://api.moonshot.ai/v1    (défaut)
+  MOONSHOT_MODEL    = kimi-k3                       (défaut)
 
 Le module n'échoue jamais à l'import : si le SDK ou la config manque,
 `ai_configured()` renvoie False et les endpoints IA répondent proprement 503.
@@ -37,6 +45,14 @@ logger = logging.getLogger(__name__)
 # --- Modèles ---
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 CLAUDE_MODEL = "claude-opus-4-8"
+
+# Kimi / Moonshot AI — modèles disponibles :
+#   kimi-k3        : flagship, 1M de contexte, raisonnement toujours actif, cher
+#   kimi-k2.7-code : orienté code, 262k de contexte, rapide
+#   kimi-k2.6      : généraliste multimodal, 262k de contexte
+#   kimi-k2.5      : économique, 262k de contexte
+MOONSHOT_MODEL = os.environ.get("MOONSHOT_MODEL", "kimi-k3")
+MOONSHOT_BASE_URL = os.environ.get("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
 
 
 def _provider() -> str:
@@ -59,6 +75,13 @@ try:
 except Exception as exc:  # pragma: no cover
     _anthropic = None  # type: ignore
     _ANTHROPIC_IMPORT_ERROR = exc
+
+try:
+    import openai as _openai  # type: ignore
+    _OPENAI_IMPORT_ERROR: Optional[Exception] = None
+except Exception as exc:  # pragma: no cover
+    _openai = None  # type: ignore
+    _OPENAI_IMPORT_ERROR = exc
 
 
 class AICoachUnavailable(Exception):
@@ -99,9 +122,20 @@ def _claude_configured() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def _moonshot_configured() -> bool:
+    if _openai is None:
+        return False
+    return bool(os.environ.get("MOONSHOT_API_KEY"))
+
+
 def ai_configured() -> bool:
     """Le coach IA est-il utilisable (SDK présent + credentials disponibles) ?"""
-    return _claude_configured() if _provider() == "claude" else _gemini_configured()
+    provider = _provider()
+    if provider == "claude":
+        return _claude_configured()
+    if provider == "moonshot":
+        return _moonshot_configured()
+    return _gemini_configured()
 
 
 def diagnostics() -> Dict[str, Any]:
@@ -117,6 +151,12 @@ def diagnostics() -> Dict[str, Any]:
         )
         sdk_name = "anthropic"
         model = CLAUDE_MODEL
+    elif provider == "moonshot":
+        sdk_installed = _openai is not None
+        use_vertex = False
+        has_credentials = bool(os.environ.get("MOONSHOT_API_KEY"))
+        sdk_name = "openai"
+        model = MOONSHOT_MODEL
     else:
         sdk_installed = _genai is not None
         use_vertex = _gemini_use_vertex()
@@ -167,6 +207,22 @@ def get_client():
             if not os.environ.get("ANTHROPIC_API_KEY"):
                 raise AICoachUnavailable("ANTHROPIC_API_KEY manquant.")
             _client = _anthropic.Anthropic()
+        return _client
+
+    if provider == "moonshot":
+        if _openai is None:
+            raise AICoachUnavailable(f"SDK openai indisponible : {_OPENAI_IMPORT_ERROR}")
+        api_key = os.environ.get("MOONSHOT_API_KEY")
+        if not api_key:
+            raise AICoachUnavailable("MOONSHOT_API_KEY manquant.")
+        # max_retries=0 est CRITIQUE : Moonshot supporte mal les relances
+        # automatiques du SDK (elles amplifient les 429 au lieu de les absorber).
+        _client = _openai.OpenAI(
+            api_key=api_key,
+            base_url=MOONSHOT_BASE_URL,
+            max_retries=0,
+            timeout=120.0,
+        )
         return _client
 
     # --- Gemini (défaut) ---
@@ -332,6 +388,96 @@ def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tok
     return _parse_json(text)
 
 
+def _moonshot_error(exc: Exception) -> AICoachUnavailable:
+    """Traduit une erreur Moonshot en message exploitable.
+
+    Le 429 est le cas le plus fréquent : Moonshot facture le quota *à l'avance*
+    (tokens d'entrée + max_completion_tokens), donc une valeur de sortie trop
+    haute déclenche un 429 immédiat, même sans trafic.
+    """
+    status = getattr(exc, "status_code", None)
+    if status == 429:
+        return AICoachUnavailable(
+            "Limite de débit Moonshot atteinte (429). Réduis max_completion_tokens "
+            "ou recharge le compte pour passer au palier supérieur."
+        )
+    if status == 401:
+        return AICoachUnavailable("Clé MOONSHOT_API_KEY invalide ou non activée (401).")
+    return AICoachUnavailable(f"Appel Moonshot en échec : {exc}")
+
+
+def _log_moonshot_usage(response) -> None:
+    """Journalise la consommation de tokens (utile pour suivre le quota)."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    logger.info(
+        "Moonshot %s — tokens: %s entrée + %s sortie = %s",
+        MOONSHOT_MODEL,
+        getattr(usage, "prompt_tokens", "?"),
+        getattr(usage, "completion_tokens", "?"),
+        getattr(usage, "total_tokens", "?"),
+    )
+
+
+def _moonshot_text(response) -> str:
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        raise AICoachUnavailable("Réponse Moonshot vide.")
+    content = getattr(choices[0].message, "content", None)
+    if not content or not content.strip():
+        raise AICoachUnavailable("Réponse Moonshot vide.")
+    return content.strip()
+
+
+def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client) -> Dict[str, Any]:
+    prompt = (
+        f"{user_content}\n\n"
+        "Réponds UNIQUEMENT avec un objet JSON valide (aucun texte autour, pas de balise Markdown) "
+        "respectant exactement ce schéma JSON :\n"
+        f"{json.dumps(schema, ensure_ascii=False)}"
+    )
+    try:
+        response = client.chat.completions.create(
+            model=MOONSHOT_MODEL,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            # max_completion_tokens remplace max_tokens (déprécié).
+            max_completion_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        )
+    except Exception as exc:
+        logger.warning("Appel Moonshot en échec : %s", exc)
+        raise _moonshot_error(exc) from exc
+
+    _log_moonshot_usage(response)
+    return _parse_json(_moonshot_text(response))
+
+
+def _chat_moonshot(system: str, history: list, max_tokens: int, client) -> str:
+    messages = [{"role": "system", "content": system}]
+    messages += [
+        {"role": ("assistant" if m.get("role") == "assistant" else "user"), "content": m.get("content") or ""}
+        for m in history if (m.get("content") or "").strip()
+    ]
+    if len(messages) == 1:
+        raise AICoachUnavailable("Message vide.")
+    try:
+        response = client.chat.completions.create(
+            model=MOONSHOT_MODEL,
+            messages=messages,
+            max_completion_tokens=max_tokens,
+        )
+    except Exception as exc:
+        logger.warning("Chat Moonshot en échec : %s", exc)
+        raise _moonshot_error(exc) from exc
+
+    _log_moonshot_usage(response)
+    return _moonshot_text(response)
+
+
 def _parse_json(text: str) -> Dict[str, Any]:
     text = text.strip()
     # Nettoyage défensif d'éventuelles fences ```json ... ```
@@ -426,8 +572,11 @@ def call_chat(system: str, history: list, max_tokens: int = 2048, client=None) -
     par le dernier message de l'élève. Renvoie la réponse texte du prof.
     """
     cli = client or get_client()
-    if _provider() == "claude":
+    provider = _provider()
+    if provider == "claude":
         return _chat_claude(system, history, max_tokens, cli)
+    if provider == "moonshot":
+        return _chat_moonshot(system, history, max_tokens, cli)
     return _chat_gemini(system, history, max_tokens, cli)
 
 
@@ -444,6 +593,9 @@ def call_structured(
     Lève `AICoachUnavailable` en cas d'erreur (refus, vide, JSON invalide, API).
     """
     cli = client or get_client()
-    if _provider() == "claude":
+    provider = _provider()
+    if provider == "claude":
         return _call_claude(system, user_content, schema, max_tokens, cli)
+    if provider == "moonshot":
+        return _call_moonshot(system, user_content, schema, max_tokens, cli)
     return _call_gemini(system, user_content, schema, max_tokens, cli)
