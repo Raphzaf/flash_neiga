@@ -99,11 +99,14 @@ export default function AdminCRM() {
         }
     }, [handleError]);
 
-    const fetchUsers = useCallback(async (nextOffset = 0) => {
+    // Les critères sont passés en arguments (et non lus dans la closure) pour que
+    // ce chargeur reste stable : le premier chargement ne se relance pas à chaque
+    // frappe dans le champ de recherche.
+    const loadUsers = useCallback(async (nextOffset, searchTerm, status) => {
         setUsersLoading(true);
         try {
             const { data } = await axios.get('/api/admin/crm/users', {
-                params: { search: search || undefined, status: statusFilter, limit: LIMIT, offset: nextOffset },
+                params: { search: searchTerm || undefined, status, limit: LIMIT, offset: nextOffset },
             });
             setUsers(data.items || []);
             setUsersTotal(data.total || 0);
@@ -114,7 +117,21 @@ export default function AdminCRM() {
         } finally {
             setUsersLoading(false);
         }
-    }, [search, statusFilter, handleError]);
+    }, [handleError]);
+
+    const fetchUsers = useCallback(
+        (nextOffset = 0) => loadUsers(nextOffset, search, statusFilter),
+        [loadUsers, search, statusFilter],
+    );
+
+    const loadPlans = useCallback(async () => {
+        try {
+            const { data } = await axios.get('/api/admin/crm/plans');
+            setPlans(data.plans || []);
+        } catch {
+            /* le sélecteur reste vide : non bloquant */
+        }
+    }, []);
 
     const fetchTransactions = useCallback(async () => {
         setTxLoading(true);
@@ -130,12 +147,9 @@ export default function AdminCRM() {
 
     useEffect(() => {
         fetchStats();
-        fetchUsers(0);
-        axios.get('/api/admin/crm/plans')
-            .then(({ data }) => setPlans(data.plans || []))
-            .catch(() => { /* le sélecteur reste vide, non bloquant */ });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        loadUsers(0, '', 'all');
+        loadPlans();
+    }, [fetchStats, loadUsers, loadPlans]);
 
     const openUser = async (userId) => {
         setDetailLoading(true);
