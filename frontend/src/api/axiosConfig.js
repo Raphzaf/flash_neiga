@@ -51,6 +51,16 @@ axios.interceptors.request.use(
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
+    // 402 = abonnement requis : on renvoie l'élève vers la page Formules.
+    // Distinct du 401 (session expirée) : le compte reste valide, seul l'accès
+    // au contenu est fermé.
+    if (error.response?.status === 402) {
+      if (window.location.pathname !== '/pricing') {
+        window.location.href = '/pricing';
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401) {
       console.warn('🚫 Unauthorized (401) - Clearing token');
       localStorage.removeItem('token');

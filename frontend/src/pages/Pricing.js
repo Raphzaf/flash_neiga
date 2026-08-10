@@ -8,11 +8,17 @@ import {
   ArrowRight, Loader2, BadgeCheck,
 } from "lucide-react";
 
-async function startHypCheckout(planId, userEmail = null, userId = null) {
+async function startHypCheckout(planId, userEmail = null, userId = null, promoCode = null) {
   try {
     const res = await axios.post('/api/payments/hyp/create-payment', {
       plan_id: planId, user_email: userEmail, user_id: userId,
+      promo_code: promoCode || null,
     });
+    // Code offrant 100 % : aucun paiement, l'accès est déjà activé côté serveur.
+    if (res.data?.free) {
+      window.location.href = '/payment/success?free=1';
+      return;
+    }
     const paymentUrl = res.data?.payment_url;
     if (paymentUrl) {
       window.location.href = paymentUrl;
@@ -142,13 +148,43 @@ function Pricing() {
   const [loading, setLoading] = useState(null);
   const [standardSel, setStandardSel] = useState(HYP_CONFIG.plans.BASIC.DAYS_30);
   const [premiumSel, setPremiumSel] = useState(HYP_CONFIG.plans.PREMIUM.DAYS_30);
+  const [promoInput, setPromoInput] = useState('');
+  const [promoApplied, setPromoApplied] = useState(null);
+  const [promoMessage, setPromoMessage] = useState(null);
+  const [promoChecking, setPromoChecking] = useState(false);
 
   const checkout = async (planId) => {
     setLoading(planId);
     try {
-      await startHypCheckout(planId, user?.email || null, user?.id || null);
+      await startHypCheckout(planId, user?.email || null, user?.id || null, promoApplied?.code || null);
     } finally {
       setLoading(null);
+    }
+  };
+
+  // Vérifie le code auprès du serveur pour afficher le prix remisé.
+  // Le montant réellement facturé est recalculé côté serveur au paiement.
+  const applyPromo = async (planId) => {
+    const code = promoInput.trim();
+    if (!code) return;
+    setPromoChecking(true);
+    setPromoMessage(null);
+    try {
+      const { data } = await axios.post('/api/payments/hyp/validate-promo', {
+        code, plan_id: planId, user_id: user?.id || null,
+      });
+      if (data.valid) {
+        setPromoApplied(data);
+        setPromoMessage({ ok: true, text: data.message });
+      } else {
+        setPromoApplied(null);
+        setPromoMessage({ ok: false, text: data.message });
+      }
+    } catch (e) {
+      setPromoApplied(null);
+      setPromoMessage({ ok: false, text: e?.response?.data?.detail || 'Code invalide' });
+    } finally {
+      setPromoChecking(false);
     }
   };
 
@@ -299,7 +335,44 @@ function Pricing() {
             </div>
           </div>
 
-          <p className="mt-6 text-center text-sm text-white/70">
+          {/* Code promo */}
+          <div className="mt-6 rounded-2xl bg-white/[0.06] border border-white/10 p-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <label htmlFor="promo" className="text-sm text-white/85 font-semibold whitespace-nowrap">
+                Tu as un code promo ?
+              </label>
+              <input
+                id="promo"
+                type="text"
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                placeholder="Saisis ton code"
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm text-white placeholder-white/40 uppercase focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              />
+              <button
+                type="button"
+                onClick={() => applyPromo(premiumSel)}
+                disabled={promoChecking || !promoInput.trim()}
+                className="rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-2 text-sm transition-colors disabled:opacity-50"
+              >
+                {promoChecking ? 'Vérification…' : 'Appliquer'}
+              </button>
+            </div>
+            {promoMessage && (
+              <p className={`mt-2 text-sm ${promoMessage.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+                {promoMessage.text}
+                {promoApplied && !promoApplied.free && (
+                  <> — tu paieras <strong>{promoApplied.final_amount} ₪</strong> au lieu de {promoApplied.original_amount} ₪.</>
+                )}
+              </p>
+            )}
+            <p className="mt-2 text-xs text-white/50">
+              Le code est vérifié pour la formule Premium sélectionnée ; la remise est recalculée sur la
+              formule que tu choisis au moment du paiement.
+            </p>
+          </div>
+
+          <p className="mt-4 text-center text-sm text-white/70">
             Le prix moyen par jour est entre <strong className="text-yellow-300">3 et 9 ₪</strong> selon la formule choisie.
           </p>
         </div>

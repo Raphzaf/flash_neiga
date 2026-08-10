@@ -80,9 +80,9 @@ try:
 except ImportError:
     from backend.routes.admin_crm import router as admin_crm_router
 try:
-    from auth import get_current_user, get_current_user_optional
+    from auth import get_current_user, get_current_user_optional, require_admin, require_subscription
 except ImportError:
-    from backend.auth import get_current_user, get_current_user_optional
+    from backend.auth import get_current_user, get_current_user_optional, require_admin, require_subscription
 try:
     from migrations.auto_migrate import run_hyp_migration
 except ImportError:
@@ -607,7 +607,10 @@ async def startup():
 
 # ===== Dev seed endpoint (optional) =====
 @app.post("/api/dev/seed")
-async def dev_seed(db: Session = Depends(get_db)):
+async def dev_seed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
     try:
         count = db.query(QuestionDB).count()
         if count >= 30:
@@ -695,7 +698,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 # ===== Admin Endpoints =====
 @app.get("/api/admin/questions/stats")
-async def get_question_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_question_stats(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Get statistics about questions in the database"""
     try:
         total = db.query(QuestionDB).count()
@@ -722,14 +725,25 @@ async def get_question_stats(current_user: User = Depends(get_current_user), db:
 
 @app.post("/api/admin/reset-admin-password")
 async def reset_admin_password(payload: dict, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):
-    """Reset the admin password to a provided value (default 'admin').
-    Secured by ADMIN_TOKEN env var if set.
-    Payload: { "email": "admin@gmail.com", "new_password": "admin" }
+    """Réinitialise le mot de passe d'un compte administrateur.
+
+    Protégé par ADMIN_TOKEN, qui est OBLIGATOIRE : sans cette variable
+    d'environnement l'endpoint est désactivé (sinon n'importe qui pourrait
+    reprendre la main sur le compte admin).
+    Payload : { "email": "...", "new_password": "..." }
     """
-    if os.environ.get("ADMIN_TOKEN") and x_admin_token != os.environ.get("ADMIN_TOKEN"):
+    admin_token = os.environ.get("ADMIN_TOKEN")
+    if not admin_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Endpoint désactivé : définissez ADMIN_TOKEN pour l'utiliser.",
+        )
+    if x_admin_token != admin_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
     email = payload.get("email") or "admin@gmail.com"
-    new_password = payload.get("new_password") or "admin."
+    new_password = payload.get("new_password")
+    if not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Mot de passe requis (8 caractères minimum)")
     user = db.query(UserDB).filter(UserDB.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Admin user not found")
@@ -742,7 +756,7 @@ async def reset_admin_password(payload: dict, db: Session = Depends(get_db), x_a
 @app.post("/api/admin/import-questions")
 async def import_questions(
     payload: dict = {},
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Manually import questions from data_v3.json"""
@@ -776,7 +790,7 @@ async def import_questions(
 @app.delete("/api/admin/questions/clear")
 async def clear_questions(
     confirm: bool = False,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Clear all questions from database (requires confirmation)"""
@@ -807,7 +821,7 @@ async def list_admin_questions(
     missingOnly: bool = False,
     limit: int = 100,
     offset: int = 0,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """List questions for admin management (with optional filter for missing explanation)."""
@@ -834,7 +848,7 @@ async def list_admin_questions(
 async def update_question_explanation(
     question_id: str,
     payload: ExplanationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Update or add explanation for a question."""
@@ -861,7 +875,7 @@ async def update_question_explanation(
 @app.delete("/api/admin/questions/{question_id}")
 async def delete_question(
     question_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a single question by id."""
@@ -884,7 +898,7 @@ async def list_admin_signs(
     missingOnly: bool = False,
     limit: int = 100,
     offset: int = 0,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """List traffic signs for admin management (with optional filter for missing explanation)."""
@@ -932,7 +946,7 @@ async def list_admin_signs(
 async def update_sign_explanation(
     sign_id: str,
     payload: ExplanationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Update or add explanation for a traffic sign."""
@@ -959,7 +973,7 @@ async def update_sign_explanation(
 @app.delete("/api/admin/signs/{sign_id}")
 async def delete_sign(
     sign_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a single traffic sign by id."""
@@ -980,7 +994,8 @@ async def delete_sign(
 async def get_questions(
     category:  Optional[List[str]] = None,
     q: Optional[str] = None,
-    db:  Session = Depends(get_db)
+    db:  Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     query = db.query(QuestionDB)
     if category and len(category) > 0:
@@ -1009,7 +1024,8 @@ async def get_questions(
 @app.post("/api/questions", response_model=Question)
 async def create_question(
     question_in: QuestionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     question = QuestionDB(
         id=str(uuid.uuid4()),
@@ -1034,7 +1050,10 @@ async def create_question(
 
 # ===== Traffic Signs Endpoints =====
 @app.get("/api/signs", response_model=List[TrafficSign])
-async def get_signs(db: Session = Depends(get_db)):
+async def get_signs(
+    db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
+):
     """Return traffic signs from DB; fallback to bundled JSON if DB unavailable.
 
     Prevents 500 errors in case of DB/table issues by serving static data.
@@ -1087,6 +1106,7 @@ async def get_signs(db: Session = Depends(get_db)):
 async def start_exam(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     import random
     # Fetch all questions and filter for playable ones (>=2 options, at least one correct)
@@ -1154,6 +1174,7 @@ async def start_exam(
 async def get_exam(
     exam_id: str,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
@@ -1179,6 +1200,7 @@ async def submit_answer(
     exam_id: str,
     answer: SubmitAnswerRequest,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
@@ -1201,6 +1223,7 @@ async def submit_answer(
 async def finish_exam(
     exam_id: str,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
@@ -1256,6 +1279,7 @@ async def finish_exam(
 async def get_exam_details(
     exam_id: str,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     if not exam:
@@ -1313,6 +1337,7 @@ async def check_training_answer(
     answer: TrainingAnswerRequest,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     question = db.query(QuestionDB).filter(QuestionDB.id == answer.question_id).first()
 
@@ -1348,6 +1373,7 @@ async def check_training_answer(
 async def get_stats_summary(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
     user_id = current_user.id if current_user else "guest"
@@ -1395,6 +1421,7 @@ async def get_stats_summary(
 async def get_stats_details(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
     user_id = current_user.id if current_user else "guest"
@@ -1449,7 +1476,10 @@ async def get_stats_details(
 
 # ===== Courses Endpoints =====
 @app.get("/api/courses", response_model=List[Course])
-async def get_courses(db: Session = Depends(get_db)):
+async def get_courses(
+    db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
+):
     """Get all courses, sorted by order"""
     try:
         courses = db.query(CourseDB).order_by(CourseDB.order).all()
@@ -1474,7 +1504,11 @@ async def get_courses(db: Session = Depends(get_db)):
 
 
 @app.get("/api/courses/{course_id}", response_model=Course)
-async def get_course(course_id: str, db: Session = Depends(get_db)):
+async def get_course(
+    course_id: str,
+    db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
+):
     """Get a specific course by ID"""
     course = db.query(CourseDB).filter(CourseDB.id == course_id).first()
     if not course:
@@ -1498,7 +1532,7 @@ async def get_course(course_id: str, db: Session = Depends(get_db)):
 @app.post("/api/courses", response_model=Course)
 async def create_course(
     course_data: CourseCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new course (admin only)"""
@@ -1540,7 +1574,7 @@ async def create_course(
 async def update_course(
     course_id: str,
     course_data: CourseCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Update a course (admin only)"""
@@ -1583,7 +1617,7 @@ async def update_course(
 @app.delete("/api/courses/{course_id}")
 async def delete_course(
     course_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a course (admin only)"""
@@ -1604,7 +1638,7 @@ async def delete_course(
 async def update_course_order(
     course_id: str,
     order_update: CourseOrderUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Update course order (admin only)"""

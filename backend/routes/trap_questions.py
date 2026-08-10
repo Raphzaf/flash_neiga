@@ -18,12 +18,12 @@ from sqlalchemy.orm import Session
 try:
     from database import get_db
     from models import UserMistakeDB, QuestionDB, AILessonDB, TrapSynthesisDB, User
-    from auth import get_current_user
+    from auth import get_current_user, require_subscription
     from ai_client import call_structured, ai_configured, AICoachUnavailable
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import UserMistakeDB, QuestionDB, AILessonDB, TrapSynthesisDB, User
-    from backend.auth import get_current_user
+    from backend.auth import get_current_user, require_subscription
     from backend.ai_client import call_structured, ai_configured, AICoachUnavailable
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ def _aggregate_traps(db: Session, limit: int) -> List[Dict[str, Any]]:
     return results
 
 
-@router.get("/api/trap-questions")
+@router.get("/api/trap-questions", dependencies=[Depends(require_subscription)])
 async def list_trap_questions(
     limit: int = 30,
     current_user: User = Depends(get_current_user),
@@ -132,7 +132,7 @@ async def list_trap_questions(
     }
 
 
-@router.get("/api/trap-questions/synthesis")
+@router.get("/api/trap-questions/synthesis", dependencies=[Depends(require_subscription)])
 async def get_trap_synthesis(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

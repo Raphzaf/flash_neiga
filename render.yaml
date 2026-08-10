@@ -26,7 +26,7 @@ services:
       - key: HYP_API_URL
         value: "https://icom.yaad.net/p/"
       - key: HYP_REQUIRE_SIGNATURE
-        value: "false"  # Set to "true" once the terminal signs its notifications
+        value: "true"  # Le terminal signe ses notifications : toute notification non signée est rejetée
       - key: HYP_SUCCESS_URL
         value: "https://app.flash-neiga.com/payment/success"
       - key: HYP_ERROR_URL

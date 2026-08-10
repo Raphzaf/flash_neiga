@@ -111,6 +111,51 @@ def is_admin_email(email: Optional[str]) -> bool:
     return bool(email) and email.strip().lower() in admin_emails()
 
 
+def has_active_subscription(db: Session, user_id: str) -> bool:
+    """L'élève dispose-t-il d'un abonnement en cours de validité ?"""
+    from datetime import datetime
+    try:
+        from models import SubscriptionDB
+    except ImportError:  # pragma: no cover
+        from backend.models import SubscriptionDB
+
+    now = datetime.utcnow()
+    sub = (
+        db.query(SubscriptionDB)
+        .filter(
+            SubscriptionDB.user_id == user_id,
+            SubscriptionDB.status == "active",
+        )
+        .order_by(SubscriptionDB.created_at.desc())
+        .first()
+    )
+    # Un abonnement résilié reste valable jusqu'à sa date de fin ; c'est le champ
+    # end_date qui fait foi, pas seulement le statut.
+    return bool(sub and (sub.end_date is None or sub.end_date > now))
+
+
+async def require_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Réserve l'accès au contenu aux élèves ayant un abonnement actif.
+
+    Répond 402 (Payment Required) pour que le front puisse rediriger vers la
+    page Formules sans confondre ce cas avec une session expirée (401) ou un
+    accès administrateur refusé (403).
+    Les administrateurs ne sont pas soumis au paywall.
+    """
+    if is_admin_email(current_user.email):
+        return current_user
+
+    if not has_active_subscription(db, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Un abonnement actif est nécessaire pour accéder à ce contenu.",
+        )
+    return current_user
+
+
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Autorise uniquement les comptes administrateurs.
 
