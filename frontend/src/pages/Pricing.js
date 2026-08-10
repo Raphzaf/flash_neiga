@@ -41,10 +41,18 @@ const PROF_TOPICS = [
   "Les erreurs les plus fréquentes aux examens",
 ];
 
+// Code couleur repris du document de la direction :
+//   jaune = mots-clés de marque, rouge = promesses et intitulés mis en avant.
+// Les nuances sont ajustées selon le fond (bleu nuit, carte claire/sombre, bandeau
+// jaune) pour rester lisibles, mais l'attribution des couleurs suit le document.
+const RED_ON_DARK = "text-red-400";
+const RED_ON_CARD = "text-red-600 dark:text-red-400";
+const YELLOW_ON_CARD = "text-yellow-600 dark:text-yellow-300";
+
 const STANDARD_FEATURES = [
   { text: "Questions officielles du Code de la route en Israël" },
   {
-    text: "Plateforme E-Learning avec",
+    text: <><span className={RED_ON_CARD}>Plateforme E-Learning</span> avec</>,
     sub: ["Cours de Code", "Explications illustrées", "Interface claire et intuitive", "Préparation à l'Examen Théorique"],
   },
   { text: "Correction automatique et immédiate de ton erreur" },
@@ -56,7 +64,15 @@ const STANDARD_FEATURES = [
 const PREMIUM_FEATURES = [
   { text: "Toutes les offres de la formule Standard sont incluses.", strong: true },
   {
-    text: "FLASH Premium : pose tes questions illimitées 24/24 7/7 et ton professeur de code te répond directement et clairement sous forme de mini leçon de code de façon précise, avec des illustrations et des mises en situations réelles, ce qui te garantira une progression rapide et une forte probabilité de réussite à ton examen théorique !",
+    text: (
+      <>
+        <span className={YELLOW_ON_CARD}>FLASH</span> Premium : pose tes questions{' '}
+        <span className={RED_ON_CARD}>illimitées 24/24 7/7</span> et ton professeur de code te répond
+        directement et clairement sous forme de mini leçon de code de façon précise, avec des illustrations
+        et des mises en situations réelles, ce qui te garantira une progression rapide et une forte
+        probabilité de réussite à ton examen théorique !
+      </>
+    ),
     strong: true,
   },
 ];
@@ -167,17 +183,18 @@ function Pricing() {
           </div>
 
           <div className="max-w-2xl">
-            <p className="text-sm md:text-base text-white/80 mb-4">
-              La <strong>Plateforme de Référence</strong> des francophones pour réussir rapidement le Code de la route
+            <p className="text-sm md:text-base font-semibold text-yellow-400 mb-4">
+              La Plateforme de Référence des francophones pour réussir rapidement le Code de la route
               en Israël.
             </p>
             <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">
               Apprends <span className="text-yellow-400">mieux</span>.<br />
-              Comprends <span className="text-yellow-400">tes erreurs</span>.<br />
-              Réussis ton code du premier coup !
+              Comprends tes <span className="text-yellow-400">erreurs</span>.<br />
+              <span className={RED_ON_DARK}>Réussis ton code du premier coup !</span>
             </h1>
             <p className="mt-4 text-sm md:text-base text-white/75">
-              FLASHNEIGA est heureux de vous faire découvrir sa <strong>Formation Théorique au Code de la route en
+              <span className={`font-semibold ${RED_ON_DARK}`}>FLASHNEIGA</span> est heureux de vous faire découvrir
+              sa <strong>Formation Théorique au Code de la route en
               Israël</strong>. Nous accompagnons et formons nos élèves francophones à l'apprentissage continu des
               différentes règles du Code de la route en Israël (signalisation, panneaux, règles de priorité...) grâce à
               notre pédagogie et notre méthode d'enseignement à la française jusqu'à l'obtention du code en un minimum
@@ -205,7 +222,7 @@ function Pricing() {
               <GraduationCap className="h-6 w-6" />
             </div>
             <h2 className="text-2xl font-extrabold">
-              Ton professeur particulier <em className="italic text-yellow-300">24/24 7/7</em>
+              Ton professeur particulier <em className={`italic ${RED_ON_DARK}`}>24/24 7/7</em>
             </h2>
           </div>
           <p className="text-white/80 mb-4">
@@ -235,7 +252,7 @@ function Pricing() {
                 <div className="h-11 w-11 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center">
                   <Zap className="h-6 w-6" />
                 </div>
-                <h3 className="text-xl font-extrabold">Formule Standard</h3>
+                <h3 className={`text-xl font-extrabold ${RED_ON_CARD}`}>Formule Standard</h3>
               </div>
               <DurationOptions options={standardOptions} selected={standardSel} onSelect={setStandardSel} accent="sky" />
               <ul className="mt-5 space-y-3">
@@ -259,7 +276,7 @@ function Pricing() {
                 <div className="h-11 w-11 rounded-2xl bg-yellow-100 text-yellow-600 flex items-center justify-center">
                   <Crown className="h-6 w-6" />
                 </div>
-                <h3 className="text-xl font-extrabold">Formule Premium</h3>
+                <h3 className={`text-xl font-extrabold ${RED_ON_CARD}`}>Formule Premium</h3>
               </div>
               <DurationOptions options={premiumOptions} selected={premiumSel} onSelect={setPremiumSel} accent="gold" />
               <ul className="mt-5 space-y-3">
@@ -293,7 +310,9 @@ function Pricing() {
 
         {/* CTA bas de page */}
         <div className="rounded-3xl bg-yellow-400 text-slate-900 p-6 text-center font-extrabold text-lg md:text-xl flex flex-wrap items-center justify-center gap-2">
-          <span>Rejoins FLASHNEIGA et obtiens ton code à la vitesse de l'éclair</span>
+          <span>
+            Rejoins <span className="text-red-700">FLASHNEIGA</span> et obtiens ton code à la vitesse de l'éclair
+          </span>
           <Zap className="h-6 w-6 fill-slate-900" aria-hidden="true" />
         </div>
       </div>
