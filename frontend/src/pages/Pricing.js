@@ -33,53 +33,60 @@ const HIGHLIGHTS = [
 ];
 
 const PROF_TOPICS = [
-  "Les règles de priorités",
+  "Les règles de priorité",
   "Les intersections",
-  "Les limitations de vitesses",
+  "Les limitations de vitesse",
   "Les différentes familles de panneaux de signalisation",
   "Les dépassements",
   "Les erreurs les plus fréquentes aux examens",
 ];
 
-// Code couleur repris du document de la direction :
-//   jaune = mots-clés de marque, rouge = promesses et intitulés mis en avant.
-// Les nuances sont ajustées selon le fond (bleu nuit, carte claire/sombre, bandeau
-// jaune) pour rester lisibles, mais l'attribution des couleurs suit le document.
-const RED_ON_DARK = "text-red-400";
-const RED_ON_CARD = "text-red-600 dark:text-red-400";
-const YELLOW_ON_CARD = "text-yellow-600 dark:text-yellow-300";
+// Mise en forme reprise à l'identique du document de la direction :
+// jaune #ffff00, rouge #ff0000, gras et italique appliqués mot pour mot.
+// Seule exception : sur la carte Premium (fond blanc), le jaune pur serait
+// invisible — il y est donc assombri en doré, même teinte, lisible.
+const YELLOW = "text-[#ffff00] italic";
+const YELLOW_ON_WHITE = "text-[#b59500] italic";
+const RED = "text-[#ff0000] italic";
+const RED_BOLD = "text-[#ff0000] italic font-bold";
 
 const STANDARD_FEATURES = [
   { text: "Questions officielles du Code de la route en Israël" },
   {
-    text: <><span className={RED_ON_CARD}>Plateforme E-Learning</span> avec</>,
+    text: <><span className={RED_BOLD}>Plateforme E-Learning</span> avec</>,
     sub: ["Cours de Code", "Explications illustrées", "Interface claire et intuitive", "Préparation à l'Examen Théorique"],
   },
   { text: "Correction automatique et immédiate de ton erreur" },
   { text: "Suivi personnalisé de ta progression !" },
-  { text: "« Pourquoi ai-je fait cette erreur ? » Ta mini leçon explicative de ton erreur !" },
+  {
+    text: (
+      <>
+        <span className="italic">« Pourquoi ai-je fait cette erreur ? »</span> Ta mini leçon explicative
+        de ton erreur !
+      </>
+    ),
+  },
   { text: "Historique de toutes tes erreurs pour les retravailler !" },
 ];
 
 const PREMIUM_FEATURES = [
-  { text: "Toutes les offres de la formule Standard sont incluses.", strong: true },
+  { text: <span className="italic">Toutes les offres de la formule Standard sont incluses.</span> },
   {
     text: (
       <>
-        <span className={YELLOW_ON_CARD}>FLASH</span> Premium : pose tes questions{' '}
-        <span className={RED_ON_CARD}>illimitées 24/24 7/7</span> et ton professeur de code te répond
+        <span className={YELLOW_ON_WHITE}>FLASH</span> <span className="italic">Premium</span> : pose tes
+        questions <span className={RED}>illimitées 24/24 7/7</span> et ton professeur de code te répond
         directement et clairement sous forme de mini leçon de code de façon précise, avec des illustrations
         et des mises en situations réelles, ce qui te garantira une progression rapide et une forte
         probabilité de réussite à ton examen théorique !
       </>
     ),
-    strong: true,
   },
 ];
 
 const TRUST = [
   { icon: BadgeCheck, title: "Contenu parfait en français", desc: "100 % conforme au Code de la route israélien" },
-  { icon: ShieldCheck, title: "Plateforme sécurisée", desc: "Paiement sécurisé et données protégées" },
+  { icon: ShieldCheck, title: "Plateforme sécurisée", desc: <span className="italic">Paiement sécurisé et données protégées</span> },
   { icon: MonitorSmartphone, title: "Accessible partout", desc: "Ordinateur et smartphone, 24h/24" },
   { icon: GraduationCap, title: "Pédagogie française de référence", desc: "Méthode nouvelle, moderne et vivante" },
 ];
@@ -183,17 +190,17 @@ function Pricing() {
           </div>
 
           <div className="max-w-2xl">
-            <p className="text-sm md:text-base font-semibold text-yellow-400 mb-4">
+            <p className={`text-sm md:text-base font-semibold mb-4 ${YELLOW}`}>
               La Plateforme de Référence des francophones pour réussir rapidement le Code de la route
               en Israël.
             </p>
             <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">
-              Apprends <span className="text-yellow-400">mieux</span>.<br />
-              Comprends tes <span className="text-yellow-400">erreurs</span>.<br />
-              <span className={RED_ON_DARK}>Réussis ton code du premier coup !</span>
+              Apprends <span className={YELLOW}>mieux</span>.<br />
+              Comprends tes <span className={YELLOW}>erreurs</span>.<br />
+              <span className={RED}>Réussis ton code du premier coup !</span>
             </h1>
             <p className="mt-4 text-sm md:text-base text-white/75">
-              <span className={`font-semibold ${RED_ON_DARK}`}>FLASHNEIGA</span> est heureux de vous faire découvrir
+              <span className={RED_BOLD}>FLASHNEIGA</span> est heureux de vous faire découvrir
               sa <strong>Formation Théorique au Code de la route en
               Israël</strong>. Nous accompagnons et formons nos élèves francophones à l'apprentissage continu des
               différentes règles du Code de la route en Israël (signalisation, panneaux, règles de priorité...) grâce à
@@ -222,7 +229,7 @@ function Pricing() {
               <GraduationCap className="h-6 w-6" />
             </div>
             <h2 className="text-2xl font-extrabold">
-              Ton professeur particulier <em className={`italic ${RED_ON_DARK}`}>24/24 7/7</em>
+              Ton professeur particulier <em className={RED}>24/24 7/7</em>
             </h2>
           </div>
           <p className="text-white/80 mb-4">
@@ -252,7 +259,7 @@ function Pricing() {
                 <div className="h-11 w-11 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center">
                   <Zap className="h-6 w-6" />
                 </div>
-                <h3 className={`text-xl font-extrabold ${RED_ON_CARD}`}>Formule Standard</h3>
+                <h3 className={`text-xl font-extrabold ${RED}`}>Formule Standard</h3>
               </div>
               <DurationOptions options={standardOptions} selected={standardSel} onSelect={setStandardSel} accent="sky" />
               <ul className="mt-5 space-y-3">
@@ -276,7 +283,7 @@ function Pricing() {
                 <div className="h-11 w-11 rounded-2xl bg-yellow-100 text-yellow-600 flex items-center justify-center">
                   <Crown className="h-6 w-6" />
                 </div>
-                <h3 className={`text-xl font-extrabold ${RED_ON_CARD}`}>Formule Premium</h3>
+                <h3 className={`text-xl font-extrabold ${RED}`}>Formule Premium</h3>
               </div>
               <DurationOptions options={premiumOptions} selected={premiumSel} onSelect={setPremiumSel} accent="gold" />
               <ul className="mt-5 space-y-3">
@@ -311,7 +318,7 @@ function Pricing() {
         {/* CTA bas de page */}
         <div className="rounded-3xl bg-yellow-400 text-slate-900 p-6 text-center font-extrabold text-lg md:text-xl flex flex-wrap items-center justify-center gap-2">
           <span>
-            Rejoins <span className="text-red-700">FLASHNEIGA</span> et obtiens ton code à la vitesse de l'éclair
+            Rejoins <span className={RED}>FLASHNEIGA</span> et obtiens ton code à la vitesse de l'éclair
           </span>
           <Zap className="h-6 w-6 fill-slate-900" aria-hidden="true" />
         </div>
