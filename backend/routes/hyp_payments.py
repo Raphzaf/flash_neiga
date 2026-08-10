@@ -46,9 +46,10 @@ HYP_API_KEY = os.environ.get("HYP_API_KEY", "")
 HYP_PASSP = os.environ.get("HYP_PASSP", "")
 HYP_API_URL = os.environ.get("HYP_API_URL", "https://icom.yaad.net/p/")
 HYP_PAGE_LANG = os.environ.get("HYP_PAGE_LANG", "ENG")  # HYP supports HEB or ENG
-# When enabled, callbacks without a valid signature are rejected. Default off so
-# terminals that are not configured to sign their notifications keep working.
-HYP_REQUIRE_SIGNATURE = os.environ.get("HYP_REQUIRE_SIGNATURE", "false").lower() in ("1", "true", "yes")
+# Les notifications de paiement non signées sont rejetées. Activé par défaut :
+# sans cette vérification, une fausse notification suffirait à ouvrir un
+# abonnement sans paiement. À ne désactiver qu'en développement local.
+HYP_REQUIRE_SIGNATURE = os.environ.get("HYP_REQUIRE_SIGNATURE", "true").lower() in ("1", "true", "yes")
 HYP_SUCCESS_URL = os.environ.get("HYP_SUCCESS_URL", "https://app.flash-neiga.com/payment/success")
 HYP_ERROR_URL = os.environ.get("HYP_ERROR_URL", "https://app.flash-neiga.com/payment/failure")
 HYP_CALLBACK_URL = os.environ.get("HYP_CALLBACK_URL", "http://localhost:8000/api/payments/hyp/callback")
@@ -241,9 +242,9 @@ def verify_hyp_callback(data: Dict[str, Any]) -> bool:
     resend the received parameters to `action=APISign&What=VERIFY`; HYP replies
     with `CCode=0` when the signature is authentic.
 
-    Backward-compatible behaviour: if no signature is present we allow the
-    callback (with a warning) unless HYP_REQUIRE_SIGNATURE is enabled, so that
-    terminals not configured to sign notifications keep working.
+    Une notification sans signature est rejetée tant que HYP_REQUIRE_SIGNATURE
+    est actif (valeur par défaut). Le mode permissif n'existe que pour le
+    développement local, où aucune signature n'est disponible.
     """
     order = data.get("Order") or data.get("order")
     signature = data.get("Sign") or data.get("signature") or data.get("Signature")
@@ -644,7 +645,15 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid callback signature"
         )
-    
+
+    # Idempotence : HYP peut renvoyer la même notification plusieurs fois (et une
+    # notification authentique pourrait être rejouée). Sans ce garde-fou, chaque
+    # rejeu ouvrirait un abonnement supplémentaire.
+    if transaction.status == "completed":
+        logger.info(f"Transaction {transaction_id} déjà traitée — notification ignorée")
+        return {"status": "success", "message": "Payment already processed"}
+
+
     # Check payment status
     ccode = data.get("CCode") or data.get("ccode")
     acode = data.get("ACode") or data.get("acode")
