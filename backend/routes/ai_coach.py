@@ -22,14 +22,14 @@ try:
     from models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
     )
-    from auth import get_current_user
+    from auth import get_current_user, require_subscription
     from ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
     )
-    from backend.auth import get_current_user
+    from backend.auth import get_current_user, require_subscription
     from backend.ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
 
 logger = logging.getLogger(__name__)
@@ -252,7 +252,7 @@ async def ai_selftest(current_user: User = Depends(get_current_user)):
         return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:500]}", "diagnostics": diagnostics()}
 
 
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(require_subscription)])
 async def chat(
     payload: dict,
     current_user: User = Depends(get_current_user),
@@ -292,7 +292,7 @@ async def chat(
     return {"reply": reply}
 
 
-@router.post("/lesson")
+@router.post("/lesson", dependencies=[Depends(require_subscription)])
 async def generate_lesson(
     payload: dict,
     current_user: User = Depends(get_current_user),
@@ -329,7 +329,7 @@ async def generate_lesson(
         raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{str(exc)[:300]}]")
 
 
-@router.post("/series-report")
+@router.post("/series-report", dependencies=[Depends(require_subscription)])
 async def series_report(
     payload: dict,
     current_user: User = Depends(get_current_user),

@@ -20,16 +20,20 @@ try:
         UserMistakeDB, QuestionDB, User,
         MistakeReviewRequest, MistakeReviewResponse,
     )
-    from auth import get_current_user
+    from auth import get_current_user, require_subscription
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import (
         UserMistakeDB, QuestionDB, User,
         MistakeReviewRequest, MistakeReviewResponse,
     )
-    from backend.auth import get_current_user
+    from backend.auth import get_current_user, require_subscription
 
-router = APIRouter(prefix="/api/mistakes", tags=["mistakes"])
+router = APIRouter(
+    prefix="/api/mistakes",
+    tags=["mistakes"],
+    dependencies=[Depends(require_subscription)],
+)
 
 
 # ===== Helpers réutilisables (appelés depuis training/exam) =====

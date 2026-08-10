@@ -80,9 +80,9 @@ try:
 except ImportError:
     from backend.routes.admin_crm import router as admin_crm_router
 try:
-    from auth import get_current_user, get_current_user_optional, require_admin
+    from auth import get_current_user, get_current_user_optional, require_admin, require_subscription
 except ImportError:
-    from backend.auth import get_current_user, get_current_user_optional, require_admin
+    from backend.auth import get_current_user, get_current_user_optional, require_admin, require_subscription
 try:
     from migrations.auto_migrate import run_hyp_migration
 except ImportError:
@@ -607,7 +607,10 @@ async def startup():
 
 # ===== Dev seed endpoint (optional) =====
 @app.post("/api/dev/seed")
-async def dev_seed(db: Session = Depends(get_db)):
+async def dev_seed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
     try:
         count = db.query(QuestionDB).count()
         if count >= 30:
@@ -991,7 +994,8 @@ async def delete_sign(
 async def get_questions(
     category:  Optional[List[str]] = None,
     q: Optional[str] = None,
-    db:  Session = Depends(get_db)
+    db:  Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     query = db.query(QuestionDB)
     if category and len(category) > 0:
@@ -1020,7 +1024,8 @@ async def get_questions(
 @app.post("/api/questions", response_model=Question)
 async def create_question(
     question_in: QuestionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     question = QuestionDB(
         id=str(uuid.uuid4()),
@@ -1045,7 +1050,10 @@ async def create_question(
 
 # ===== Traffic Signs Endpoints =====
 @app.get("/api/signs", response_model=List[TrafficSign])
-async def get_signs(db: Session = Depends(get_db)):
+async def get_signs(
+    db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
+):
     """Return traffic signs from DB; fallback to bundled JSON if DB unavailable.
 
     Prevents 500 errors in case of DB/table issues by serving static data.
@@ -1098,6 +1106,7 @@ async def get_signs(db: Session = Depends(get_db)):
 async def start_exam(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     import random
     # Fetch all questions and filter for playable ones (>=2 options, at least one correct)
@@ -1165,6 +1174,7 @@ async def start_exam(
 async def get_exam(
     exam_id: str,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
@@ -1190,6 +1200,7 @@ async def submit_answer(
     exam_id: str,
     answer: SubmitAnswerRequest,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
@@ -1212,6 +1223,7 @@ async def submit_answer(
 async def finish_exam(
     exam_id: str,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     
@@ -1267,6 +1279,7 @@ async def finish_exam(
 async def get_exam_details(
     exam_id: str,
     db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
 ):
     exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
     if not exam:
@@ -1324,6 +1337,7 @@ async def check_training_answer(
     answer: TrainingAnswerRequest,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     question = db.query(QuestionDB).filter(QuestionDB.id == answer.question_id).first()
 
@@ -1359,6 +1373,7 @@ async def check_training_answer(
 async def get_stats_summary(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
     user_id = current_user.id if current_user else "guest"
@@ -1406,6 +1421,7 @@ async def get_stats_summary(
 async def get_stats_details(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
+    _sub: User = Depends(require_subscription),
 ):
     # Statistiques de l'élève connecté (repli "guest" pour l'anonyme / compat existante)
     user_id = current_user.id if current_user else "guest"
@@ -1460,7 +1476,10 @@ async def get_stats_details(
 
 # ===== Courses Endpoints =====
 @app.get("/api/courses", response_model=List[Course])
-async def get_courses(db: Session = Depends(get_db)):
+async def get_courses(
+    db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
+):
     """Get all courses, sorted by order"""
     try:
         courses = db.query(CourseDB).order_by(CourseDB.order).all()
@@ -1485,7 +1504,11 @@ async def get_courses(db: Session = Depends(get_db)):
 
 
 @app.get("/api/courses/{course_id}", response_model=Course)
-async def get_course(course_id: str, db: Session = Depends(get_db)):
+async def get_course(
+    course_id: str,
+    db: Session = Depends(get_db),
+    _sub: User = Depends(require_subscription),
+):
     """Get a specific course by ID"""
     course = db.query(CourseDB).filter(CourseDB.id == course_id).first()
     if not course:
