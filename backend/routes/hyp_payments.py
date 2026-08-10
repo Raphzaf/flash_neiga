@@ -26,8 +26,10 @@ except ImportError:
 
 try:
     from models import TransactionDB, SubscriptionDB, UserDB
+    import promo as promo_lib
 except ImportError:
     from backend.models import TransactionDB, SubscriptionDB, UserDB
+    from backend import promo as promo_lib
 
 logger = logging.getLogger(__name__)
 
@@ -70,14 +72,27 @@ class CreatePaymentRequest(BaseModel):
     plan_id: str
     user_id: Optional[str] = None
     user_email: Optional[EmailStr] = None
+    promo_code: Optional[str] = None
 
 
 class CreatePaymentResponse(BaseModel):
-    payment_url: str
+    payment_url: Optional[str] = None
     transaction_id: str
     plan_id: str
     amount: float
     currency: str
+    # Renseignés quand un code promo s'applique
+    original_amount: Optional[float] = None
+    discount_amount: Optional[float] = None
+    promo_code: Optional[str] = None
+    # True quand la remise couvre 100 % : aucun paiement, accès activé directement
+    free: bool = False
+
+
+class ValidatePromoRequest(BaseModel):
+    code: str
+    plan_id: str
+    user_id: Optional[str] = None
 
 
 class CallbackData(BaseModel):
@@ -362,6 +377,42 @@ async def get_plans():
     }
 
 
+@router.post("/validate-promo")
+async def validate_promo(request: ValidatePromoRequest, db: Session = Depends(get_db)):
+    """Vérifie un code promo et renvoie le montant remisé, sans rien engager.
+
+    Sert à afficher le prix final à l'élève avant qu'il ne paie. La remise est
+    recalculée au moment du paiement : ce retour est purement informatif.
+    """
+    plan = get_plan(request.plan_id)
+    if not plan:
+        raise HTTPException(status_code=400, detail=f"Formule inconnue : {request.plan_id}")
+
+    original_amount = float(plan["amount"])
+    try:
+        promo, discount, final_amount = promo_lib.validate(
+            db, request.code, request.plan_id, original_amount, request.user_id
+        )
+    except promo_lib.PromoError as exc:
+        return {"valid": False, "message": str(exc)}
+
+    return {
+        "valid": True,
+        "code": promo.code,
+        "description": promo.description,
+        "discount_type": promo.discount_type,
+        "original_amount": original_amount,
+        "discount_amount": discount,
+        "final_amount": final_amount,
+        "currency": plan["currency"],
+        "free": final_amount <= 0,
+        "message": (
+            "Accès offert !" if final_amount <= 0
+            else f"Code appliqué : -{discount:g} {plan['currency'] == 'ILS' and '₪' or plan['currency']}"
+        ),
+    }
+
+
 @router.post("/create-payment", response_model=CreatePaymentResponse)
 async def create_payment(
     request: CreatePaymentRequest,
@@ -395,45 +446,113 @@ async def create_payment(
         user_email = request.user_email or user.email
     else:
         user_email = request.user_email
-    
+
+    # Code promo : le montant est TOUJOURS recalculé côté serveur à partir du
+    # catalogue ; le client n'envoie qu'un code, jamais un prix.
+    original_amount = float(plan["amount"])
+    amount = original_amount
+    discount = 0.0
+    applied_promo = None
+    if request.promo_code:
+        try:
+            applied_promo, discount, amount = promo_lib.validate(
+                db, request.promo_code, request.plan_id, original_amount, request.user_id
+            )
+        except promo_lib.PromoError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     # Create transaction record
     transaction = TransactionDB(
         user_id=request.user_id,
         plan_id=request.plan_id,
-        amount=plan["amount"],
+        amount=amount,
         currency=plan["currency"],
         status="pending",
-        event_type="payment.created"
+        event_type="payment.created",
+        event_data=(
+            {"promo_code": applied_promo.code, "original_amount": original_amount,
+             "discount_amount": discount, "user_email": user_email}
+            if applied_promo else None
+        ),
     )
-    
+
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
-    
+
     logger.info(f"Created transaction {transaction.id} for plan {request.plan_id}")
-    
+
+    # Remise de 100 % : rien à encaisser, l'accès est ouvert immédiatement.
+    if amount <= 0:
+        if not request.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Un compte est nécessaire pour utiliser un code d'accès offert.",
+            )
+        transaction.status = "completed"
+        transaction.completed_at = datetime.utcnow()
+        transaction.event_type = "payment.free"
+        start_date, end_date = calculate_subscription_dates(request.plan_id)
+        for old in db.query(SubscriptionDB).filter(
+            SubscriptionDB.user_id == request.user_id,
+            SubscriptionDB.status == "active",
+        ).all():
+            old.status = "expired"
+            old.updated_at = datetime.utcnow()
+            db.add(old)
+        db.add(SubscriptionDB(
+            user_id=request.user_id,
+            plan_id=request.plan_id,
+            start_date=start_date,
+            end_date=end_date,
+            status="active",
+            transaction_id=transaction.id,
+        ))
+        promo_lib.redeem(
+            db, applied_promo, request.plan_id, original_amount, discount, amount,
+            user_id=request.user_id, user_email=user_email, transaction_id=transaction.id,
+        )
+        db.commit()
+        logger.info("Accès offert via le code %s pour %s", applied_promo.code, user_email)
+        return CreatePaymentResponse(
+            payment_url=None,
+            transaction_id=transaction.id,
+            plan_id=request.plan_id,
+            amount=0.0,
+            currency=plan["currency"],
+            original_amount=original_amount,
+            discount_amount=discount,
+            promo_code=applied_promo.code,
+            free=True,
+        )
+
     # Create HYP payment URL
     try:
         payment_url = create_hyp_payment_url(
             transaction_id=transaction.id,
-            amount=plan["amount"],
+            amount=amount,
             currency=plan["currency"],
             user_email=user_email,
             info=plan.get("name", "Flash Neiga"),
         )
-        
-        # Update transaction with payment URL
+
+        # Update transaction with payment URL. Le code promo n'est PAS consommé
+        # ici : il ne l'est qu'au paiement effectif (callback), sinon un panier
+        # abandonné brûlerait le code de l'élève.
         transaction.payment_url = payment_url
         db.commit()
-        
+
         logger.info(f"Generated HYP payment URL for transaction {transaction.id}")
-        
+
         return CreatePaymentResponse(
             payment_url=payment_url,
             transaction_id=transaction.id,
             plan_id=request.plan_id,
-            amount=plan["amount"],
-            currency=plan["currency"]
+            amount=amount,
+            currency=plan["currency"],
+            original_amount=original_amount if applied_promo else None,
+            discount_amount=discount if applied_promo else None,
+            promo_code=applied_promo.code if applied_promo else None,
         )
         
     except Exception as e:
@@ -540,7 +659,32 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
         transaction.status = "completed"
         transaction.completed_at = datetime.utcnow()
         transaction.event_type = "payment.completed"
-        
+
+        # Le code promo n'est comptabilisé qu'ici, au paiement confirmé.
+        promo_info = transaction.event_data or {}
+        promo_code_used = promo_info.get("promo_code") if isinstance(promo_info, dict) else None
+        if promo_code_used:
+            promo_obj = (
+                db.query(promo_lib.PromoCodeDB)
+                .filter(promo_lib.PromoCodeDB.code == promo_code_used)
+                .first()
+            )
+            already_counted = (
+                db.query(promo_lib.PromoRedemptionDB)
+                .filter(promo_lib.PromoRedemptionDB.transaction_id == transaction.id)
+                .first()
+            )
+            if promo_obj and not already_counted:
+                promo_lib.redeem(
+                    db, promo_obj, transaction.plan_id,
+                    promo_info.get("original_amount", transaction.amount),
+                    promo_info.get("discount_amount", 0),
+                    transaction.amount,
+                    user_id=transaction.user_id,
+                    user_email=(promo_info.get("user_email")),
+                    transaction_id=transaction.id,
+                )
+
         # Create or extend subscription
         if transaction.user_id and transaction.plan_id:
             # Check for existing active subscription of the same type

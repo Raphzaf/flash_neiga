@@ -31,16 +31,18 @@ try:
     from database import get_db
     from models import (
         UserDB, SubscriptionDB, TransactionDB, PaymentDB,
-        ExamSessionDB, UserMistakeDB, User,
+        ExamSessionDB, UserMistakeDB, User, PromoCodeDB, PromoRedemptionDB,
     )
     from auth import require_admin
+    import promo as promo_lib
 except ImportError:  # pragma: no cover - import depuis la racine du repo
     from backend.database import get_db
     from backend.models import (
         UserDB, SubscriptionDB, TransactionDB, PaymentDB,
-        ExamSessionDB, UserMistakeDB, User,
+        ExamSessionDB, UserMistakeDB, User, PromoCodeDB, PromoRedemptionDB,
     )
     from backend.auth import require_admin
+    from backend import promo as promo_lib
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,31 @@ class SubscriptionGrant(BaseModel):
     plan_id: str
     duration_days: Optional[int] = None   # par défaut : durée du plan
     start_now: bool = True                # sinon, prolonge l'abonnement actif
+
+
+class PromoCodeCreate(BaseModel):
+    code: str
+    description: Optional[str] = None
+    discount_type: str                    # percent | amount | free
+    discount_value: float = 0
+    plan_ids: List[str] = []              # [] = toutes les formules
+    max_uses: Optional[int] = None        # None = illimité
+    max_uses_per_user: int = 1
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    active: bool = True
+
+
+class PromoCodeUpdate(BaseModel):
+    description: Optional[str] = None
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
+    plan_ids: Optional[List[str]] = None
+    max_uses: Optional[int] = None
+    max_uses_per_user: Optional[int] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    active: Optional[bool] = None
 
 
 # ===== Helpers =====
@@ -569,6 +596,148 @@ async def list_transactions(
         "limit": limit,
         "offset": offset,
         "has_more": offset + len(rows) < total,
+    }
+
+
+# ===== Codes promo =====
+def _validate_promo_payload(discount_type: str, discount_value: float) -> None:
+    if discount_type not in promo_lib.DISCOUNT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Type de remise invalide : {discount_type} (attendu : percent, amount ou free)",
+        )
+    if discount_type == "percent" and not (0 < discount_value <= 100):
+        raise HTTPException(status_code=400, detail="Le pourcentage doit être compris entre 1 et 100")
+    if discount_type == "amount" and discount_value <= 0:
+        raise HTTPException(status_code=400, detail="Le montant de la remise doit être positif")
+
+
+@router.get("/promo-codes")
+async def list_promo_codes(db: Session = Depends(get_db)):
+    codes = db.query(PromoCodeDB).order_by(PromoCodeDB.created_at.desc()).all()
+    total_redemptions = (
+        db.query(func.count(PromoRedemptionDB.id)).scalar() or 0
+    )
+    total_discount = (
+        db.query(func.coalesce(func.sum(PromoRedemptionDB.discount_amount), 0.0)).scalar() or 0.0
+    )
+    return {
+        "items": [promo_lib.payload(c) for c in codes],
+        "total": len(codes),
+        "total_redemptions": int(total_redemptions),
+        "total_discount_granted": round(float(total_discount), 2),
+    }
+
+
+@router.post("/promo-codes")
+async def create_promo_code(
+    payload: PromoCodeCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    code = promo_lib.normalize(payload.code)
+    if len(code) < 3:
+        raise HTTPException(status_code=400, detail="Le code doit faire au moins 3 caractères")
+    _validate_promo_payload(payload.discount_type, payload.discount_value)
+
+    if db.query(PromoCodeDB).filter(PromoCodeDB.code == code).first():
+        raise HTTPException(status_code=409, detail=f"Le code {code} existe déjà")
+
+    unknown = [p for p in payload.plan_ids if p not in PLANS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Formules inconnues : {', '.join(unknown)}")
+
+    promo = PromoCodeDB(
+        code=code,
+        description=payload.description,
+        discount_type=payload.discount_type,
+        discount_value=payload.discount_value,
+        plan_ids=payload.plan_ids,
+        max_uses=payload.max_uses,
+        max_uses_per_user=payload.max_uses_per_user,
+        valid_from=payload.valid_from,
+        valid_until=payload.valid_until,
+        active=payload.active,
+        created_by=admin.email,
+    )
+    db.add(promo)
+    db.commit()
+    db.refresh(promo)
+    logger.info("CRM : code promo %s créé par %s", code, admin.email)
+    return promo_lib.payload(promo)
+
+
+@router.patch("/promo-codes/{promo_id}")
+async def update_promo_code(promo_id: str, payload: PromoCodeUpdate, db: Session = Depends(get_db)):
+    promo = db.query(PromoCodeDB).filter(PromoCodeDB.id == promo_id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Code promo introuvable")
+
+    if payload.discount_type is not None or payload.discount_value is not None:
+        _validate_promo_payload(
+            payload.discount_type or promo.discount_type,
+            payload.discount_value if payload.discount_value is not None else promo.discount_value,
+        )
+    if payload.plan_ids is not None:
+        unknown = [p for p in payload.plan_ids if p not in PLANS]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"Formules inconnues : {', '.join(unknown)}")
+
+    for field in (
+        "description", "discount_type", "discount_value", "plan_ids",
+        "max_uses", "max_uses_per_user", "valid_from", "valid_until", "active",
+    ):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(promo, field, value)
+
+    db.add(promo)
+    db.commit()
+    db.refresh(promo)
+    return promo_lib.payload(promo)
+
+
+@router.delete("/promo-codes/{promo_id}")
+async def delete_promo_code(promo_id: str, db: Session = Depends(get_db)):
+    promo = db.query(PromoCodeDB).filter(PromoCodeDB.id == promo_id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Code promo introuvable")
+    # L'historique d'utilisation est conservé (suivi commercial) ; il référence
+    # le code par sa valeur textuelle en plus de son identifiant.
+    code = promo.code
+    db.delete(promo)
+    db.commit()
+    logger.info("CRM : code promo %s supprimé", code)
+    return {"status": "deleted", "code": code}
+
+
+@router.get("/promo-codes/{promo_id}/redemptions")
+async def promo_redemptions(promo_id: str, db: Session = Depends(get_db)):
+    promo = db.query(PromoCodeDB).filter(PromoCodeDB.id == promo_id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Code promo introuvable")
+    rows = (
+        db.query(PromoRedemptionDB)
+        .filter(PromoRedemptionDB.promo_code_id == promo_id)
+        .order_by(PromoRedemptionDB.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return {
+        "code": promo.code,
+        "items": [
+            {
+                "id": r.id,
+                "user_email": r.user_email,
+                "plan_id": r.plan_id,
+                "plan_name": _plan_name(r.plan_id),
+                "original_amount": r.original_amount,
+                "discount_amount": r.discount_amount,
+                "final_amount": r.final_amount,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ],
     }
 
 

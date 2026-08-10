@@ -14,7 +14,7 @@ import {
 } from '../components/ui/dialog';
 import {
     Search, RefreshCw, Users, CreditCard, TrendingUp, Clock, ArrowLeft,
-    Trash2, Save, KeyRound, Gift, ShieldAlert,
+    Trash2, Save, KeyRound, Gift, ShieldAlert, Ticket, Plus, Power,
 } from 'lucide-react';
 
 const money = (v, currency = 'ILS') =>
@@ -71,6 +71,15 @@ export default function AdminCRM() {
     const [transactions, setTransactions] = useState([]);
     const [txLoading, setTxLoading] = useState(false);
 
+    // Codes promo
+    const [promos, setPromos] = useState([]);
+    const [promoLoading, setPromoLoading] = useState(false);
+    const [promoStats, setPromoStats] = useState({ redemptions: 0, granted: 0 });
+    const [newPromo, setNewPromo] = useState({
+        code: '', description: '', discount_type: 'percent', discount_value: '',
+        plan_ids: [], max_uses: '', max_uses_per_user: 1, valid_until: '',
+    });
+
     // Fiche élève
     const [detail, setDetail] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
@@ -123,6 +132,19 @@ export default function AdminCRM() {
         (nextOffset = 0) => loadUsers(nextOffset, search, statusFilter),
         [loadUsers, search, statusFilter],
     );
+
+    const loadPromos = useCallback(async () => {
+        setPromoLoading(true);
+        try {
+            const { data } = await axios.get('/api/admin/crm/promo-codes');
+            setPromos(data.items || []);
+            setPromoStats({ redemptions: data.total_redemptions, granted: data.total_discount_granted });
+        } catch (error) {
+            handleError(error, 'Impossible de charger les codes promo');
+        } finally {
+            setPromoLoading(false);
+        }
+    }, [handleError]);
 
     const loadPlans = useCallback(async () => {
         try {
@@ -231,6 +253,58 @@ export default function AdminCRM() {
         }
     };
 
+    const createPromo = async () => {
+        if (!newPromo.code.trim()) {
+            toast.error('Saisis un code');
+            return;
+        }
+        if (newPromo.discount_type !== 'free' && !Number(newPromo.discount_value)) {
+            toast.error('Saisis la valeur de la remise');
+            return;
+        }
+        try {
+            await axios.post('/api/admin/crm/promo-codes', {
+                code: newPromo.code,
+                description: newPromo.description || null,
+                discount_type: newPromo.discount_type,
+                discount_value: newPromo.discount_type === 'free' ? 0 : Number(newPromo.discount_value),
+                plan_ids: newPromo.plan_ids,
+                max_uses: newPromo.max_uses ? Number(newPromo.max_uses) : null,
+                max_uses_per_user: Number(newPromo.max_uses_per_user) || 1,
+                valid_until: newPromo.valid_until ? new Date(newPromo.valid_until).toISOString() : null,
+            });
+            toast.success('Code promo créé');
+            setNewPromo({
+                code: '', description: '', discount_type: 'percent', discount_value: '',
+                plan_ids: [], max_uses: '', max_uses_per_user: 1, valid_until: '',
+            });
+            loadPromos();
+        } catch (error) {
+            handleError(error, 'Création impossible');
+        }
+    };
+
+    const togglePromo = async (promo) => {
+        try {
+            await axios.patch(`/api/admin/crm/promo-codes/${promo.id}`, { active: !promo.active });
+            toast.success(promo.active ? 'Code désactivé' : 'Code réactivé');
+            loadPromos();
+        } catch (error) {
+            handleError(error, 'Modification impossible');
+        }
+    };
+
+    const deletePromo = async (promo) => {
+        if (!window.confirm(`Supprimer définitivement le code ${promo.code} ?`)) return;
+        try {
+            await axios.delete(`/api/admin/crm/promo-codes/${promo.id}`);
+            toast.success('Code supprimé');
+            loadPromos();
+        } catch (error) {
+            handleError(error, 'Suppression impossible');
+        }
+    };
+
     const deleteUser = async () => {
         if (!window.confirm(`Supprimer définitivement le compte ${detail.email} et ses données ? Cette action est irréversible.`)) return;
         try {
@@ -297,9 +371,16 @@ export default function AdminCRM() {
                 )}
             </div>
 
-            <Tabs defaultValue="users" onValueChange={(v) => { if (v === 'transactions' && !transactions.length) fetchTransactions(); }}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
+            <Tabs
+                defaultValue="users"
+                onValueChange={(v) => {
+                    if (v === 'transactions' && !transactions.length) fetchTransactions();
+                    if (v === 'promos' && !promos.length) loadPromos();
+                }}
+            >
+                <TabsList className="grid w-full grid-cols-4 mb-6">
                     <TabsTrigger value="users">Élèves <Badge variant="outline" className="ml-2">{usersTotal}</Badge></TabsTrigger>
+                    <TabsTrigger value="promos">Codes promo</TabsTrigger>
                     <TabsTrigger value="transactions">Paiements</TabsTrigger>
                     <TabsTrigger value="plans">Formules actives</TabsTrigger>
                 </TabsList>
@@ -390,6 +471,156 @@ export default function AdminCRM() {
                             </div>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* ===== Codes promo ===== */}
+                <TabsContent value="promos">
+                    <div className="space-y-6">
+                        {/* Création */}
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                                    <Ticket className="h-5 w-5" /> Créer un code promo
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                    <Input
+                                        placeholder="Code (ex : RENTREE25)"
+                                        value={newPromo.code}
+                                        onChange={(e) => setNewPromo({ ...newPromo, code: e.target.value.toUpperCase() })}
+                                    />
+                                    <Select
+                                        value={newPromo.discount_type}
+                                        onValueChange={(v) => setNewPromo({ ...newPromo, discount_type: v })}
+                                    >
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="percent">Réduction en %</SelectItem>
+                                            <SelectItem value="amount">Réduction en ₪</SelectItem>
+                                            <SelectItem value="free">Abonnement offert (100 %)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        type="number" min="1"
+                                        placeholder={newPromo.discount_type === 'percent' ? 'Valeur en %' : 'Valeur en ₪'}
+                                        value={newPromo.discount_value}
+                                        disabled={newPromo.discount_type === 'free'}
+                                        onChange={(e) => setNewPromo({ ...newPromo, discount_value: e.target.value })}
+                                    />
+                                    <Input
+                                        placeholder="Description (interne)"
+                                        value={newPromo.description}
+                                        onChange={(e) => setNewPromo({ ...newPromo, description: e.target.value })}
+                                    />
+                                </div>
+                                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                    <Select
+                                        value={newPromo.plan_ids.length === 1 ? newPromo.plan_ids[0] : 'all'}
+                                        onValueChange={(v) => setNewPromo({ ...newPromo, plan_ids: v === 'all' ? [] : [v] })}
+                                    >
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Toutes les formules</SelectItem>
+                                            {plans.map((p) => (
+                                                <SelectItem key={p.plan_id} value={p.plan_id}>{p.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        type="number" min="1" placeholder="Nombre max d'utilisations (vide = illimité)"
+                                        value={newPromo.max_uses}
+                                        onChange={(e) => setNewPromo({ ...newPromo, max_uses: e.target.value })}
+                                    />
+                                    <Input
+                                        type="number" min="1" placeholder="Max par élève"
+                                        value={newPromo.max_uses_per_user}
+                                        onChange={(e) => setNewPromo({ ...newPromo, max_uses_per_user: e.target.value })}
+                                    />
+                                    <Input
+                                        type="date" title="Date d'expiration"
+                                        value={newPromo.valid_until}
+                                        onChange={(e) => setNewPromo({ ...newPromo, valid_until: e.target.value })}
+                                    />
+                                </div>
+                                <Button onClick={createPromo}><Plus className="h-4 w-4 mr-2" /> Créer le code</Button>
+                            </CardContent>
+                        </Card>
+
+                        {/* Liste */}
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <CardTitle className="text-slate-900 dark:text-white">
+                                    Codes existants
+                                    <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                                        {promoStats.redemptions} utilisation(s) · {money(promoStats.granted)} de remises accordées
+                                    </span>
+                                </CardTitle>
+                                <Button size="sm" variant="outline" onClick={loadPromos}>
+                                    <RefreshCw className="h-4 w-4 mr-2" /> Actualiser
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                {promoLoading ? (
+                                    <div className="space-y-2">
+                                        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+                                    </div>
+                                ) : promos.length === 0 ? (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">
+                                        Aucun code promo pour l'instant.
+                                    </p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                                                    <th className="py-2 pr-3">Code</th>
+                                                    <th className="py-2 pr-3">Remise</th>
+                                                    <th className="py-2 pr-3">Formules</th>
+                                                    <th className="py-2 pr-3">Utilisations</th>
+                                                    <th className="py-2 pr-3">Expire le</th>
+                                                    <th className="py-2 pr-3">État</th>
+                                                    <th className="py-2" />
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {promos.map((p) => (
+                                                    <tr key={p.id} className="border-b border-slate-100 dark:border-slate-700/50">
+                                                        <td className="py-2 pr-3">
+                                                            <div className="font-mono font-bold text-slate-900 dark:text-white">{p.code}</div>
+                                                            {p.description && (
+                                                                <div className="text-xs text-slate-500 dark:text-slate-400">{p.description}</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="py-2 pr-3 font-semibold text-slate-700 dark:text-slate-200">{p.label}</td>
+                                                        <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">
+                                                            {p.plan_ids.length === 0 ? 'Toutes' : p.plan_ids.join(', ')}
+                                                        </td>
+                                                        <td className="py-2 pr-3 text-slate-700 dark:text-slate-200">
+                                                            {p.used_count}{p.max_uses != null ? ` / ${p.max_uses}` : ''}
+                                                        </td>
+                                                        <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{date(p.valid_until)}</td>
+                                                        <td className="py-2 pr-3">
+                                                            <Badge variant={p.is_usable ? 'default' : 'secondary'}>{p.status}</Badge>
+                                                        </td>
+                                                        <td className="py-2 text-right whitespace-nowrap">
+                                                            <Button size="sm" variant="outline" className="mr-2" onClick={() => togglePromo(p)}>
+                                                                <Power className="h-3.5 w-3.5 mr-1" />
+                                                                {p.active ? 'Désactiver' : 'Activer'}
+                                                            </Button>
+                                                            <Button size="sm" variant="destructive" onClick={() => deletePromo(p)}>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
 
                 {/* ===== Paiements ===== */}

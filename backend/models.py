@@ -132,6 +132,52 @@ class SubscriptionDB(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class PromoCodeDB(Base):
+    """Code promotionnel : réduction en pourcentage, en shekels, ou accès offert.
+
+    Créé et piloté depuis le CRM ; appliqué au moment du paiement.
+    """
+    __tablename__ = "promo_codes"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    code = Column(String, unique=True, index=True, nullable=False)  # toujours stocké en MAJUSCULES
+    description = Column(String, nullable=True)
+
+    discount_type = Column(String, nullable=False)   # percent | amount | free
+    discount_value = Column(Float, default=0)        # % (0-100) ou montant ; ignoré si free
+
+    plan_ids = Column(JSON, default=list)            # [] = toutes les formules
+    max_uses = Column(Integer, nullable=True)        # None = illimité
+    max_uses_per_user = Column(Integer, default=1)
+    used_count = Column(Integer, default=0)
+
+    valid_from = Column(DateTime, nullable=True)
+    valid_until = Column(DateTime, nullable=True)
+    active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String, nullable=True)       # email de l'admin
+
+
+class PromoRedemptionDB(Base):
+    """Trace d'utilisation d'un code promo (audit et comptage)."""
+    __tablename__ = "promo_redemptions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    promo_code_id = Column(String, ForeignKey("promo_codes.id"), index=True, nullable=False)
+    code = Column(String, index=True, nullable=False)
+    user_id = Column(String, index=True, nullable=True)
+    user_email = Column(String, nullable=True)
+    transaction_id = Column(String, nullable=True)
+    plan_id = Column(String, nullable=True)
+
+    original_amount = Column(Float, nullable=True)
+    discount_amount = Column(Float, nullable=True)
+    final_amount = Column(Float, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class UserMistakeDB(Base):
     """Mémoire des erreurs d'un élève : chaque question ratée est enregistrée ici
     pour pouvoir être retravaillée depuis la rubrique « Mes questions à retravailler ».
