@@ -80,9 +80,17 @@ try:
 except ImportError:
     from backend.routes.admin_crm import router as admin_crm_router
 try:
-    from auth import get_current_user, get_current_user_optional, require_admin, require_subscription
+    from auth import (
+        get_current_user, get_current_user_optional, require_admin, require_subscription,
+        hash_password, verify_password, create_access_token, normalize_email,
+        find_user_by_email, validate_password,
+    )
 except ImportError:
-    from backend.auth import get_current_user, get_current_user_optional, require_admin, require_subscription
+    from backend.auth import (
+        get_current_user, get_current_user_optional, require_admin, require_subscription,
+        hash_password, verify_password, create_access_token, normalize_email,
+        find_user_by_email, validate_password,
+    )
 try:
     from migrations.auto_migrate import run_hyp_migration
 except ImportError:
@@ -167,23 +175,9 @@ def init_db():
 
 
 # ===== Auth Helpers =====
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(hours=24)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+# hash_password / verify_password / create_access_token vivent dans auth.py :
+# le module des paiements en a besoin lui aussi (rattachement d'un paiement à
+# un compte) et ne peut pas importer server.py sans créer un import circulaire.
 
 
 # ===== Init Data =====
@@ -644,14 +638,20 @@ async def dev_seed(
 # ===== Auth Endpoints =====
 @app.post("/api/auth/register", response_model=TokenResponse)
 async def register(user_in: UserCreate, db: Session = Depends(get_db)):
+    # L'email est normalisé (minuscules, sans espaces) : c'est la clé du compte,
+    # et une majuscule involontaire ne doit pas créer un second compte ni
+    # empêcher la connexion.
+    email = normalize_email(user_in.email)
+    password = validate_password(user_in.password)
+
     # Check if user exists
-    existing_user = db.query(UserDB).filter(UserDB.email == user_in.email).first()
+    existing_user = find_user_by_email(db, email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Un compte existe déjà avec cet email. Connecte-toi.",
         )
-    
+
     # Prénom / nom : champs dédiés, avec repli sur l'ancien "full_name"
     first_name = (user_in.first_name or "").strip() or None
     last_name = (user_in.last_name or "").strip() or None
@@ -664,8 +664,8 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
     user_id = str(uuid.uuid4())
     user = UserDB(
         id=user_id,
-        email=user_in.email,
-        hashed_password=hash_password(user_in.password),
+        email=email,
+        hashed_password=hash_password(password),
         first_name=first_name,
         last_name=last_name,
     )
@@ -680,13 +680,15 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/login", response_model=TokenResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter(UserDB.email == form_data.username).first()
+    # Recherche insensible à la casse : les comptes créés avant la normalisation
+    # peuvent contenir des majuscules, l'élève ne doit pas avoir à les deviner.
+    user = find_user_by_email(db, form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
+            detail="Email ou mot de passe incorrect."
         )
-    
+
     access_token = create_access_token(data={"sub": user.id})
     return TokenResponse(access_token=access_token)
 

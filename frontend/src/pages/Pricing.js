@@ -2,32 +2,159 @@ import React, { useState } from "react";
 import axios from "axios";
 import { HYP_CONFIG } from '../config/hypConfig';
 import { useAuth } from "../context/AuthContext";
+import { toast } from "sonner";
 import {
   Zap, FileCheck, LineChart, BookOpen, HelpCircle, History,
   Crown, Check, Star, ShieldCheck, MonitorSmartphone, GraduationCap,
-  ArrowRight, Loader2, BadgeCheck,
+  ArrowRight, Loader2, BadgeCheck, X, Eye, EyeOff, UserPlus, LogIn,
 } from "lucide-react";
 
-async function startHypCheckout(planId, userEmail = null, userId = null, promoCode = null) {
+// Renvoie le statut HTTP en cas d'échec pour que l'appelant puisse réagir
+// (401 = session perdue : on redemande le compte plutôt que d'afficher une
+// erreur sèche).
+async function startHypCheckout(planId, promoCode = null) {
   try {
     const res = await axios.post('/api/payments/hyp/create-payment', {
-      plan_id: planId, user_email: userEmail, user_id: userId,
-      promo_code: promoCode || null,
+      plan_id: planId, promo_code: promoCode || null,
     });
     // Code offrant 100 % : aucun paiement, l'accès est déjà activé côté serveur.
+    // L'identifiant de transaction suit, sinon la page de confirmation n'a rien
+    // à afficher.
     if (res.data?.free) {
-      window.location.href = '/payment/success?free=1';
-      return;
+      window.location.href = `/payment/success?free=1&transaction_id=${res.data.transaction_id}`;
+      return { ok: true };
     }
     const paymentUrl = res.data?.payment_url;
     if (paymentUrl) {
       window.location.href = paymentUrl;
-    } else {
-      alert('❌ Erreur : URL de paiement non disponible');
+      return { ok: true };
     }
+    toast.error("URL de paiement indisponible. Réessaie dans un instant.");
+    return { ok: false };
   } catch (e) {
-    alert(`❌ Erreur de paiement : ${e?.response?.data?.detail || 'Erreur inconnue'}`);
+    const status = e?.response?.status;
+    if (status !== 401) {
+      toast.error(`Erreur de paiement : ${e?.response?.data?.detail || 'erreur inconnue'}`);
+    }
+    return { ok: false, status };
   }
+}
+
+/**
+ * Compte obligatoire AVANT le paiement.
+ *
+ * Un abonnement n'existe que rattaché à un compte : si l'élève paie sans en
+ * avoir un, l'argent est encaissé mais aucun accès ne peut être ouvert, et on
+ * lui demande ensuite de se connecter à un compte qu'il n'a jamais créé. Le
+ * mot de passe est donc choisi ici, avant la redirection vers la banque, puis
+ * le paiement reprend tout seul.
+ */
+function AccountGate({ planLabel, onClose, onReady }) {
+  const { register, login } = useAuth();
+  const [mode, setMode] = useState('register');   // register | login
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const isRegister = mode === 'register';
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (isRegister && password.length < 6) {
+      setError("Ton mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      if (isRegister) {
+        await register(email.trim(), password, firstName.trim(), lastName.trim());
+      } else {
+        await login(email.trim(), password);
+      }
+      onReady();
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setError(
+        detail ||
+        (isRegister
+          ? "Impossible de créer le compte. Cet email est peut-être déjà utilisé."
+          : "Email ou mot de passe incorrect.")
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const field = "w-full rounded-xl bg-white/10 border border-white/15 px-3 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-yellow-400";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="w-full max-w-md rounded-3xl bg-[#0c1a2e] border border-white/15 p-6 shadow-2xl my-8">
+        <div className="flex items-start justify-between gap-4 mb-1">
+          <h3 className="text-xl font-extrabold text-white">
+            {isRegister ? 'Crée ton compte pour continuer' : 'Connecte-toi pour continuer'}
+          </h3>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="text-white/60 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="text-sm text-white/70 mb-5">
+          Ton abonnement <strong className="text-yellow-300">{planLabel}</strong> sera rattaché à ce compte.
+          {isRegister && " Choisis ton mot de passe maintenant : c'est avec lui que tu te connecteras juste après le paiement."}
+        </p>
+
+        <form onSubmit={submit} className="space-y-3">
+          {isRegister && (
+            <div className="grid grid-cols-2 gap-3">
+              <input className={field} placeholder="Prénom" autoComplete="given-name" autoFocus
+                value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+              <input className={field} placeholder="Nom" autoComplete="family-name"
+                value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </div>
+          )}
+          <input className={field} type="email" placeholder="Ton email" autoComplete="email" inputMode="email"
+            autoFocus={!isRegister} value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <div className="relative">
+            <input
+              className={`${field} pr-11`}
+              type={showPassword ? 'text' : 'password'}
+              placeholder={isRegister ? 'Mot de passe (6 caractères minimum)' : 'Ton mot de passe'}
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
+              minLength={isRegister ? 6 : undefined}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button type="button" onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white">
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+
+          {error && <p className="text-sm text-red-300">{error}</p>}
+
+          <button type="submit" disabled={submitting}
+            className="w-full rounded-xl bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-bold py-3 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
+            {submitting
+              ? <Loader2 className="h-5 w-5 animate-spin" />
+              : <>{isRegister ? <UserPlus className="h-4 w-4" /> : <LogIn className="h-4 w-4" />} Continuer vers le paiement</>}
+          </button>
+        </form>
+
+        <button type="button"
+          onClick={() => { setMode(isRegister ? 'login' : 'register'); setError(null); }}
+          className="mt-4 w-full text-sm text-white/70 hover:text-white underline underline-offset-4">
+          {isRegister ? "J'ai déjà un compte" : "Je n'ai pas encore de compte"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 const HIGHLIGHTS = [
@@ -144,7 +271,7 @@ function DurationOptions({ options, selected, onSelect, accent }) {
 }
 
 function Pricing() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [loading, setLoading] = useState(null);
   const [standardSel, setStandardSel] = useState(HYP_CONFIG.plans.BASIC.DAYS_30);
   const [premiumSel, setPremiumSel] = useState(HYP_CONFIG.plans.PREMIUM.DAYS_30);
@@ -152,15 +279,37 @@ function Pricing() {
   const [promoApplied, setPromoApplied] = useState(null);
   const [promoMessage, setPromoMessage] = useState(null);
   const [promoChecking, setPromoChecking] = useState(false);
+  // Formule choisie en attendant que l'élève ait un compte.
+  const [pendingPlan, setPendingPlan] = useState(null);
 
-  const checkout = async (planId) => {
+  const goToPayment = async (planId) => {
     setLoading(planId);
     try {
-      await startHypCheckout(planId, user?.email || null, user?.id || null, promoApplied?.code || null);
+      const result = await startHypCheckout(planId, promoApplied?.code || null);
+      // Session perdue ou expirée entre-temps : on redemande le compte plutôt
+      // que de laisser l'élève devant un message d'erreur.
+      if (!result.ok && result.status === 401) {
+        toast.info('Reconnecte-toi pour finaliser ton abonnement.');
+        setPendingPlan(planId);
+      }
     } finally {
       setLoading(null);
     }
   };
+
+  const checkout = async (planId) => {
+    // Pas de compte, pas de paiement : sinon l'abonnement encaissé ne peut être
+    // rattaché à personne. La formule est mémorisée et le paiement repart seul
+    // dès que le compte est prêt.
+    if (!user) {
+      setPendingPlan(planId);
+      return;
+    }
+    await goToPayment(planId);
+  };
+
+  const planLabel = (planId) =>
+    [...standardOptions, ...premiumOptions].find((o) => o.planId === planId)?.label || 'Flash Neiga';
 
   // Vérifie le code auprès du serveur pour afficher le prix remisé.
   // Le montant réellement facturé est recalculé côté serveur au paiement.
@@ -189,14 +338,14 @@ function Pricing() {
   };
 
   const standardOptions = [
-    { planId: HYP_CONFIG.plans.BASIC.DAYS_14, price: 69, duration: '14 jours' },
-    { planId: HYP_CONFIG.plans.BASIC.DAYS_21, price: 89, duration: '21 jours' },
-    { planId: HYP_CONFIG.plans.BASIC.DAYS_30, price: 99, duration: '30 jours' },
+    { planId: HYP_CONFIG.plans.BASIC.DAYS_14, price: 69, duration: '14 jours', label: 'Standard 14 jours' },
+    { planId: HYP_CONFIG.plans.BASIC.DAYS_21, price: 89, duration: '21 jours', label: 'Standard 21 jours' },
+    { planId: HYP_CONFIG.plans.BASIC.DAYS_30, price: 99, duration: '30 jours', label: 'Standard 30 jours' },
   ];
   const premiumOptions = [
-    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_14, price: 119, duration: '14 jours' },
-    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_21, price: 139, duration: '21 jours' },
-    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_30, price: 149, duration: '30 jours' },
+    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_14, price: 119, duration: '14 jours', label: 'Premium 14 jours' },
+    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_21, price: 139, duration: '21 jours', label: 'Premium 21 jours' },
+    { planId: HYP_CONFIG.plans.PREMIUM.DAYS_30, price: 149, duration: '30 jours', label: 'Premium 30 jours' },
   ];
 
   return (
@@ -222,7 +371,17 @@ function Pricing() {
                 </div>
               </div>
             </div>
-            <a href="/login" className="text-sm text-white/70 hover:text-white underline underline-offset-4">Se connecter</a>
+            {user ? (
+              <div className="text-right text-sm">
+                <div className="text-white/60 text-xs">Abonnement rattaché à</div>
+                <div className="text-white font-semibold">{user.email}</div>
+                <button type="button" onClick={logout} className="text-white/50 hover:text-white text-xs underline underline-offset-2">
+                  Ce n'est pas moi
+                </button>
+              </div>
+            ) : (
+              <a href="/login" className="text-sm text-white/70 hover:text-white underline underline-offset-4">Se connecter</a>
+            )}
           </div>
 
           <div className="max-w-2xl">
@@ -283,9 +442,14 @@ function Pricing() {
 
         {/* Formules */}
         <div>
-          <h2 className="text-center text-2xl md:text-3xl font-extrabold mb-6">
+          <h2 className="text-center text-2xl md:text-3xl font-extrabold mb-2">
             Choisis ta formule et avance à ton rythme
           </h2>
+          <p className="text-center text-sm text-white/60 mb-6">
+            {user
+              ? <>Ton abonnement sera activé sur ton compte <strong className="text-white/80">{user.email}</strong> dès le paiement validé.</>
+              : "Tu choisiras ton mot de passe juste avant le paiement : ton accès est activé immédiatement après."}
+          </p>
 
           <div className="grid md:grid-cols-2 gap-6 items-start">
 
@@ -396,6 +560,18 @@ function Pricing() {
           <Zap className="h-6 w-6 fill-slate-900" aria-hidden="true" />
         </div>
       </div>
+
+      {pendingPlan && (
+        <AccountGate
+          planLabel={planLabel(pendingPlan)}
+          onClose={() => setPendingPlan(null)}
+          onReady={() => {
+            const planId = pendingPlan;
+            setPendingPlan(null);
+            goToPayment(planId);
+          }}
+        />
+      )}
     </div>
   );
 }

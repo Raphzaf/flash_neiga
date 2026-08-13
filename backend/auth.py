@@ -2,8 +2,11 @@
 Authentication utilities for Flash Neiga API
 Extracted to avoid circular imports
 """
+from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from passlib.context import CryptContext
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from typing import Optional
@@ -21,6 +24,67 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "demo-secret-key-flash-neiga-sqlite")
 ALGORITHM = "HS256"
 
 security = HTTPBearer()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Longueur minimale imposée partout (inscription, rattachement d'un paiement,
+# réinitialisation depuis le CRM) pour éviter les règles divergentes.
+MIN_PASSWORD_LENGTH = 6
+
+
+# ===== Identifiants =====
+def normalize_email(email: Optional[str]) -> str:
+    """Forme canonique d'un email : sans espaces et en minuscules.
+
+    Les élèves saisissent souvent leur email avec une majuscule initiale (ou un
+    espace ajouté par le clavier du téléphone). Sans normalisation, le compte
+    créé et le compte recherché à la connexion peuvent différer.
+    """
+    return (email or "").strip().lower()
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Vérifie un mot de passe sans jamais lever d'exception.
+
+    Un hash absent ou illisible (compte importé, donnée corrompue) doit se
+    traduire par « identifiants invalides », pas par une erreur 500.
+    """
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
+
+
+def validate_password(password: Optional[str]) -> str:
+    """Contrôle la longueur du mot de passe et renvoie la valeur nettoyée."""
+    password = password or ""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Le mot de passe doit contenir au moins {MIN_PASSWORD_LENGTH} caractères.",
+        )
+    return password
+
+
+def find_user_by_email(db: Session, email: Optional[str]) -> Optional[UserDB]:
+    """Recherche un compte par email, sans tenir compte de la casse."""
+    normalized = normalize_email(email)
+    if not normalized:
+        return None
+    return db.query(UserDB).filter(func.lower(UserDB.email) == normalized).first()
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=24))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
 async def get_current_user(
