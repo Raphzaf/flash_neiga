@@ -37,19 +37,13 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, []); // 🔒 Dependency array vide = exécution unique !
 
-    const login = async (email, password) => {
-        const formData = new FormData();
-        formData.append('username', email);
-        formData.append('password', password);
-
-        const res = await axios.post('/api/auth/login', formData);
-        const newToken = res.data.access_token;
-        
-        // Sauvegarder et configurer le token
+    // Ouvre la session à partir d'un token déjà obtenu (connexion classique,
+    // inscription, ou rattachement d'un paiement à un compte).
+    const loginWithToken = async (newToken) => {
         localStorage.setItem('token', newToken);
         axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
         setToken(newToken);
-        
+
         // Charger l'utilisateur immédiatement
         try {
             const userRes = await axios.get('/api/auth/me');
@@ -58,18 +52,28 @@ export const AuthProvider = ({ children }) => {
             console.error("Failed to load user after login:", error);
             throw error;
         }
-        
+
         return true;
     };
 
+    const login = async (email, password) => {
+        const formData = new FormData();
+        formData.append('username', email);
+        formData.append('password', password);
+
+        const res = await axios.post('/api/auth/login', formData);
+        return await loginWithToken(res.data.access_token);
+    };
+
     const register = async (email, password, firstName, lastName) => {
-        await axios.post('/api/auth/register', {
+        // L'inscription renvoie déjà un token : inutile de rejouer une connexion.
+        const res = await axios.post('/api/auth/register', {
             email,
             password,
             first_name: firstName,
             last_name: lastName,
         });
-        return await login(email, password);
+        return await loginWithToken(res.data.access_token);
     };
 
     const logout = () => {
@@ -80,11 +84,12 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ 
-            user, 
-            login, 
-            register, 
-            logout, 
+        <AuthContext.Provider value={{
+            user,
+            login,
+            loginWithToken,
+            register,
+            logout,
             loading, 
             isAuthenticated: !!user,
             token

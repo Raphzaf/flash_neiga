@@ -46,6 +46,18 @@ def test_db():
 def client():
     return TestClient(app)
 
+
+@pytest.fixture(autouse=True)
+def no_signature_check(monkeypatch):
+    """Les notifications HYP sont signées en production (HYP_REQUIRE_SIGNATURE).
+
+    Les tests ne disposent d'aucun terminal HYP pour produire une signature :
+    on désactive la vérification côté module, sans toucher au comportement par
+    défaut de l'application.
+    """
+    import routes.hyp_payments as hyp
+    monkeypatch.setattr(hyp, "HYP_REQUIRE_SIGNATURE", False)
+
 # Test data
 SAMPLE_USER = {
     "id": "test-user-123",
@@ -497,6 +509,196 @@ class TestGetUserSubscriptions:
         assert "subscriptions" in data
         assert data["count"] == 2
         assert len(data["subscriptions"]) == 2
+
+
+class TestAccountRequiredBeforePayment:
+    """Un paiement ne peut pas partir sans compte : c'est ce qui garantit que
+    l'abonnement encaissé pourra effectivement être ouvert."""
+
+    def test_create_payment_without_account_is_refused(self, client, test_db):
+        response = client.post(
+            "/api/payments/hyp/create-payment",
+            json={"plan_id": "code_14d", "user_email": "sarah@example.com"},
+        )
+        assert response.status_code == 401
+        assert "compte" in response.json()["detail"].lower()
+
+        # Aucun paiement ne doit avoir été amorcé.
+        assert test_db.query(TransactionDB).count() == 0
+
+    @patch('routes.hyp_payments.create_hyp_payment_url')
+    def test_authenticated_user_wins_over_client_payload(self, mock_create_url, client, test_db):
+        """Le compte crédité est celui du token, jamais le user_id envoyé par le client."""
+        mock_create_url.return_value = "https://icom.yaad.net/p/?test=true"
+
+        register = client.post(
+            "/api/auth/register",
+            json={"email": "sarah@example.com", "password": "motdepasse", "first_name": "Sarah"},
+        )
+        assert register.status_code == 200
+        token = register.json()["access_token"]
+
+        other = UserDB(id="autre-eleve", email="autre@example.com", hashed_password="x")
+        test_db.add(other)
+        test_db.commit()
+
+        response = client.post(
+            "/api/payments/hyp/create-payment",
+            json={"plan_id": "code_14d", "user_id": other.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+
+        transaction = test_db.query(TransactionDB).filter(
+            TransactionDB.id == response.json()["transaction_id"]
+        ).first()
+        assert transaction.user_id != other.id
+        assert transaction.event_data["user_email"] == "sarah@example.com"
+
+
+class TestClaimPayment:
+    """Rattachement d'un paiement encaissé sans compte (parcours de rattrapage)."""
+
+    def _orphan_transaction(self, client, test_db, email="sarah@example.com"):
+        transaction = TransactionDB(
+            plan_id="code_14d",
+            amount=99,
+            currency="ILS",
+            status="pending",
+            event_data={"user_email": email},
+        )
+        test_db.add(transaction)
+        test_db.commit()
+
+        response = client.post(
+            "/api/payments/hyp/callback",
+            json={"Order": transaction.id, "CCode": "0", "Id": "hyp-orphan-1"},
+        )
+        assert response.status_code == 200
+        test_db.refresh(transaction)
+        return transaction
+
+    def test_payment_without_account_is_flagged(self, client, test_db):
+        transaction = self._orphan_transaction(client, test_db)
+
+        assert transaction.status == "completed"
+        assert transaction.event_data["needs_account"] is True
+        assert test_db.query(SubscriptionDB).count() == 0
+
+        details = client.get(f"/api/payments/hyp/transaction/{transaction.id}").json()
+        assert details["needs_account"] is True
+        # L'email n'est renvoyé que masqué.
+        assert details["email_hint"].endswith("@example.com")
+        assert "sarah@example.com" not in details["email_hint"]
+
+    def test_claim_creates_account_and_opens_subscription(self, client, test_db):
+        transaction = self._orphan_transaction(client, test_db)
+
+        response = client.post(
+            "/api/payments/hyp/claim",
+            json={
+                "transaction_id": transaction.id,
+                "email": "Sarah@Example.com ",
+                "password": "motdepasse",
+                "first_name": "Sarah",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["subscription"]["status"] == "active"
+
+        # L'élève est connecté immédiatement, sans avoir à deviner d'identifiants.
+        me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {data['access_token']}"})
+        assert me.status_code == 200
+        assert me.json()["email"] == "sarah@example.com"
+
+        test_db.refresh(transaction)
+        assert transaction.user_id == data["user"]["id"]
+        subscription = test_db.query(SubscriptionDB).filter(
+            SubscriptionDB.user_id == data["user"]["id"]
+        ).first()
+        assert subscription.status == "active"
+        assert subscription.transaction_id == transaction.id
+
+        # Le mot de passe choisi permet bien de se reconnecter ensuite.
+        login = client.post(
+            "/api/auth/login",
+            data={"username": "sarah@example.com", "password": "motdepasse"},
+        )
+        assert login.status_code == 200
+
+    def test_claim_is_single_use(self, client, test_db):
+        transaction = self._orphan_transaction(client, test_db)
+        payload = {
+            "transaction_id": transaction.id,
+            "email": "sarah@example.com",
+            "password": "motdepasse",
+        }
+        assert client.post("/api/payments/hyp/claim", json=payload).status_code == 200
+
+        second = client.post(
+            "/api/payments/hyp/claim",
+            json={**payload, "email": "voleur@example.com", "password": "autremotdepasse"},
+        )
+        assert second.status_code == 409
+
+    def test_claim_on_existing_account_requires_its_password(self, client, test_db):
+        client.post(
+            "/api/auth/register",
+            json={"email": "sarah@example.com", "password": "motdepasse"},
+        )
+        transaction = self._orphan_transaction(client, test_db)
+
+        refused = client.post(
+            "/api/payments/hyp/claim",
+            json={
+                "transaction_id": transaction.id,
+                "email": "sarah@example.com",
+                "password": "mauvais-mot-de-passe",
+            },
+        )
+        assert refused.status_code == 403
+        assert test_db.query(SubscriptionDB).count() == 0
+
+        accepted = client.post(
+            "/api/payments/hyp/claim",
+            json={
+                "transaction_id": transaction.id,
+                "email": "sarah@example.com",
+                "password": "motdepasse",
+            },
+        )
+        assert accepted.status_code == 200
+        assert accepted.json()["subscription"]["status"] == "active"
+
+    def test_claim_refuses_unconfirmed_payment(self, client, test_db):
+        transaction = TransactionDB(plan_id="code_14d", amount=99, currency="ILS", status="pending")
+        test_db.add(transaction)
+        test_db.commit()
+
+        response = client.post(
+            "/api/payments/hyp/claim",
+            json={
+                "transaction_id": transaction.id,
+                "email": "sarah@example.com",
+                "password": "motdepasse",
+            },
+        )
+        assert response.status_code == 409
+        assert test_db.query(SubscriptionDB).count() == 0
+
+    def test_claim_refuses_short_password(self, client, test_db):
+        transaction = self._orphan_transaction(client, test_db)
+
+        response = client.post(
+            "/api/payments/hyp/claim",
+            json={
+                "transaction_id": transaction.id,
+                "email": "sarah@example.com",
+                "password": "123",
+            },
+        )
+        assert response.status_code == 400
 
 
 if __name__ == "__main__":

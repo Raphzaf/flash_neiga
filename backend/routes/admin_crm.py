@@ -14,10 +14,12 @@ utilisateur authentifié dont l'email figure dans ADMIN_EMAILS).
   POST   /api/admin/crm/users/{user_id}/subscriptions  → accorder / prolonger un abonnement
   POST   /api/admin/crm/subscriptions/{sub_id}/cancel  → résilier un abonnement
   GET    /api/admin/crm/transactions                   → historique des paiements
+  POST   /api/admin/crm/transactions/{id}/attach       → rattacher un paiement à un compte
   GET    /api/admin/crm/plans                          → catalogue des formules
 """
 import json
 import logging
+import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -33,7 +35,8 @@ try:
         UserDB, SubscriptionDB, TransactionDB, PaymentDB,
         ExamSessionDB, UserMistakeDB, User, PromoCodeDB, PromoRedemptionDB,
     )
-    from auth import require_admin
+    from auth import require_admin, hash_password, normalize_email, find_user_by_email
+    from routes.hyp_payments import provision_subscription, transaction_email
     import promo as promo_lib
 except ImportError:  # pragma: no cover - import depuis la racine du repo
     from backend.database import get_db
@@ -41,7 +44,8 @@ except ImportError:  # pragma: no cover - import depuis la racine du repo
         UserDB, SubscriptionDB, TransactionDB, PaymentDB,
         ExamSessionDB, UserMistakeDB, User, PromoCodeDB, PromoRedemptionDB,
     )
-    from backend.auth import require_admin
+    from backend.auth import require_admin, hash_password, normalize_email, find_user_by_email
+    from backend.routes.hyp_payments import provision_subscription, transaction_email
     from backend import promo as promo_lib
 
 logger = logging.getLogger(__name__)
@@ -69,6 +73,14 @@ class UserUpdate(BaseModel):
 
 class PasswordReset(BaseModel):
     new_password: str
+
+
+class TransactionAttach(BaseModel):
+    """Rattachement manuel d'un paiement à un compte élève."""
+    email: EmailStr
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    password: Optional[str] = None   # None = mot de passe provisoire généré
 
 
 class SubscriptionGrant(BaseModel):
@@ -443,9 +455,7 @@ async def reset_user_password(user_id: str, payload: PasswordReset, db: Session 
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
 
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    user.hashed_password = pwd_context.hash(payload.new_password)
+    user.hashed_password = hash_password(payload.new_password)
     db.add(user)
     db.commit()
     logger.info("CRM : mot de passe réinitialisé pour %s", user.email)
@@ -559,12 +569,20 @@ async def cancel_subscription(sub_id: str, db: Session = Depends(get_db)):
 async def list_transactions(
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None, description="pending / completed / failed …"),
+    needs_account: bool = Query(
+        False, description="Uniquement les paiements encaissés sans compte rattaché"
+    ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     query = db.query(TransactionDB)
     if status:
         query = query.filter(TransactionDB.status == status)
+    if needs_account:
+        # Paiement encaissé dont personne ne profite : aucun compte ne le porte.
+        query = query.filter(
+            TransactionDB.status == "completed", TransactionDB.user_id.is_(None)
+        )
     total = query.count()
     rows = (
         query.order_by(TransactionDB.created_at.desc()).offset(offset).limit(limit).all()
@@ -581,7 +599,14 @@ async def list_transactions(
             {
                 "id": t.id,
                 "user_id": t.user_id,
-                "user_email": (users.get(t.user_id).email if users.get(t.user_id) else None),
+                # Sans compte rattaché, on affiche l'email saisi au paiement :
+                # c'est la seule piste pour retrouver l'élève.
+                "user_email": (
+                    users.get(t.user_id).email if users.get(t.user_id)
+                    else transaction_email(t)
+                ),
+                "has_account": bool(t.user_id),
+                "needs_account": t.status == "completed" and not t.user_id,
                 "plan_id": t.plan_id,
                 "plan_name": _plan_name(t.plan_id),
                 "amount": t.amount,
@@ -596,6 +621,71 @@ async def list_transactions(
         "limit": limit,
         "offset": offset,
         "has_more": offset + len(rows) < total,
+    }
+
+
+@router.post("/transactions/{transaction_id}/attach")
+async def attach_transaction(
+    transaction_id: str,
+    payload: TransactionAttach,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Rattache un paiement encaissé à un compte élève et ouvre son abonnement.
+
+    Sert quand un élève a payé mais ne peut pas entrer : soit le compte n'existe
+    pas encore (il est créé ici, avec un mot de passe provisoire à lui
+    communiquer), soit il existe déjà et le paiement lui est simplement affecté.
+    """
+    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Paiement introuvable")
+    if transaction.user_id:
+        raise HTTPException(status_code=409, detail="Ce paiement est déjà rattaché à un compte")
+    if transaction.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Paiement non encaissé (statut : {transaction.status})",
+        )
+
+    email = normalize_email(payload.email)
+    user = find_user_by_email(db, email)
+    temporary_password = None
+    if not user:
+        temporary_password = payload.password or secrets.token_urlsafe(9)
+        user = UserDB(
+            email=email,
+            hashed_password=hash_password(temporary_password),
+            first_name=(payload.first_name or "").strip() or None,
+            last_name=(payload.last_name or "").strip() or None,
+        )
+        db.add(user)
+        db.flush()
+    elif payload.password:
+        user.hashed_password = hash_password(payload.password)
+        temporary_password = payload.password
+        db.add(user)
+
+    transaction.user_id = user.id
+    event_data = dict(transaction.event_data or {})
+    event_data.update({
+        "needs_account": False,
+        "attached_by": admin.email,
+        "attached_at": datetime.utcnow().isoformat(),
+    })
+    event_data.setdefault("user_email", email)
+    transaction.event_data = event_data
+
+    subscription = provision_subscription(db, transaction)
+    db.commit()
+
+    logger.info("CRM : paiement %s rattaché à %s par %s", transaction.id, email, admin.email)
+    return {
+        "status": "ok",
+        "user": {"id": user.id, "email": user.email},
+        # Renvoyé une seule fois, à transmettre à l'élève : il pourra le changer.
+        "temporary_password": temporary_password,
+        "subscription": _sub_payload(subscription),
     }
 
 

@@ -25,10 +25,18 @@ except ImportError:
     from backend.database import get_db
 
 try:
-    from models import TransactionDB, SubscriptionDB, UserDB
+    from models import TransactionDB, SubscriptionDB, UserDB, User
+    from auth import (
+        get_current_user_optional, hash_password, create_access_token,
+        normalize_email, find_user_by_email, validate_password, verify_password,
+    )
     import promo as promo_lib
 except ImportError:
-    from backend.models import TransactionDB, SubscriptionDB, UserDB
+    from backend.models import TransactionDB, SubscriptionDB, UserDB, User
+    from backend.auth import (
+        get_current_user_optional, hash_password, create_access_token,
+        normalize_email, find_user_by_email, validate_password, verify_password,
+    )
     from backend import promo as promo_lib
 
 logger = logging.getLogger(__name__)
@@ -96,6 +104,20 @@ class ValidatePromoRequest(BaseModel):
     user_id: Optional[str] = None
 
 
+class ClaimAccessRequest(BaseModel):
+    """Rattachement d'un paiement encaissé à un compte élève.
+
+    Filet de sécurité pour les paiements qui, pour une raison ou une autre, sont
+    arrivés sans compte associé : l'élève choisit son mot de passe et récupère
+    immédiatement l'accès qu'il a payé.
+    """
+    transaction_id: str
+    email: EmailStr
+    password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+
 class CallbackData(BaseModel):
     """Model for HYP callback data"""
     Id: Optional[str] = None
@@ -126,6 +148,84 @@ def calculate_subscription_dates(plan_id: str, start_date: Optional[datetime] = 
     end_date = start_date + timedelta(days=duration_days)
     
     return start_date, end_date
+
+
+def transaction_email(transaction: TransactionDB) -> Optional[str]:
+    """Email connu pour ce paiement : celui saisi chez nous, sinon celui de HYP."""
+    for source in (transaction.event_data, transaction.callback_data):
+        if isinstance(source, dict):
+            for key in ("user_email", "email", "Email", "UserEmail", "client_email"):
+                value = source.get(key)
+                if value:
+                    return normalize_email(str(value))
+    return None
+
+
+def mask_email(email: Optional[str]) -> Optional[str]:
+    """`sarah.cohen@gmail.com` → `sa****n@gmail.com`.
+
+    Sert à confirmer à l'élève quel email a servi au paiement sans exposer
+    l'adresse complète à quiconque détiendrait l'identifiant de transaction.
+    """
+    if not email or "@" not in email:
+        return None
+    local, domain = email.rsplit("@", 1)
+    if len(local) <= 2:
+        return f"{local[0]}***@{domain}"
+    return f"{local[:2]}{'*' * max(3, len(local) - 3)}{local[-1]}@{domain}"
+
+
+def provision_subscription(db: Session, transaction: TransactionDB) -> Optional[SubscriptionDB]:
+    """Crée (ou prolonge) l'abonnement correspondant à un paiement encaissé.
+
+    Isolé du callback pour être rejouable : c'est la même fonction qui sert
+    lorsqu'un paiement est rattaché après coup à un compte (voir /claim et le
+    CRM). Ne committe pas : l'appelant maîtrise la transaction SQL.
+    """
+    if not (transaction.user_id and transaction.plan_id):
+        return None
+
+    plan = get_plan(transaction.plan_id) or {}
+    plan_type = plan.get("type")
+    is_extension = plan.get("is_extension", False)
+
+    # Filtrage en Python plutôt qu'un LIKE construit à partir du plan.
+    existing_subs = db.query(SubscriptionDB).filter(
+        SubscriptionDB.user_id == transaction.user_id,
+        SubscriptionDB.status == "active",
+    ).all()
+    existing_sub = next(
+        (s for s in existing_subs if s.plan_id and s.plan_id.startswith(f"{plan_type}_")),
+        None,
+    )
+
+    if existing_sub and is_extension:
+        # Prolongation : on repart de la date de fin en cours.
+        base_date = existing_sub.end_date or datetime.utcnow()
+        _, end_date = calculate_subscription_dates(transaction.plan_id, base_date)
+        existing_sub.end_date = end_date
+        existing_sub.updated_at = datetime.utcnow()
+        db.add(existing_sub)
+        logger.info(f"Extended subscription {existing_sub.id} to {end_date}")
+        return existing_sub
+
+    start_date, end_date = calculate_subscription_dates(transaction.plan_id)
+    if existing_sub:
+        existing_sub.status = "expired"
+        existing_sub.updated_at = datetime.utcnow()
+        db.add(existing_sub)
+
+    subscription = SubscriptionDB(
+        user_id=transaction.user_id,
+        plan_id=transaction.plan_id,
+        start_date=start_date,
+        end_date=end_date,
+        status="active",
+        transaction_id=transaction.id,
+    )
+    db.add(subscription)
+    logger.info(f"Created new subscription for user {transaction.user_id}")
+    return subscription
 
 
 def _hyp_coin(currency: str) -> int:
@@ -417,16 +517,22 @@ async def validate_promo(request: ValidatePromoRequest, db: Session = Depends(ge
 @router.post("/create-payment", response_model=CreatePaymentResponse)
 async def create_payment(
     request: CreatePaymentRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Create a HYP payment link
-    
+
     This endpoint:
     1. Validates the plan
-    2. Creates a transaction record
-    3. Generates a HYP payment URL
-    4. Returns the URL for user redirection
+    2. Identifies the buyer (an account is required)
+    3. Creates a transaction record
+    4. Generates a HYP payment URL
+    5. Returns the URL for user redirection
+
+    Le compte est exigé AVANT le paiement : un abonnement ne peut exister que
+    rattaché à un élève. Sans cette règle, un paiement anonyme est encaissé sans
+    qu'aucun accès ne puisse être ouvert.
     """
     # Validate plan
     plan = get_plan(request.plan_id)
@@ -435,18 +541,28 @@ async def create_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid plan_id: {request.plan_id}"
         )
-    
-    # Verify user exists if user_id provided
-    if request.user_id:
+
+    # L'élève connecté prime toujours sur ce que dit le client : c'est son compte
+    # qui sera crédité, quel que soit le user_id envoyé dans le corps.
+    if current_user:
+        request.user_id = current_user.id
+        user_email = normalize_email(current_user.email)
+    elif request.user_id:
         user = db.query(UserDB).filter(UserDB.id == request.user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        user_email = request.user_email or user.email
+        user_email = normalize_email(request.user_email or user.email)
     else:
-        user_email = request.user_email
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                "Crée ton compte (ou connecte-toi) avant de payer : "
+                "ton abonnement doit être rattaché à un compte pour être activé."
+            ),
+        )
 
     # Code promo : le montant est TOUJOURS recalculé côté serveur à partir du
     # catalogue ; le client n'envoie qu'un code, jamais un prix.
@@ -462,7 +578,16 @@ async def create_payment(
         except promo_lib.PromoError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
-    # Create transaction record
+    # Create transaction record. L'email est TOUJOURS conservé (et pas seulement
+    # avec un code promo) : c'est ce qui permet de retrouver l'élève si un
+    # paiement doit être rapproché manuellement d'un compte.
+    event_data: Dict[str, Any] = {"user_email": user_email}
+    if applied_promo:
+        event_data.update({
+            "promo_code": applied_promo.code,
+            "original_amount": original_amount,
+            "discount_amount": discount,
+        })
     transaction = TransactionDB(
         user_id=request.user_id,
         plan_id=request.plan_id,
@@ -470,11 +595,7 @@ async def create_payment(
         currency=plan["currency"],
         status="pending",
         event_type="payment.created",
-        event_data=(
-            {"promo_code": applied_promo.code, "original_amount": original_amount,
-             "discount_amount": discount, "user_email": user_email}
-            if applied_promo else None
-        ),
+        event_data=event_data,
     )
 
     db.add(transaction)
@@ -493,22 +614,7 @@ async def create_payment(
         transaction.status = "completed"
         transaction.completed_at = datetime.utcnow()
         transaction.event_type = "payment.free"
-        start_date, end_date = calculate_subscription_dates(request.plan_id)
-        for old in db.query(SubscriptionDB).filter(
-            SubscriptionDB.user_id == request.user_id,
-            SubscriptionDB.status == "active",
-        ).all():
-            old.status = "expired"
-            old.updated_at = datetime.utcnow()
-            db.add(old)
-        db.add(SubscriptionDB(
-            user_id=request.user_id,
-            plan_id=request.plan_id,
-            start_date=start_date,
-            end_date=end_date,
-            status="active",
-            transaction_id=transaction.id,
-        ))
+        provision_subscription(db, transaction)
         promo_lib.redeem(
             db, applied_promo, request.plan_id, original_amount, discount, amount,
             user_id=request.user_id, user_email=user_email, transaction_id=transaction.id,
@@ -695,66 +801,28 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
                 )
 
         # Create or extend subscription
-        if transaction.user_id and transaction.plan_id:
-            # Check for existing active subscription of the same type
-            plan = get_plan(transaction.plan_id)
-            plan_type = plan.get("type")
-            is_extension = plan.get("is_extension", False)
-            
-            # Use startswith() to avoid SQL injection with LIKE
-            # Only match subscriptions where plan_id starts with plan_type
-            existing_sub = db.query(SubscriptionDB).filter(
-                SubscriptionDB.user_id == transaction.user_id,
-                SubscriptionDB.status == "active"
-            ).all()
-            
-            # Filter in Python to avoid SQL injection
-            existing_sub = [
-                sub for sub in existing_sub 
-                if sub.plan_id and sub.plan_id.startswith(f"{plan_type}_")
-            ]
-            existing_sub = existing_sub[0] if existing_sub else None
-            
-            if existing_sub and is_extension:
-                # Extend existing subscription
-                if existing_sub.end_date:
-                    start_date = existing_sub.end_date
-                else:
-                    start_date = datetime.utcnow()
-                
-                start_date, end_date = calculate_subscription_dates(
-                    transaction.plan_id,
-                    start_date
-                )
-                
-                existing_sub.end_date = end_date
-                existing_sub.updated_at = datetime.utcnow()
-                
-                logger.info(f"Extended subscription {existing_sub.id} to {end_date}")
-            else:
-                # Create new subscription
-                start_date, end_date = calculate_subscription_dates(transaction.plan_id)
-                
-                # Deactivate old subscriptions of the same type
-                if existing_sub:
-                    existing_sub.status = "expired"
-                    existing_sub.updated_at = datetime.utcnow()
-                
-                subscription = SubscriptionDB(
-                    user_id=transaction.user_id,
-                    plan_id=transaction.plan_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    status="active",
-                    transaction_id=transaction.id
-                )
-                
-                db.add(subscription)
-                logger.info(f"Created new subscription for user {transaction.user_id}")
-        
+        provision_subscription(db, transaction)
+
+        # Paiement encaissé sans compte rattaché : l'abonnement ne peut pas être
+        # créé. On le trace explicitement (alerte dans les logs + drapeau visible
+        # dans le CRM) et l'élève se voit proposer de finaliser son compte sur la
+        # page de confirmation, via /claim.
+        if not transaction.user_id:
+            logger.error(
+                "⚠️ Paiement %s encaissé SANS COMPTE (email connu : %s) — "
+                "abonnement en attente de rattachement",
+                transaction.id, transaction_email(transaction) or "inconnu",
+            )
+            event_data = dict(transaction.event_data or {})
+            event_data["needs_account"] = True
+            hyp_email = data.get("email") or data.get("Email")
+            if hyp_email and not event_data.get("user_email"):
+                event_data["user_email"] = normalize_email(str(hyp_email))
+            transaction.event_data = event_data
+
         db.commit()
         logger.info(f"Transaction {transaction_id} completed successfully")
-        
+
         return {"status": "success", "message": "Payment completed"}
     else:
         # Payment failed
@@ -809,11 +877,16 @@ async def get_transaction(
             detail="Transaction not found"
         )
     
-    # Build base response
+    # Build base response. `needs_account` dit à la page de confirmation qu'il
+    # reste une étape : le paiement est encaissé mais aucun compte ne le porte.
+    # L'email n'est renvoyé que masqué : l'identifiant de transaction ne doit pas
+    # suffire à lire l'adresse d'un élève.
+    needs_account = transaction.status == "completed" and not transaction.user_id
     response = {
         "id": transaction.id,
         "user_id": transaction.user_id,
         "plan_id": transaction.plan_id,
+        "plan_name": (get_plan(transaction.plan_id) or {}).get("name") or transaction.plan_id,
         "amount": transaction.amount,
         "currency": transaction.currency,
         "status": transaction.status,
@@ -821,9 +894,11 @@ async def get_transaction(
         "hyp_transaction_id": transaction.hyp_transaction_id,
         "created_at": transaction.created_at.isoformat() if transaction.created_at else None,
         "completed_at": transaction.completed_at.isoformat() if transaction.completed_at else None,
-        "callback_data": transaction.callback_data
+        "callback_data": transaction.callback_data,
+        "needs_account": needs_account,
+        "email_hint": mask_email(transaction_email(transaction)) if needs_account else None,
     }
-    
+
     # If transaction is completed, try to fetch associated subscription
     if transaction.status == "completed" and transaction.user_id:
         subscription = db.query(SubscriptionDB).filter(
@@ -847,6 +922,89 @@ async def get_transaction(
             logger.debug(f"Added subscription details to transaction {transaction_id}")
     
     return response
+
+
+@router.post("/claim")
+async def claim_payment(request: ClaimAccessRequest, db: Session = Depends(get_db)):
+    """Rattache un paiement encaissé à un compte élève et ouvre l'accès.
+
+    Utilisé sur la page de confirmation quand le paiement est arrivé sans compte
+    (ancien parcours anonyme, session perdue en cours de route…). L'élève choisit
+    son mot de passe et est connecté immédiatement : il n'a plus à deviner des
+    identifiants qu'il n'a jamais créés.
+
+    Garde-fous :
+      - le paiement doit être confirmé (statut `completed`) ;
+      - un paiement déjà rattaché ne peut pas être repris ;
+      - si l'email correspond à un compte existant, le mot de passe de ce compte
+        est exigé — on ne prend jamais la main sur le compte d'un tiers.
+    """
+    transaction = db.query(TransactionDB).filter(
+        TransactionDB.id == request.transaction_id
+    ).first()
+    if not transaction:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paiement introuvable")
+
+    if transaction.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ce paiement n'est pas encore confirmé. Réessaie dans quelques instants.",
+        )
+
+    if transaction.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ce paiement est déjà rattaché à un compte. Connecte-toi pour accéder à ton abonnement.",
+        )
+
+    email = normalize_email(request.email)
+    password = validate_password(request.password)
+
+    user = find_user_by_email(db, email)
+    if user:
+        # Compte existant : seul son propriétaire (celui qui connaît le mot de
+        # passe) peut y rattacher le paiement.
+        if not verify_password(password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Un compte existe déjà avec cet email. Saisis son mot de passe "
+                    "pour y rattacher ton abonnement."
+                ),
+            )
+    else:
+        user = UserDB(
+            email=email,
+            hashed_password=hash_password(password),
+            first_name=(request.first_name or "").strip() or None,
+            last_name=(request.last_name or "").strip() or None,
+        )
+        db.add(user)
+        db.flush()  # attribue l'id avant de rattacher le paiement
+
+    transaction.user_id = user.id
+    event_data = dict(transaction.event_data or {})
+    event_data["needs_account"] = False
+    event_data["claimed_at"] = datetime.utcnow().isoformat()
+    event_data.setdefault("user_email", email)
+    transaction.event_data = event_data
+
+    subscription = provision_subscription(db, transaction)
+    db.commit()
+
+    logger.info("Paiement %s rattaché au compte %s", transaction.id, email)
+
+    return {
+        "status": "ok",
+        "access_token": create_access_token(data={"sub": user.id}),
+        "token_type": "bearer",
+        "user": {"id": user.id, "email": user.email},
+        "subscription": {
+            "plan_id": subscription.plan_id,
+            "end_date": subscription.end_date.isoformat() if subscription and subscription.end_date else None,
+            "status": subscription.status,
+        } if subscription else None,
+    }
 
 
 @router.get("/subscriptions/{user_id}")

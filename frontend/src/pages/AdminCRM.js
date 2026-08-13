@@ -14,7 +14,8 @@ import {
 } from '../components/ui/dialog';
 import {
     Search, RefreshCw, Users, CreditCard, TrendingUp, Clock, ArrowLeft,
-    Trash2, Save, KeyRound, Gift, ShieldAlert, Ticket, Plus, Power,
+    Trash2, Save, KeyRound, Gift, ShieldAlert, Ticket, Plus, Power, UserPlus,
+    AlertTriangle,
 } from 'lucide-react';
 
 const money = (v, currency = 'ILS') =>
@@ -70,6 +71,11 @@ export default function AdminCRM() {
     const [plans, setPlans] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [txLoading, setTxLoading] = useState(false);
+    // Rattachement d'un paiement encaissé sans compte
+    const [attachTx, setAttachTx] = useState(null);
+    const [attachForm, setAttachForm] = useState({ email: '', first_name: '', last_name: '' });
+    const [attachSaving, setAttachSaving] = useState(false);
+    const [attachResult, setAttachResult] = useState(null);
 
     // Codes promo
     const [promos, setPromos] = useState([]);
@@ -166,6 +172,31 @@ export default function AdminCRM() {
             setTxLoading(false);
         }
     }, [handleError]);
+
+    // Rattache un paiement encaissé à un compte élève : le compte est créé s'il
+    // n'existe pas, et l'abonnement payé est ouvert dans la foulée.
+    const attachTransaction = useCallback(async () => {
+        if (!attachTx) return;
+        setAttachSaving(true);
+        try {
+            const { data } = await axios.post(
+                `/api/admin/crm/transactions/${attachTx.id}/attach`,
+                {
+                    email: attachForm.email.trim(),
+                    first_name: attachForm.first_name.trim() || null,
+                    last_name: attachForm.last_name.trim() || null,
+                },
+            );
+            setAttachResult(data);
+            toast.success('Paiement rattaché et abonnement ouvert');
+            fetchTransactions();
+            fetchStats();
+        } catch (error) {
+            handleError(error, 'Impossible de rattacher ce paiement');
+        } finally {
+            setAttachSaving(false);
+        }
+    }, [attachTx, attachForm, fetchTransactions, fetchStats, handleError]);
 
     useEffect(() => {
         fetchStats();
@@ -633,6 +664,16 @@ export default function AdminCRM() {
                             </Button>
                         </CardHeader>
                         <CardContent>
+                            {transactions.some((t) => t.needs_account) && (
+                                <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-3">
+                                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                                        <strong>{transactions.filter((t) => t.needs_account).length} paiement(s) encaissé(s) sans compte.</strong>{' '}
+                                        L'élève a payé mais aucun abonnement n'a pu être ouvert : rattache-le à un compte
+                                        pour lui donner l'accès.
+                                    </div>
+                                </div>
+                            )}
                             {txLoading ? (
                                 <div className="space-y-2">
                                     {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
@@ -649,17 +690,40 @@ export default function AdminCRM() {
                                                 <th className="py-2 pr-3">Formule</th>
                                                 <th className="py-2 pr-3">Montant</th>
                                                 <th className="py-2 pr-3">Statut</th>
+                                                <th className="py-2 pr-3"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {transactions.map((t) => (
                                                 <tr key={t.id} className="border-b border-slate-100 dark:border-slate-700/50">
                                                     <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{date(t.created_at)}</td>
-                                                    <td className="py-2 pr-3 text-slate-700 dark:text-slate-200">{t.user_email || '—'}</td>
+                                                    <td className="py-2 pr-3 text-slate-700 dark:text-slate-200">
+                                                        {t.user_email || '—'}
+                                                        {t.needs_account && (
+                                                            <span className="block text-xs text-amber-600 dark:text-amber-400">
+                                                                payé sans compte
+                                                            </span>
+                                                        )}
+                                                    </td>
                                                     <td className="py-2 pr-3 text-slate-700 dark:text-slate-200">{t.plan_name}</td>
                                                     <td className="py-2 pr-3 text-slate-700 dark:text-slate-200">{money(t.amount, t.currency)}</td>
                                                     <td className="py-2 pr-3">
                                                         <Badge variant={t.status === 'completed' ? 'default' : 'secondary'}>{t.status}</Badge>
+                                                    </td>
+                                                    <td className="py-2 pr-3 text-right">
+                                                        {t.needs_account && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setAttachTx(t);
+                                                                    setAttachResult(null);
+                                                                    setAttachForm({ email: t.user_email || '', first_name: '', last_name: '' });
+                                                                }}
+                                                            >
+                                                                <UserPlus className="h-4 w-4 mr-1" /> Rattacher
+                                                            </Button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -833,6 +897,64 @@ export default function AdminCRM() {
                             <Trash2 className="h-4 w-4 mr-2" /> Supprimer le compte
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => setDetail(null)}>Fermer</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ===== Rattacher un paiement à un compte ===== */}
+            <Dialog open={!!attachTx} onOpenChange={(open) => { if (!open) { setAttachTx(null); setAttachResult(null); } }}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Rattacher le paiement à un compte</DialogTitle>
+                        <DialogDescription>
+                            {attachTx && (
+                                <>{money(attachTx.amount, attachTx.currency)} — {attachTx.plan_name} — {date(attachTx.created_at)}</>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {attachResult ? (
+                        <div className="space-y-3">
+                            <p className="text-sm text-slate-700 dark:text-slate-200">
+                                Abonnement ouvert pour <strong>{attachResult.user.email}</strong>
+                                {attachResult.subscription?.end_date && <> jusqu'au {date(attachResult.subscription.end_date)}</>}.
+                            </p>
+                            {attachResult.temporary_password && (
+                                <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-3">
+                                    <div className="text-xs text-amber-700 dark:text-amber-300 mb-1">
+                                        Mot de passe provisoire à communiquer à l'élève (affiché une seule fois) :
+                                    </div>
+                                    <code className="text-sm font-mono text-slate-900 dark:text-white">
+                                        {attachResult.temporary_password}
+                                    </code>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                                Le compte est créé s'il n'existe pas encore ; s'il existe déjà, le paiement lui est
+                                simplement rattaché.
+                            </p>
+                            <Input placeholder="Email de l'élève" type="email" value={attachForm.email}
+                                onChange={(e) => setAttachForm((f) => ({ ...f, email: e.target.value }))} />
+                            <div className="grid grid-cols-2 gap-2">
+                                <Input placeholder="Prénom" value={attachForm.first_name}
+                                    onChange={(e) => setAttachForm((f) => ({ ...f, first_name: e.target.value }))} />
+                                <Input placeholder="Nom" value={attachForm.last_name}
+                                    onChange={(e) => setAttachForm((f) => ({ ...f, last_name: e.target.value }))} />
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        {attachResult ? (
+                            <Button size="sm" onClick={() => { setAttachTx(null); setAttachResult(null); }}>Fermer</Button>
+                        ) : (
+                            <Button size="sm" onClick={attachTransaction} disabled={attachSaving || !attachForm.email.trim()}>
+                                <UserPlus className="h-4 w-4 mr-2" /> {attachSaving ? 'Rattachement…' : 'Rattacher et ouvrir l\'accès'}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

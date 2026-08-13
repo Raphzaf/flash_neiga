@@ -61,7 +61,13 @@ axios.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401) {
+    // Ces appels traitent eux-mêmes leur 401 (échec de connexion, paiement
+    // lancé sans compte) : les rediriger vers /login ferait perdre à l'élève sa
+    // saisie ou la formule qu'il venait de choisir.
+    const url = error.config?.url || '';
+    const handledLocally = /\/api\/auth\/(login|register)|\/api\/payments\//.test(url);
+
+    if (error.response?.status === 401 && !handledLocally) {
       console.warn('🚫 Unauthorized (401) - Clearing token');
       localStorage.removeItem('token');
       delete axios.defaults.headers.common['Authorization'];
