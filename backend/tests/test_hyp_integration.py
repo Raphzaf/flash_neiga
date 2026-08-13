@@ -183,6 +183,55 @@ class TestHypCallback:
         assert response.status_code == 400
         assert "Missing transaction ID" in response.json()["detail"]
     
+    def test_callback_accepts_our_own_transaction_id_field(self, client, test_db):
+        """La page de confirmation renvoie le résultat avec `transaction_id`.
+
+        HYP utilise `Order` ; nos URLs de retour utilisent `transaction_id`. Les
+        deux doivent ouvrir l'abonnement, sinon un paiement réussi reste sans
+        effet.
+        """
+        user = UserDB(**SAMPLE_USER)
+        test_db.add(user)
+        transaction = TransactionDB(
+            user_id=user.id, plan_id="code_14d", amount=99, currency="ILS", status="pending"
+        )
+        test_db.add(transaction)
+        test_db.commit()
+
+        response = client.post(
+            "/api/payments/hyp/callback",
+            json={"transaction_id": transaction.id, "CCode": "0", "Id": "hyp-123"},
+        )
+        assert response.status_code == 200
+
+        test_db.refresh(transaction)
+        assert transaction.status == "completed"
+        subscription = test_db.query(SubscriptionDB).filter(
+            SubscriptionDB.transaction_id == transaction.id
+        ).first()
+        assert subscription is not None and subscription.status == "active"
+
+    def test_replayed_callback_does_not_create_a_second_subscription(self, client, test_db):
+        """HYP peut renvoyer la même notification plusieurs fois (et l'élève peut
+        recharger la page de retour) : un seul abonnement doit en sortir."""
+        user = UserDB(**SAMPLE_USER)
+        test_db.add(user)
+        transaction = TransactionDB(
+            user_id=user.id, plan_id="code_14d", amount=99, currency="ILS", status="pending"
+        )
+        test_db.add(transaction)
+        test_db.commit()
+
+        payload = {"Order": transaction.id, "CCode": "0", "Id": "hyp-1"}
+        for _ in range(3):
+            assert client.post("/api/payments/hyp/callback", json=payload).status_code == 200
+
+        subscriptions = test_db.query(SubscriptionDB).filter(
+            SubscriptionDB.user_id == user.id
+        ).all()
+        assert len(subscriptions) == 1
+        assert subscriptions[0].status == "active"
+
     def test_callback_transaction_not_found(self, client, test_db):
         """Test callback with non-existent transaction"""
         response = client.post(
@@ -478,11 +527,16 @@ class TestGetUserSubscriptions:
     
     def test_get_user_subscriptions(self, client, test_db):
         """Test getting all subscriptions for a user"""
-        # Create test user
-        user = UserDB(**SAMPLE_USER)
-        test_db.add(user)
-        test_db.commit()
-        
+        # L'historique d'abonnement est une donnée personnelle : il faut un
+        # compte authentifié pour le lire.
+        register = client.post(
+            "/api/auth/register",
+            json={"email": SAMPLE_USER["email"], "password": "motdepasse"},
+        )
+        assert register.status_code == 200
+        headers = {"Authorization": f"Bearer {register.json()['access_token']}"}
+        user = test_db.query(UserDB).filter(UserDB.email == SAMPLE_USER["email"]).first()
+
         # Create subscriptions
         sub1 = SubscriptionDB(
             user_id=user.id,
@@ -503,12 +557,25 @@ class TestGetUserSubscriptions:
         test_db.commit()
         
         # Get subscriptions
-        response = client.get(f"/api/payments/hyp/subscriptions/{user.id}")
+        response = client.get(f"/api/payments/hyp/subscriptions/{user.id}", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert "subscriptions" in data
         assert data["count"] == 2
         assert len(data["subscriptions"]) == 2
+
+        # Sans authentification, l'accès est refusé.
+        assert client.get(f"/api/payments/hyp/subscriptions/{user.id}").status_code == 401
+
+    def test_other_students_subscriptions_are_not_readable(self, client, test_db):
+        curieux = client.post(
+            "/api/auth/register", json={"email": "curieux@example.com", "password": "motdepasse"}
+        )
+        response = client.get(
+            "/api/payments/hyp/subscriptions/un-autre-eleve",
+            headers={"Authorization": f"Bearer {curieux.json()['access_token']}"},
+        )
+        assert response.status_code == 403
 
 
 class TestAccountRequiredBeforePayment:

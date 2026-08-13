@@ -1,156 +1,117 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
+import FunnelShell from '../components/funnel/FunnelShell';
+import { TextField, PasswordField, FormError, Notice } from '../components/funnel/fields';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Card, CardHeader, CardContent, CardFooter } from '../components/ui/card';
-import { Label } from '../components/ui/label';
-import { Checkbox } from '../components/ui/checkbox';
-import { toast } from 'sonner';
-import { Mail, Lock, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react'; // Icônes pour le "cachet"
+import { readRememberedEmail } from '../lib/funnel';
+import { Loader2 } from 'lucide-react';
+
+// Message d'accueil selon la raison qui a amené l'élève ici : il doit toujours
+// comprendre pourquoi on lui demande de se connecter.
+const REASONS = {
+  'payment-success': {
+    tone: 'success',
+    text: "Ton abonnement est actif. Connecte-toi avec le mot de passe choisi à l'inscription pour commencer.",
+  },
+  subscribe: { tone: 'info', text: 'Connecte-toi pour choisir ta formule et accéder à la plateforme.' },
+  session: { tone: 'info', text: 'Ta session a expiré. Reconnecte-toi pour reprendre où tu en étais.' },
+};
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState({ email: '', password: '' });
-  const [rememberMe, setRememberMe] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const { login, isAuthenticated, hasAccess, loading, subscription, subscriptionLoading } = useAuth();
+
+  const [email, setEmail] = useState(searchParams.get('email') || readRememberedEmail() || '');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const reason = REASONS[searchParams.get('reason')];
+  // Destination demandée avant la redirection vers la connexion (route protégée).
+  const from = location.state?.from?.pathname;
+
+  // Déjà connecté : on ne réaffiche pas un formulaire de connexion. La
+  // destination dépend de l'abonnement — on attend donc de le connaître, sinon
+  // un élève à jour serait renvoyé vers le tunnel d'achat le temps d'un rendu.
+  useEffect(() => {
+    if (loading || !isAuthenticated) return;
+    if (subscriptionLoading || !subscription) return;
+    navigate(from || (hasAccess ? '/' : '/subscribe'), { replace: true });
+  }, [loading, isAuthenticated, subscription, subscriptionLoading, hasAccess, from, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // ... (votre logique reste la même)
+    setError(null);
     setIsLoading(true);
     try {
-      await login(email, password);
-      toast.success('Ravi de vous revoir !');
-      navigate('/');
-    } catch (error) {
-      toast.error('Identifiants incorrects.');
-    } finally {
+      await login(email.trim(), password);
+      // La redirection est portée par l'effet ci-dessus, une fois l'état
+      // d'abonnement connu : on ne devine jamais où envoyer l'élève.
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Email ou mot de passe incorrect.');
       setIsLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center relative px-4 overflow-hidden bg-gradient-to-br from-cyan-400 via-blue-500 to-blue-600 animate-gradient">
-      
-      {/* Orbes décoratifs en arrière-plan pour le côté "premium" avec animations améliorées */}
-      <div className="absolute top-10 -left-20 w-96 h-96 bg-gradient-to-br from-white/20 to-cyan-300/20 rounded-full mix-blend-overlay filter blur-3xl opacity-50 animate-blob" />
-      <div className="absolute bottom-10 -right-20 w-96 h-96 bg-gradient-to-br from-yellow-400/40 to-amber-500/40 rounded-full mix-blend-overlay filter blur-3xl opacity-60 animate-blob animation-delay-2000" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-blue-400/20 to-cyan-500/20 rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-float animation-delay-4000" />
-      
-      {/* Particules décoratives subtiles */}
-      <div className="absolute top-20 left-20 w-2 h-2 bg-white/50 rounded-full animate-glow-pulse" />
-      <div className="absolute top-40 right-32 w-1 h-1 bg-cyan-200/60 rounded-full animate-glow-pulse animation-delay-2000" />
-      <div className="absolute bottom-32 left-40 w-1.5 h-1.5 bg-yellow-300/60 rounded-full animate-glow-pulse animation-delay-4000" />
-      <div className="absolute bottom-20 right-20 w-2 h-2 bg-white/40 rounded-full animate-glow-pulse" />
+    <FunnelShell
+      title="Connexion"
+      subtitle="Accède à ton espace Flash Neiga."
+      footer={
+        <>
+          Mot de passe oublié ? Écris-nous à{' '}
+          <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">
+            support@flash-neiga.com
+          </a>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {reason && <Notice tone={reason.tone}>{reason.text}</Notice>}
 
-      <Card className="relative z-10 w-full max-w-md bg-white/[0.12] backdrop-blur-2xl border-white/[0.25] shadow-[0_8px_32px_0_rgba(0,0,0,0.2),0_0_60px_0_rgba(255,255,255,0.1)] rounded-[2rem] overflow-hidden animate-fade-in-up before:absolute before:inset-0 before:rounded-[2rem] before:p-[1px] before:bg-gradient-to-br before:from-white/30 before:via-white/10 before:to-transparent before:-z-10">
-        <CardHeader className="text-center space-y-4 pt-10 pb-6">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-yellow-400 via-amber-500 to-yellow-500 p-[1px] shadow-lg shadow-yellow-400/50 animate-glow-pulse">
-            <div className="w-full h-full rounded-2xl bg-white flex items-center justify-center">
-              <img src="/brand-logo.svg" alt="Logo" className="h-8 w-8 brightness-100 filter drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]" />
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-yellow-100 to-white bg-clip-text text-transparent filter drop-shadow-[0_2px_12px_rgba(255,255,255,0.5)]">
-              Prêt à prendre la route ?
-            </h1>
-            <p className="text-sm font-medium text-white/80">Connectez-vous à votre espace Flash Neiga</p>
-          </div>
-        </CardHeader>
+        <TextField
+          label="Email"
+          type="email"
+          placeholder="nom@exemple.com"
+          autoComplete="email"
+          inputMode="email"
+          autoFocus={!email}
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          data-testid="login-email-input"
+        />
 
-        <CardContent className="px-8 pb-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-white/90 ml-1" htmlFor="email">
-                Email
-              </Label>
-              <div className="relative group">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-yellow-400 transition-all duration-300 group-focus-within:drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="nom@exemple.com"
-                  autoFocus
-                  autoComplete="email"
-                  inputMode="email"
-                  required
-                  className="pl-10 bg-white/[0.15] border-white/[0.25] text-white placeholder:text-white/50 rounded-xl h-12 transition-all duration-300 focus:border-yellow-400/50 focus:ring-4 focus:ring-yellow-400/20 focus:bg-white/[0.20] focus:shadow-[0_0_20px_rgba(251,191,36,0.15)] hover:border-white/[0.35]"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-            </div>
+        <PasswordField
+          label="Mot de passe"
+          placeholder="Ton mot de passe"
+          autoComplete="current-password"
+          autoFocus={!!email}
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          data-testid="login-password-input"
+        />
 
-            <div className="space-y-2">
-              <div className="px-1">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-white/90" htmlFor="password">
-                  Mot de passe
-                </Label>
-              </div>
-              <div className="relative group">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-yellow-400 transition-all duration-300 group-focus-within:drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Votre mot de passe"
-                  autoComplete="current-password"
-                  required
-                  className="pl-10 pr-11 bg-white/[0.15] border-white/[0.25] text-white placeholder:text-white/50 rounded-xl h-12 transition-all duration-300 focus:border-yellow-400/50 focus:ring-4 focus:ring-yellow-400/20 focus:bg-white/[0.20] focus:shadow-[0_0_20px_rgba(251,191,36,0.15)] hover:border-white/[0.35]"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
+        <FormError>{error}</FormError>
 
-            <div className="flex items-center space-x-2 px-1">
-              <Checkbox id="remember" checked={rememberMe} onCheckedChange={(v) => setRememberMe(!!v)} className="border-white/40 data-[state=checked]:bg-gradient-to-br data-[state=checked]:from-yellow-400 data-[state=checked]:to-amber-500 data-[state=checked]:border-yellow-400/50 transition-all duration-200" />
-              <label htmlFor="remember" className="text-sm text-white/80 cursor-pointer select-none hover:text-white transition-colors">
-                Rester connecté
-              </label>
-            </div>
+        <Button type="submit" className="h-10 w-full" disabled={isLoading || !email || !password}>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Se connecter'}
+        </Button>
 
-            <Button
-              type="submit"
-              disabled={isLoading || !email || !password}
-              className="w-full h-12 rounded-xl bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 hover:from-yellow-300 hover:via-amber-300 hover:to-yellow-400 text-slate-900 font-bold text-base shadow-[0_0_30px_rgba(251,191,36,0.5)] transition-all duration-300 active:scale-[0.98] hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(251,191,36,0.7)] relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin relative z-10" />
-              ) : (
-                <span className="flex items-center gap-2 relative z-10">
-                  Se connecter <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300" />
-                </span>
-              )}
-            </Button>
-          </form>
-        </CardContent>
+        <div className="flex items-center gap-3 pt-1">
+          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          <span className="text-xs text-muted-foreground">ou</span>
+          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+        </div>
 
-        <CardFooter className="bg-slate-950 border-t border-white/[0.05] py-6 backdrop-blur-sm">
-          <div className="w-full text-center">
-            <p className="text-sm text-gray-200">
-              Nouveau ici ?{' '}
-              <Link to="/register" className="font-semibold text-yellow-300 hover:text-yellow-200 transition-colors underline underline-offset-4">
-                Créer un compte
-              </Link>
-            </p>
-          </div>
-        </CardFooter>
-      </Card>
-    </main>
+        <Button variant="outline" className="h-10 w-full" asChild>
+          <Link to="/register">Je n'ai pas encore de compte</Link>
+        </Button>
+      </form>
+    </FunnelShell>
   );
 }

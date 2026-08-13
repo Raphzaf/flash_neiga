@@ -1,113 +1,67 @@
-import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import FunnelShell from '../components/funnel/FunnelShell';
+import { Notice } from '../components/funnel/fields';
 import { Button } from '../components/ui/button';
-import { XCircle, RefreshCw, Mail, Home } from 'lucide-react';
+import { readRememberedPlan } from '../lib/funnel';
+import { XCircle } from 'lucide-react';
 
-function PaymentFailure() {
+const REASONS = [
+  'Fonds insuffisants ou plafond de carte atteint',
+  'Informations de carte incorrectes ou carte expirée',
+  'Paiement refusé par la banque',
+  'Paiement interrompu ou annulé',
+];
+
+export default function PaymentFailure() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
-  const transactionId = searchParams.get('transaction_id');
-  const errorMessage = searchParams.get('error') || 'Le paiement a échoué ou a été annulé.';
-
-  useEffect(() => {
-    // Log the failure for analytics/debugging
-    console.error('Payment failed:', { transactionId, errorMessage });
-  }, [transactionId, errorMessage]);
+  const transactionId = searchParams.get('transaction_id') || searchParams.get('Order');
+  const message = searchParams.get('error');
+  // On rouvre le paiement sur la formule choisie : l'élève ne recommence pas
+  // son parcours depuis le début.
+  const plan = searchParams.get('plan') || readRememberedPlan();
+  const retryTo = plan ? `/checkout?plan=${encodeURIComponent(plan)}` : '/subscribe';
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
-      <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] rounded-2xl shadow-xl p-8 text-center">
-        {/* Error Icon */}
-        <div className="mb-6">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-500/10">
-            <XCircle className="h-10 w-10 text-red-500" />
-          </div>
+    <FunnelShell
+      step={3}
+      title="Le paiement n'a pas abouti"
+      subtitle="Aucun montant n'a été débité. Tu peux réessayer immédiatement."
+    >
+      <div className="space-y-5">
+        <div className="flex justify-center">
+          <XCircle className="h-10 w-10 text-red-600 dark:text-red-400" />
         </div>
 
-        {/* Error Message */}
-        <h1 className="text-3xl font-bold text-white mb-4">
-          Payment Failed
-        </h1>
-        
-        <p className="text-slate-300 mb-6">
-          {errorMessage}
-        </p>
+        {message && <Notice tone="warning">{message}</Notice>}
 
-        {/* Transaction ID */}
-        {transactionId && (
-          <div className="bg-white/[0.05] backdrop-blur-sm rounded-xl p-4 mb-6 border border-white/[0.05]">
-            <p className="text-xs text-slate-400 mb-1">
-              ID de transaction
-            </p>
-            <p className="font-mono text-sm text-white">
-              {transactionId}
-            </p>
-          </div>
-        )}
-
-        {/* Common Reasons */}
-        <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.05] rounded-xl p-4 mb-6 text-left">
-          <h3 className="font-semibold text-indigo-400 mb-2 text-sm">
-            Raisons courantes d'échec :
-          </h3>
-          <ul className="text-sm text-slate-300 space-y-1 list-disc list-inside">
-            <li>Fonds insuffisants sur la carte</li>
-            <li>Informations de carte incorrectes</li>
-            <li>Carte expirée</li>
-            <li>Paiement refusé par la banque</li>
-            <li>Paiement annulé par l'utilisateur</li>
+        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Causes les plus fréquentes
+          </h2>
+          <ul className="space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
+            {REASONS.map((reason) => (
+              <li key={reason} className="flex gap-2"><span aria-hidden="true">•</span><span>{reason}</span></li>
+            ))}
           </ul>
         </div>
 
-        {/* Action Buttons */}
         <div className="space-y-3">
-          <Button 
-            onClick={() => navigate('/pricing')} 
-            className="w-full bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Retry Payment
+          <Button className="h-10 w-full" asChild>
+            <Link to={retryTo}>Réessayer le paiement</Link>
           </Button>
-          
-          <Button 
-            onClick={() => window.location.href = 'mailto:support@flash-neiga.com'}
-            variant="outline"
-            className="w-full border-white/[0.05] hover:bg-white/[0.05] transition-colors flex items-center justify-center gap-2"
-            asChild
-          >
-            <a href="mailto:support@flash-neiga.com">
-              <Mail className="h-4 w-4" />
-              Contact Support
-            </a>
+          <Button variant="outline" className="h-10 w-full" asChild>
+            <Link to="/subscribe">Choisir une autre formule</Link>
           </Button>
-          
-          <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
-          >
-            <Home className="h-4 w-4" />
-            Back to Home
-          </button>
         </div>
 
-        {/* Support Info */}
-        <div className="mt-6 pt-6 border-t border-white/[0.05]">
-          <p className="text-xs text-slate-400">
-            Nous sommes là pour vous aider. N'hésitez pas à nous contacter si vous rencontrez des difficultés.
-            <br />
-            Support:{' '}
-            <a 
-              href="mailto:support@flash-neiga.com" 
-              className="text-indigo-400 hover:text-indigo-300 hover:underline transition-colors"
-            >
-              support@flash-neiga.com
-            </a>
-          </p>
-        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Besoin d'aide ?{' '}
+          <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">support@flash-neiga.com</a>
+          {transactionId && <> — référence <span className="font-mono">{transactionId.slice(0, 8)}</span></>}
+        </p>
       </div>
-    </div>
+    </FunnelShell>
   );
 }
-
-export default PaymentFailure;

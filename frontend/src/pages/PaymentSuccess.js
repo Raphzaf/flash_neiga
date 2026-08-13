@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import FunnelShell from '../components/funnel/FunnelShell';
+import { TextField, PasswordField, FormError, Notice } from '../components/funnel/fields';
 import { Button } from '../components/ui/button';
-import { CheckCircle, Home, DollarSign, Calendar, Package, KeyRound, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { forgetPlan, formatDate, formatPrice, rememberEmail, readRememberedEmail } from '../lib/funnel';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 
-// Constants for polling configuration
 const MAX_POLLING_ATTEMPTS = 10;
 const POLLING_INTERVAL_MS = 2000;
-const AUTO_REDIRECT_DELAY_MS = 7000;
 
 /**
  * Dernière étape quand un paiement est arrivé sans compte rattaché : l'élève
@@ -21,7 +22,6 @@ function ClaimAccessForm({ transactionId, emailHint, onDone }) {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -41,210 +41,156 @@ function ClaimAccessForm({ transactionId, emailHint, onDone }) {
         first_name: firstName.trim() || null,
         last_name: lastName.trim() || null,
       });
-      await onDone(data.access_token);
+      await onDone(data.access_token, email.trim());
     } catch (err) {
       setError(err?.response?.data?.detail || "Impossible de finaliser ton accès. Réessaie ou contacte-nous.");
-    } finally {
       setSubmitting(false);
     }
   };
 
-  const field = "w-full rounded-xl bg-white/[0.06] border border-white/[0.12] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500";
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
-      <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] rounded-2xl shadow-xl p-8">
-        <div className="mx-auto mb-5 flex items-center justify-center h-16 w-16 rounded-full bg-emerald-500/10">
-          <CheckCircle className="h-10 w-10 text-emerald-500" />
+    <FunnelShell
+      step={3}
+      title="Paiement bien reçu"
+      subtitle="Dernière étape : choisis ton mot de passe pour ouvrir ton accès."
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <Notice tone="success">
+          Ton abonnement est payé. Il ne reste qu'à créer tes identifiants
+          {emailHint ? <> — utilise de préférence l'email du paiement ({emailHint}).</> : '.'}
+        </Notice>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField label="Prénom" placeholder="Sarah" autoComplete="given-name" autoFocus required
+            value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+          <TextField label="Nom" placeholder="Cohen" autoComplete="family-name" required
+            value={lastName} onChange={(e) => setLastName(e.target.value)} />
         </div>
+        <TextField label="Email" type="email" placeholder="nom@exemple.com" autoComplete="email"
+          inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        <PasswordField label="Mot de passe" placeholder="Au moins 6 caractères" autoComplete="new-password"
+          minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)}
+          hint="C'est celui qui te servira à te connecter." />
 
-        <h1 className="text-2xl font-bold text-white text-center mb-2">Paiement bien reçu !</h1>
-        <p className="text-slate-300 text-center mb-1">
-          Dernière étape : choisis ton mot de passe pour ouvrir ton accès.
-        </p>
-        <p className="text-slate-500 text-sm text-center mb-6">
-          {emailHint
-            ? <>Utilise de préférence l'email du paiement ({emailHint}).</>
-            : "Utilise de préférence l'email indiqué lors du paiement."}
-        </p>
+        <FormError>{error}</FormError>
 
-        <form onSubmit={submit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <input className={field} placeholder="Prénom" autoComplete="given-name" autoFocus
-              value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-            <input className={field} placeholder="Nom" autoComplete="family-name"
-              value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-          </div>
-          <input className={field} type="email" placeholder="Ton email" autoComplete="email" inputMode="email"
-            value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <div className="relative">
-            <input
-              className={`${field} pr-11`}
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Choisis ton mot de passe (6 caractères minimum)"
-              autoComplete="new-password"
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <button type="button" onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-
-          {error && <p className="text-sm text-red-400">{error}</p>}
-
-          <Button type="submit" disabled={submitting} className="w-full bg-emerald-600 hover:bg-emerald-700">
-            {submitting
-              ? <Loader2 className="h-5 w-5 animate-spin" />
-              : <span className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> Activer mon accès</span>}
-          </Button>
-        </form>
-
-        <p className="mt-5 text-xs text-slate-500 text-center">
-          Ton abonnement est déjà payé : ce mot de passe est celui qui te servira à te connecter.
-        </p>
-      </div>
-    </div>
+        <Button type="submit" className="h-10 w-full" disabled={submitting}>
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Activer mon accès'}
+        </Button>
+      </form>
+    </FunnelShell>
   );
 }
 
-function PaymentSuccess() {
+export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, loginWithToken } = useAuth();
+  const { user, loginWithToken, refreshSubscription } = useAuth();
+
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pollAttempt, setPollAttempt] = useState(0);
+  const timers = useRef([]);
 
-  // HYP returns the internal order id in `Order`; our own success URL uses
-  // `transaction_id`. Support both.
+  // HYP renvoie l'identifiant de commande dans `Order` ; nos propres URLs
+  // utilisent `transaction_id`. Les deux sont acceptés.
   const transactionId = searchParams.get('transaction_id') || searchParams.get('Order');
 
   useEffect(() => {
     let cancelled = false;
+    const schedule = (fn, delay) => { timers.current.push(setTimeout(fn, delay)); };
 
-    // If HYP redirected the browser here with a result payload (CCode present),
-    // forward it to the backend callback so the subscription is provisioned even
-    // when the server-to-server notification is not configured. Verification is
-    // still performed server-side via HYP APISign VERIFY.
+    // Si HYP a renvoyé le résultat dans l'URL (CCode), on le transmet au backend
+    // pour que l'abonnement soit ouvert même si la notification serveur à
+    // serveur n'est pas configurée. La signature est vérifiée côté serveur.
     const notifyBackend = async () => {
       if (searchParams.get('CCode') === null) return;
       try {
-        const params = Object.fromEntries(searchParams.entries());
-        await axios.post('/api/payments/hyp/callback', params);
+        await axios.post('/api/payments/hyp/callback', Object.fromEntries(searchParams.entries()));
       } catch (err) {
-        console.warn('Backend callback notification failed (will rely on polling):', err?.response?.status);
+        console.warn('Notification du paiement échouée (le sondage prend le relais):', err?.response?.status);
       }
     };
 
-    // Fetch transaction details with polling
     const fetchTransaction = async (attempt = 0) => {
       if (cancelled) return;
       if (!transactionId) {
-        setError('ID de transaction manquant');
+        setError("Nous n'avons pas retrouvé la référence de ton paiement.");
         setLoading(false);
         return;
       }
-
       try {
-        const response = await axios.get(`/api/payments/hyp/transaction/${transactionId}`);
-
-        // Check if callback has been processed (transaction completed)
-        if (response.data.status === 'completed' || attempt >= MAX_POLLING_ATTEMPTS) {
-          setTransaction(response.data);
+        const { data } = await axios.get(`/api/payments/hyp/transaction/${transactionId}`);
+        if (data.status === 'completed' || attempt >= MAX_POLLING_ATTEMPTS) {
+          setTransaction(data);
           setLoading(false);
+          if (data.status === 'completed') {
+            forgetPlan();
+            // L'abonnement vient peut-être d'être ouvert : on rafraîchit l'état
+            // côté serveur plutôt que de le supposer.
+            refreshSubscription();
+          }
         } else {
-          // Transaction still pending, retry after polling interval
           setPollAttempt(attempt + 1);
-          setTimeout(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
+          schedule(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
         }
       } catch (err) {
-        console.error('Error fetching transaction:', err);
-
-        // Retry on error if not too many attempts
         if (attempt < MAX_POLLING_ATTEMPTS) {
           setPollAttempt(attempt + 1);
-          setTimeout(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
+          schedule(() => fetchTransaction(attempt + 1), POLLING_INTERVAL_MS);
         } else {
-          setError('Erreur lors de la récupération des détails de paiement');
+          setError("Nous n'arrivons pas à confirmer ton paiement pour le moment.");
           setLoading(false);
         }
       }
     };
 
-    // Trigger provisioning first (best-effort), then start polling.
     notifyBackend().finally(() => fetchTransaction());
 
-    return () => { cancelled = true; };
-  }, [transactionId, searchParams]);
+    const scheduled = timers.current;
+    return () => {
+      cancelled = true;
+      scheduled.forEach(clearTimeout);
+    };
+  }, [transactionId, searchParams, refreshSubscription]);
 
-  // La redirection automatique n'a lieu que si l'élève peut réellement entrer :
-  // connecté et abonnement ouvert. Sinon, il resterait bloqué sur une page de
-  // connexion sans savoir quoi faire.
-  const canEnter = !!user && !!transaction && !transaction.needs_account;
-  useEffect(() => {
-    if (!canEnter) return;
-    const timer = setTimeout(() => navigate('/training'), AUTO_REDIRECT_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [canEnter, navigate]);
-
-  const handleClaimed = useCallback(async (accessToken) => {
+  const handleClaimed = useCallback(async (accessToken, email) => {
+    rememberEmail(email);
     await loginWithToken(accessToken);
-    navigate('/training');
+    navigate('/', { replace: true });
   }, [loginWithToken, navigate]);
-
-  // Format date in French format
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-slate-300">Vérification du paiement...</p>
-          {pollAttempt > 0 && (
-            <p className="text-slate-500 text-sm mt-2">
-              Tentative {pollAttempt + 1}/{MAX_POLLING_ATTEMPTS}
-            </p>
-          )}
+      <FunnelShell step={3} title="Validation de ton paiement" subtitle="Encore quelques secondes…">
+        <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          {pollAttempt > 0 && <p className="text-xs">Vérification {pollAttempt}/{MAX_POLLING_ATTEMPTS}</p>}
         </div>
-      </div>
+      </FunnelShell>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
-        <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] rounded-2xl shadow-xl p-8 text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-white mb-4">
-            Erreur
-          </h1>
-          <p className="text-slate-300 mb-6">
-            {error}
+      <FunnelShell step={3} title="Paiement en attente de confirmation">
+        <div className="space-y-4">
+          <FormError>{error}</FormError>
+          <p className="text-sm text-muted-foreground">
+            Si ta carte a été débitée, ton accès sera ouvert automatiquement. Écris-nous à{' '}
+            <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">support@flash-neiga.com</a>
+            {transactionId && <> en indiquant la référence <span className="font-mono">{transactionId.slice(0, 8)}</span></>}.
           </p>
-          <Button onClick={() => navigate('/pricing')} className="w-full">
-            Retour aux abonnements
+          <Button variant="outline" className="w-full" asChild>
+            <Link to="/subscribe">Revenir aux formules</Link>
           </Button>
         </div>
-      </div>
+      </FunnelShell>
     );
   }
 
-  // Paiement encaissé sans compte : on ouvre l'accès ici, tout de suite.
+  // Paiement encaissé sans compte rattaché : on ouvre l'accès ici, tout de suite.
   if (transaction?.needs_account) {
     return (
       <ClaimAccessForm
@@ -255,155 +201,75 @@ function PaymentSuccess() {
     );
   }
 
+  const pending = transaction?.status !== 'completed';
+  const sub = transaction?.subscription;
+  const loginEmail = user?.email || readRememberedEmail() || '';
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
-      <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/[0.05] rounded-2xl shadow-xl p-8 text-center">
-        {/* Success Icon */}
-        <div className="mb-6">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-emerald-500/10">
-            <CheckCircle className="h-10 w-10 text-emerald-500" />
-          </div>
-        </div>
-
-        {/* Success Message */}
-        <h1 className="text-3xl font-bold text-white mb-4">
-          Paiement réussi !
-        </h1>
-
-        <p className="text-slate-300 mb-6">
-          {transaction?.status === 'completed'
-            ? 'Ton abonnement est activé.'
-            : "Ton paiement est en cours de validation : ton accès s'ouvrira dans quelques instants."}
-        </p>
-
-        {/* Transaction Details */}
-        {transaction && (
-          <div className="bg-white/[0.05] backdrop-blur-sm rounded-xl p-4 mb-6 text-left border border-white/[0.05]">
-            <h3 className="font-semibold text-white mb-3">
-              Détails de la transaction
-            </h3>
-            <div className="space-y-2 text-sm">
-              {/* Amount with icon */}
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Montant :
-                </span>
-                <span className="font-medium text-white">
-                  {transaction.amount}₪
-                </span>
-              </div>
-
-              {/* Subscription info with icon */}
-              {transaction.subscription ? (
-                <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400 flex items-center gap-2">
-                      <Package className="h-4 w-4" />
-                      Formule :
-                    </span>
-                    <span className="font-medium text-white">
-                      {transaction.subscription.plan_name}
-                    </span>
-                  </div>
-
-                  {/* End date with icon */}
-                  {transaction.subscription.end_date && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Expire le :
-                      </span>
-                      <span className="font-medium text-emerald-400">
-                        {formatDate(transaction.subscription.end_date)}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Statut :</span>
-                    <span className="font-medium text-emerald-500">
-                      {transaction.subscription.status}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Formule :</span>
-                  <span className="font-medium text-white">
-                    {transaction.plan_name || transaction.plan_id}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex justify-between">
-                <span className="text-slate-400">Date :</span>
-                <span className="font-medium text-white">
-                  {formatDate(transaction.created_at || new Date().toISOString())}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-slate-400">ID :</span>
-                <span className="font-mono text-xs text-white">
-                  {transaction.id.substring(0, 8)}...
-                </span>
-              </div>
-            </div>
+    <FunnelShell
+      step={3}
+      title={pending ? 'Paiement en cours de validation' : 'Ton abonnement est actif'}
+      subtitle={
+        pending
+          ? "Ta banque n'a pas encore confirmé le paiement. Ton accès s'ouvrira dès validation."
+          : 'Merci ! Tout est en place, tu peux commencer.'
+      }
+    >
+      <div className="space-y-5">
+        {!pending && (
+          <div className="flex justify-center">
+            <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="space-y-3">
-          {user ? (
-            <>
-              <Button
-                onClick={() => navigate('/training')}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 transition-colors"
-              >
-                Accéder à mon entraînement
-              </Button>
-              <p className="text-sm text-slate-500">
-                Redirection automatique dans 7 secondes...
-              </p>
-            </>
-          ) : (
-            // Abonnement rattaché à un compte, mais la session a été perdue en
-            // route (paiement sur un autre appareil, navigateur relancé…).
-            <>
-              <Button
-                onClick={() => navigate('/login')}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 transition-colors"
-              >
-                Me connecter pour commencer
-              </Button>
-              <p className="text-sm text-slate-400">
-                Connecte-toi avec l'email et le mot de passe choisis avant le paiement.
-              </p>
-            </>
+        <dl className="space-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700">
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Formule</dt>
+            <dd className="text-right text-slate-900 dark:text-slate-200">
+              {sub?.plan_name || transaction?.plan_name || '—'}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Montant</dt>
+            <dd className="text-slate-900 dark:text-slate-200">
+              {formatPrice(transaction?.amount, transaction?.currency)}
+            </dd>
+          </div>
+          {sub?.end_date && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Accès jusqu'au</dt>
+              <dd className="font-medium text-slate-900 dark:text-white">{formatDate(sub.end_date)}</dd>
+            </div>
           )}
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Référence</dt>
+            <dd className="font-mono text-xs text-muted-foreground">{transaction?.id?.slice(0, 8)}</dd>
+          </div>
+        </dl>
 
-          <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
-          >
-            <Home className="h-4 w-4" />
-            Retour à l'accueil
-          </button>
-        </div>
+        {user ? (
+          <Button className="h-10 w-full" asChild>
+            <Link to="/">Accéder à la plateforme</Link>
+          </Button>
+        ) : (
+          <>
+            <Button className="h-10 w-full" asChild>
+              <Link to={`/login?reason=payment-success${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ''}`}>
+                Me connecter
+              </Link>
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Connecte-toi avec l'email et le mot de passe choisis à l'inscription.
+            </p>
+          </>
+        )}
 
-        {/* Additional Info */}
-        <div className="mt-6 pt-6 border-t border-white/[0.05]">
-          <p className="text-xs text-slate-400">
-            Un reçu de paiement t'a été envoyé par email.
-            <br />
-            Un souci pour accéder à ton abonnement ? Contacte-nous en indiquant
-            l'identifiant de paiement ci-dessus.
-          </p>
-        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Un reçu t'a été envoyé par email. Un souci d'accès ? Écris-nous à{' '}
+          <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">support@flash-neiga.com</a>{' '}
+          en indiquant ta référence de paiement.
+        </p>
       </div>
-    </div>
+    </FunnelShell>
   );
 }
-
-export default PaymentSuccess;

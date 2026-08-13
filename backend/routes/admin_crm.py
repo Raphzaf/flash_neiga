@@ -11,8 +11,6 @@ utilisateur authentifié dont l'email figure dans ADMIN_EMAILS).
   PATCH  /api/admin/crm/users/{user_id}                → modifier prénom / nom / email
   DELETE /api/admin/crm/users/{user_id}                → supprimer un compte et ses données
   POST   /api/admin/crm/users/{user_id}/password       → réinitialiser le mot de passe
-  POST   /api/admin/crm/users/{user_id}/subscriptions  → accorder / prolonger un abonnement
-  POST   /api/admin/crm/subscriptions/{sub_id}/cancel  → résilier un abonnement
   GET    /api/admin/crm/transactions                   → historique des paiements
   POST   /api/admin/crm/transactions/{id}/attach       → rattacher un paiement à un compte
   GET    /api/admin/crm/plans                          → catalogue des formules
@@ -81,12 +79,6 @@ class TransactionAttach(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     password: Optional[str] = None   # None = mot de passe provisoire généré
-
-
-class SubscriptionGrant(BaseModel):
-    plan_id: str
-    duration_days: Optional[int] = None   # par défaut : durée du plan
-    start_now: bool = True                # sinon, prolonge l'abonnement actif
 
 
 class PromoCodeCreate(BaseModel):
@@ -490,78 +482,16 @@ async def delete_user(user_id: str, db: Session = Depends(get_db)):
 
 
 # ===== Abonnements =====
-@router.post("/users/{user_id}/subscriptions")
-async def grant_subscription(
-    user_id: str,
-    payload: SubscriptionGrant,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """Accorde manuellement un abonnement (offre commerciale, geste commercial,
-    paiement encaissé hors plateforme) ou prolonge l'abonnement en cours."""
-    user = db.query(UserDB).filter(UserDB.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-
-    plan = PLANS.get(payload.plan_id)
-    if not plan:
-        raise HTTPException(status_code=400, detail=f"Formule inconnue : {payload.plan_id}")
-
-    days = payload.duration_days or int(plan.get("duration_days") or 30)
-    if days <= 0:
-        raise HTTPException(status_code=400, detail="Durée invalide")
-
-    now = datetime.utcnow()
-    current = (
-        db.query(SubscriptionDB)
-        .filter(SubscriptionDB.user_id == user_id, SubscriptionDB.status == "active")
-        .order_by(SubscriptionDB.created_at.desc())
-        .first()
-    )
-
-    if not payload.start_now and current and _is_active(current, now):
-        # Prolongation : on repousse la date de fin de l'abonnement actif.
-        base = current.end_date or now
-        current.end_date = base + timedelta(days=days)
-        current.canceled_at = None
-        db.add(current)
-        db.commit()
-        db.refresh(current)
-        logger.info("CRM : abonnement %s prolongé de %s jours par %s", current.id, days, admin.email)
-        return {"status": "extended", "subscription": _sub_payload(current)}
-
-    # Nouvel abonnement : l'ancien actif est clos pour éviter les doublons.
-    if current:
-        current.status = "cancelled"
-        current.canceled_at = now
-        db.add(current)
-
-    sub = SubscriptionDB(
-        user_id=user_id,
-        plan_id=payload.plan_id,
-        start_date=now,
-        end_date=now + timedelta(days=days),
-        status="active",
-    )
-    db.add(sub)
-    db.commit()
-    db.refresh(sub)
-    logger.info("CRM : abonnement %s accordé à %s par %s", payload.plan_id, user.email, admin.email)
-    return {"status": "created", "subscription": _sub_payload(sub)}
-
-
-@router.post("/subscriptions/{sub_id}/cancel")
-async def cancel_subscription(sub_id: str, db: Session = Depends(get_db)):
-    """Résilie un abonnement. L'accès reste valable jusqu'à sa date de fin."""
-    sub = db.query(SubscriptionDB).filter(SubscriptionDB.id == sub_id).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="Abonnement introuvable")
-    sub.status = "cancelled"
-    sub.canceled_at = datetime.utcnow()
-    db.add(sub)
-    db.commit()
-    db.refresh(sub)
-    return {"status": "cancelled", "subscription": _sub_payload(sub)}
+# Aucune route ici : l'abonnement appartient à l'élève.
+#
+# Un administrateur ne peut ni en accorder un, ni le prolonger, ni le résilier
+# depuis le CRM — comme sur n'importe quel produit par abonnement, c'est l'élève
+# qui souscrit et qui change de formule depuis son espace. Le CRM lit les
+# abonnements (fiche élève), il ne les écrit pas.
+#
+# Seule exception, plus bas : rattacher à un compte un paiement RÉELLEMENT
+# encaissé mais resté orphelin. On ne crée alors pas un droit, on répare
+# l'affectation d'un paiement déjà effectué par l'élève.
 
 
 # ===== Paiements =====

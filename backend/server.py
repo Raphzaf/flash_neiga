@@ -26,6 +26,7 @@ except ImportError:
 try:
     from models import (
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
+        SubscriptionDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
@@ -36,6 +37,7 @@ try:
 except ImportError:
     from backend.models import (
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
+        SubscriptionDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
@@ -83,13 +85,13 @@ try:
     from auth import (
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
-        find_user_by_email, validate_password,
+        find_user_by_email, validate_password, is_admin_email,
     )
 except ImportError:
     from backend.auth import (
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
-        find_user_by_email, validate_password,
+        find_user_by_email, validate_password, is_admin_email,
     )
 try:
     from migrations.auto_migrate import run_hyp_migration
@@ -696,6 +698,61 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 @app.get("/api/auth/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@app.get("/api/subscriptions/me")
+async def get_my_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """État de l'abonnement de l'élève connecté.
+
+    Source de vérité unique du front pour savoir où envoyer l'élève après la
+    connexion (application ou choix d'une formule) et pour afficher l'échéance.
+    Ne dépend d'aucune variable conservée côté navigateur : c'est la base qui
+    décide.
+    """
+    try:
+        from routes.hyp_payments import get_plan
+    except ImportError:  # pragma: no cover - import depuis la racine du repo
+        from backend.routes.hyp_payments import get_plan
+
+    now = datetime.utcnow()
+    subscription = (
+        db.query(SubscriptionDB)
+        .filter(SubscriptionDB.user_id == current_user.id, SubscriptionDB.status == "active")
+        .order_by(SubscriptionDB.created_at.desc())
+        .first()
+    )
+    # Un abonnement résilié reste valable jusqu'à sa date de fin.
+    active = bool(subscription and (subscription.end_date is None or subscription.end_date > now))
+    is_admin = is_admin_email(current_user.email)
+
+    payload = {
+        # Les administrateurs ne sont pas soumis au paywall : ils ont accès au
+        # contenu sans abonnement, le front ne doit donc pas les renvoyer vers
+        # le tunnel d'achat.
+        "has_access": active or is_admin,
+        "is_admin": is_admin,
+        "active": active,
+        "subscription": None,
+    }
+    if subscription:
+        plan = get_plan(subscription.plan_id) or {}
+        days_left = None
+        if subscription.end_date:
+            days_left = max(0, (subscription.end_date - now).days)
+        payload["subscription"] = {
+            "id": subscription.id,
+            "plan_id": subscription.plan_id,
+            "plan_name": plan.get("name") or subscription.plan_id,
+            "status": subscription.status,
+            "start_date": subscription.start_date.isoformat() if subscription.start_date else None,
+            "end_date": subscription.end_date.isoformat() if subscription.end_date else None,
+            "days_left": days_left,
+            "expired": not active,
+        }
+    return payload
 
 
 # ===== Admin Endpoints =====

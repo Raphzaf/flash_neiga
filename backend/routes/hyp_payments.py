@@ -29,6 +29,7 @@ try:
     from auth import (
         get_current_user_optional, hash_password, create_access_token,
         normalize_email, find_user_by_email, validate_password, verify_password,
+        is_admin_email,
     )
     import promo as promo_lib
 except ImportError:
@@ -36,6 +37,7 @@ except ImportError:
     from backend.auth import (
         get_current_user_optional, hash_password, create_access_token,
         normalize_email, find_user_by_email, validate_password, verify_password,
+        is_admin_email,
     )
     from backend import promo as promo_lib
 
@@ -470,12 +472,26 @@ async def test_hyp_connection():
 
 
 @router.get("/plans")
-async def get_plans():
-    """Get all available HYP plans"""
-    return {
-        "plans": HYP_PLANS,
-        "count": len(HYP_PLANS)
-    }
+async def get_plans(visible_only: bool = False):
+    """Catalogue des formules.
+
+    `visible_only=true` ne renvoie que les formules réellement commercialisées
+    (drapeau `visible` dans hyp_plans.json), sous forme de liste ordonnée et
+    prête à afficher : c'est la source unique des prix, pour que la page
+    Formules, le tunnel d'abonnement et le montant facturé ne puissent pas
+    diverger. Les anciennes formules restent servies (et donc honorées) tant
+    qu'elles ne sont pas marquées visibles.
+    """
+    if not visible_only:
+        return {"plans": HYP_PLANS, "count": len(HYP_PLANS)}
+
+    items = [
+        {"plan_id": plan_id, **plan}
+        for plan_id, plan in HYP_PLANS.items()
+        if plan.get("visible")
+    ]
+    items.sort(key=lambda p: (p.get("sort_order", 999), p.get("amount", 0)))
+    return {"items": items, "count": len(items)}
 
 
 @router.post("/validate-promo")
@@ -723,8 +739,11 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
     This function verifies the callback, updates the transaction, and creates/updates the subscription.
     """
     
-    # Extract transaction ID from Order field
-    transaction_id = data.get("Order") or data.get("order")
+    # Identifiant de commande. HYP le renvoie dans `Order`, mais nos propres URLs
+    # de retour (page de confirmation) le portent sous le nom `transaction_id` :
+    # les deux désignent la même transaction et doivent être acceptés, sans quoi
+    # un retour de paiement légitime est rejeté et l'abonnement n'est pas ouvert.
+    transaction_id = data.get("Order") or data.get("order") or data.get("transaction_id")
     if not transaction_id:
         logger.error("No transaction ID in callback")
         raise HTTPException(
@@ -1010,11 +1029,20 @@ async def claim_payment(request: ClaimAccessRequest, db: Session = Depends(get_d
 @router.get("/subscriptions/{user_id}")
 async def get_user_subscriptions(
     user_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Get all subscriptions for a user
+
+    Réservé à l'élève concerné (et aux administrateurs) : l'historique
+    d'abonnement d'un compte est une donnée personnelle.
     """
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Connexion requise")
+    if current_user.id != user_id and not is_admin_email(current_user.email):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé")
+
     subscriptions = db.query(SubscriptionDB).filter(
         SubscriptionDB.user_id == user_id
     ).order_by(SubscriptionDB.created_at.desc()).all()
