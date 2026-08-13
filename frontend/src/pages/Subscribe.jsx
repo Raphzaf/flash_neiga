@@ -3,9 +3,10 @@ import axios from 'axios';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import FunnelShell from '../components/funnel/FunnelShell';
-import { FormError, Notice, primaryButtonClass, secondaryButtonClass } from '../components/funnel/fields';
+import { FormError, Notice } from '../components/funnel/fields';
+import { Button } from '../components/ui/button';
 import { formatDate, formatPrice, pricePerDay, rememberPlan, readRememberedPlan } from '../lib/funnel';
-import { ArrowRight, Check, Loader2, RefreshCw } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 
 /**
  * Choix de la formule (étape 2).
@@ -40,12 +41,12 @@ export default function Subscribe() {
   useEffect(() => { loadPlans(); }, [loadPlans]);
 
   // Reprise du choix : URL d'abord (partage / retour arrière), puis mémoire
-  // locale, puis la formule mise en avant par défaut.
+  // locale, puis la formule la plus complète.
   useEffect(() => {
     if (!plans.length || selected) return;
     const candidates = [searchParams.get('plan'), readRememberedPlan()];
     const known = candidates.find((id) => plans.some((p) => p.plan_id === id));
-    setSelected(known || plans.find((p) => p.recommended)?.plan_id || plans[plans.length - 1]?.plan_id);
+    setSelected(known || plans[plans.length - 1]?.plan_id);
   }, [plans, selected, searchParams]);
 
   const groups = useMemo(() => {
@@ -79,15 +80,19 @@ export default function Subscribe() {
       step={2}
       width="lg"
       title="Choisis ta formule"
-      subtitle={user ? `Elle sera activée sur le compte ${user.email}.` : 'Toutes les formules donnent accès à la plateforme complète.'}
+      subtitle={
+        user
+          ? `Elle sera activée sur le compte ${user.email}.`
+          : 'Toutes les formules donnent accès à la plateforme complète.'
+      }
       footer={
-        <button type="button" onClick={() => navigate('/pricing')} className="underline underline-offset-4 hover:text-yellow-200">
+        <Link to="/pricing" className="underline underline-offset-4 hover:text-foreground">
           Voir le détail des formules
-        </button>
+        </Link>
       }
     >
       {active && (
-        <div className="mb-6">
+        <div className="mb-5">
           <Notice tone="success">
             Ton abonnement <strong>{subscription.subscription.plan_name}</strong> est actif jusqu'au{' '}
             {formatDate(subscription.subscription.end_date)}.{' '}
@@ -98,15 +103,13 @@ export default function Subscribe() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center gap-3 py-14 text-white/80">
-          <Loader2 className="h-5 w-5 animate-spin" /> Chargement des formules…
+        <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Chargement des formules…
         </div>
       ) : error ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <FormError>{error}</FormError>
-          <button type="button" onClick={loadPlans} className={secondaryButtonClass}>
-            <RefreshCw className="h-4 w-4" /> Réessayer
-          </button>
+          <Button variant="outline" className="w-full" onClick={loadPlans}>Réessayer</Button>
         </div>
       ) : (
         <>
@@ -116,13 +119,17 @@ export default function Subscribe() {
               return (
                 <section
                   key={label}
-                  className={`rounded-2xl border p-5 transition-colors ${
-                    groupSelected ? 'border-yellow-300/70 bg-white/[0.16]' : 'border-white/20 bg-white/[0.07]'
+                  className={`rounded-lg border p-4 transition-colors ${
+                    groupSelected
+                      ? 'border-primary/60 bg-primary/[0.04]'
+                      : 'border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  <h2 className="text-lg font-bold text-white">Formule {label}</h2>
+                  <h2 className="font-heading text-base font-bold text-slate-900 dark:text-white">
+                    Formule {label}
+                  </h2>
 
-                  <div role="radiogroup" aria-label={`Durée — formule ${label}`} className="mt-4 grid grid-cols-3 gap-2">
+                  <div role="radiogroup" aria-label={`Durée — formule ${label}`} className="mt-3 grid grid-cols-3 gap-2">
                     {items.map((plan) => {
                       const isSelected = plan.plan_id === selected;
                       return (
@@ -132,16 +139,18 @@ export default function Subscribe() {
                           role="radio"
                           aria-checked={isSelected}
                           onClick={() => choose(plan.plan_id)}
-                          className={`rounded-xl border px-2 py-2.5 text-center transition-colors ${
+                          className={`rounded-md border px-2 py-2 text-center transition-colors ${
                             isSelected
-                              ? 'border-yellow-300 bg-yellow-400 text-slate-900'
-                              : 'border-white/25 bg-white/10 text-white hover:bg-white/20'
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
                           }`}
                         >
-                          <span className="block text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                          <span className={`block text-[11px] font-medium ${isSelected ? 'opacity-90' : 'text-muted-foreground'}`}>
                             {plan.period}
                           </span>
-                          <span className="block text-lg font-extrabold">{formatPrice(plan.amount, plan.currency)}</span>
+                          <span className="block text-base font-bold">
+                            {formatPrice(plan.amount, plan.currency)}
+                          </span>
                         </button>
                       );
                     })}
@@ -149,8 +158,8 @@ export default function Subscribe() {
 
                   <ul className="mt-4 space-y-2">
                     {(items[0]?.features || []).map((feature) => (
-                      <li key={feature} className="flex items-start gap-2 text-sm text-white/85">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
+                      <li key={feature} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                         <span>{feature}</span>
                       </li>
                     ))}
@@ -161,22 +170,20 @@ export default function Subscribe() {
           </div>
 
           {selectedPlan && (
-            <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-white/20 bg-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-sm text-white/70">Ta sélection</div>
-                <div className="text-base font-bold text-white">
+                <div className="text-xs text-muted-foreground">Ta sélection</div>
+                <div className="font-semibold text-slate-900 dark:text-white">
                   Formule {selectedPlan.label} · {selectedPlan.period} ·{' '}
                   {formatPrice(selectedPlan.amount, selectedPlan.currency)}
                 </div>
                 {pricePerDay(selectedPlan.amount, selectedPlan.duration_days) && (
-                  <div className="text-xs text-white/70">
+                  <div className="text-xs text-muted-foreground">
                     soit environ {pricePerDay(selectedPlan.amount, selectedPlan.duration_days)} ₪ par jour
                   </div>
                 )}
               </div>
-              <button type="button" onClick={goToCheckout} className={`${primaryButtonClass} sm:w-auto sm:px-6`}>
-                Continuer <ArrowRight className="h-4 w-4" />
-              </button>
+              <Button className="h-10 sm:w-auto sm:px-6" onClick={goToCheckout}>Continuer</Button>
             </div>
           )}
         </>

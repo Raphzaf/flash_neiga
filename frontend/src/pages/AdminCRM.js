@@ -14,7 +14,7 @@ import {
 } from '../components/ui/dialog';
 import {
     Search, RefreshCw, Users, CreditCard, TrendingUp, Clock, ArrowLeft,
-    Trash2, Save, KeyRound, Gift, ShieldAlert, Ticket, Plus, Power, UserPlus,
+    Trash2, Save, KeyRound, ShieldAlert, Ticket, Plus, Power, UserPlus,
     AlertTriangle,
 } from 'lucide-react';
 
@@ -90,8 +90,6 @@ export default function AdminCRM() {
     const [detail, setDetail] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '' });
-    const [grantPlan, setGrantPlan] = useState('');
-    const [grantDays, setGrantDays] = useState('');
     const [newPassword, setNewPassword] = useState('');
 
     const handleError = useCallback((error, fallback) => {
@@ -234,39 +232,6 @@ export default function AdminCRM() {
             fetchUsers(offset);
         } catch (error) {
             handleError(error, 'Mise à jour impossible');
-        }
-    };
-
-    const grantSubscription = async (startNow) => {
-        if (!grantPlan) {
-            toast.error('Choisis une formule');
-            return;
-        }
-        try {
-            const { data } = await axios.post(`/api/admin/crm/users/${detail.id}/subscriptions`, {
-                plan_id: grantPlan,
-                duration_days: grantDays ? Number(grantDays) : undefined,
-                start_now: startNow,
-            });
-            toast.success(data.status === 'extended' ? 'Abonnement prolongé' : 'Abonnement accordé');
-            await openUser(detail.id);
-            fetchUsers(offset);
-            fetchStats();
-        } catch (error) {
-            handleError(error, "Impossible d'accorder l'abonnement");
-        }
-    };
-
-    const cancelSubscription = async (subId) => {
-        if (!window.confirm("Résilier cet abonnement ? L'accès reste valable jusqu'à la date de fin.")) return;
-        try {
-            await axios.post(`/api/admin/crm/subscriptions/${subId}/cancel`);
-            toast.success('Abonnement résilié');
-            await openUser(detail.id);
-            fetchUsers(offset);
-            fetchStats();
-        } catch (error) {
-            handleError(error, 'Résiliation impossible');
         }
     };
 
@@ -807,7 +772,7 @@ export default function AdminCRM() {
                                 </div>
                             </section>
 
-                            {/* Abonnements */}
+                            {/* Abonnements (lecture seule : c'est l'élève qui souscrit) */}
                             <section className="space-y-3">
                                 <h3 className="font-semibold text-slate-900 dark:text-white">Abonnements</h3>
                                 {detail.subscriptions.length === 0 ? (
@@ -815,48 +780,19 @@ export default function AdminCRM() {
                                 ) : (
                                     <div className="space-y-2">
                                         {detail.subscriptions.map((s) => (
-                                            <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <SubscriptionBadge sub={s} />
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                        {date(s.start_date)} → {date(s.end_date)}
-                                                    </div>
+                                            <div key={s.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                                <SubscriptionBadge sub={s} />
+                                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                    {date(s.start_date)} → {date(s.end_date)}
                                                 </div>
-                                                {s.is_active && (
-                                                    <Button size="sm" variant="outline" onClick={() => cancelSubscription(s.id)}>Résilier</Button>
-                                                )}
                                             </div>
                                         ))}
                                     </div>
                                 )}
-
-                                <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-600 p-3 space-y-2">
-                                    <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-white">
-                                        <Gift className="h-4 w-4" /> Accorder / prolonger un abonnement
-                                    </div>
-                                    <div className="grid sm:grid-cols-2 gap-2">
-                                        <Select value={grantPlan} onValueChange={setGrantPlan}>
-                                            <SelectTrigger><SelectValue placeholder="Choisir une formule" /></SelectTrigger>
-                                            <SelectContent>
-                                                {plans.map((p) => (
-                                                    <SelectItem key={p.plan_id} value={p.plan_id}>
-                                                        {p.name} — {money(p.amount, p.currency)}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Input type="number" min="1" placeholder="Durée en jours (défaut : durée du plan)"
-                                            value={grantDays} onChange={(e) => setGrantDays(e.target.value)} />
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button size="sm" onClick={() => grantSubscription(true)}>Nouvel abonnement</Button>
-                                        <Button size="sm" variant="outline" onClick={() => grantSubscription(false)}>
-                                            Prolonger l'abonnement actif
-                                        </Button>
-                                    </div>
-                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    L'abonnement appartient à l'élève : il le souscrit, le change et le
+                                    renouvelle depuis son espace. Le CRM l'affiche, sans le modifier.
+                                </p>
                             </section>
 
                             {/* Paiements */}

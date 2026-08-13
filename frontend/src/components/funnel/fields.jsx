@@ -1,57 +1,45 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 /**
- * Champs et boutons du tunnel : une seule définition, partagée par la
- * connexion, la création de compte, le choix de la formule et le paiement.
- * C'est ce qui garantit des inputs, des arrondis et des états de focus
- * identiques d'un écran à l'autre.
+ * Champs et encarts du tunnel. Ils enveloppent les composants d'interface déjà
+ * utilisés partout dans l'application : un seul système de formulaires pour le
+ * produit entier, plutôt qu'un style propre au parcours d'abonnement.
  */
 
-export const inputClass =
-  'w-full rounded-xl border border-white/25 bg-white/15 px-3.5 py-3 text-sm text-white placeholder:text-white/50 ' +
-  'transition-colors focus:border-yellow-300/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/30 ' +
-  'disabled:opacity-70';
-
-export const primaryButtonClass =
-  'flex w-full items-center justify-center gap-2 rounded-xl bg-yellow-400 px-4 py-3 text-sm font-bold text-slate-900 ' +
-  'transition-colors hover:bg-yellow-300 focus:outline-none focus:ring-2 focus:ring-yellow-200 focus:ring-offset-2 ' +
-  'focus:ring-offset-blue-600 disabled:cursor-not-allowed disabled:opacity-70';
-
-export const secondaryButtonClass =
-  'flex w-full items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm ' +
-  'font-semibold text-white transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40 ' +
-  'disabled:cursor-not-allowed disabled:opacity-70';
-
-export function Field({ label, hint, children }) {
+export function Field({ label, hint, htmlFor, children }) {
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-white/85">{label}</span>
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint && <span className="mt-1.5 block text-xs text-white/70">{hint}</span>}
-    </label>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
   );
 }
 
 export function TextField({ label, hint, className = '', ...props }) {
+  const id = useId();
   return (
-    <Field label={label} hint={hint}>
-      <input className={`${inputClass} ${className}`} {...props} />
+    <Field label={label} hint={hint} htmlFor={id}>
+      <Input id={id} className={`h-10 ${className}`} {...props} />
     </Field>
   );
 }
 
 export function PasswordField({ label, hint, ...props }) {
+  const id = useId();
   const [visible, setVisible] = useState(false);
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} htmlFor={id}>
       <div className="relative">
-        <input type={visible ? 'text' : 'password'} className={`${inputClass} pr-11`} {...props} />
+        <Input id={id} type={visible ? 'text' : 'password'} className="h-10 pr-10" {...props} />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 transition-colors hover:text-white"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
@@ -63,7 +51,10 @@ export function PasswordField({ label, hint, ...props }) {
 export function FormError({ children }) {
   if (!children) return null;
   return (
-    <p role="alert" className="rounded-xl border border-red-300/40 bg-red-500/15 px-3.5 py-2.5 text-sm text-red-50">
+    <p
+      role="alert"
+      className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+    >
       {children}
     </p>
   );
@@ -71,11 +62,9 @@ export function FormError({ children }) {
 
 export function Notice({ children, tone = 'info' }) {
   const tones = {
-    info: 'border-white/25 bg-white/10 text-white/85',
-    success: 'border-emerald-300/40 bg-emerald-400/15 text-emerald-50',
-    warning: 'border-yellow-300/40 bg-yellow-300/15 text-yellow-50',
+    info: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300',
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300',
+    warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300',
   };
-  return (
-    <div className={`rounded-xl border px-3.5 py-2.5 text-sm ${tones[tone] || tones.info}`}>{children}</div>
-  );
+  return <div className={`rounded-md border px-3 py-2 text-sm ${tones[tone] || tones.info}`}>{children}</div>;
 }

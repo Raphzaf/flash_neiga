@@ -31,31 +31,25 @@ const FullScreenLoader = ({ label }) => (
     <div className="flex h-screen items-center justify-center text-slate-900 dark:text-white">{label}</div>
 );
 
-// Écrans du tunnel : ils portent déjà leurs propres mentions légales, en
-// cohérence avec leur fond. Le pied de page de l'application y ferait double
-// emploi et casserait la continuité visuelle du parcours.
-const FUNNEL_ROUTES = ['/login', '/register', '/subscribe', '/checkout', '/payment'];
-
 const AppFooter = () => {
-    const { pathname } = useLocation();
-    if (FUNNEL_ROUTES.some((route) => pathname.startsWith(route))) return null;
-
+    // Le pied de page suit le thème : en clair, il était rendu en dalle sombre,
+    // ce qui coupait la page en deux.
     return (
-        <footer className="relative z-10 border-t border-white/[0.05] bg-slate-950/50 backdrop-blur-md py-10">
-            <div className="max-w-7xl mx-auto px-6">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="text-slate-500 text-xs font-medium tracking-widest">
-                        © 2026 <span className="text-slate-200">FLASH NEIGA</span>
+        <footer className="relative z-10 border-t border-slate-200 py-8 dark:border-slate-800">
+            <div className="mx-auto max-w-7xl px-6">
+                <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                        © 2026 <span className="font-medium text-slate-700 dark:text-slate-200">Flash Neiga</span>
                     </div>
 
-                    <nav className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-[11px] uppercase tracking-[0.2em] font-bold">
-                        <Link to="/conditions-generales" className="text-slate-400 hover:text-primary transition-colors">
+                    <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs">
+                        <Link to="/conditions-generales" className="text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                             CGU
                         </Link>
-                        <Link to="/politique-confidentialite" className="text-slate-400 hover:text-primary transition-colors">
+                        <Link to="/politique-confidentialite" className="text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                             Confidentialité
                         </Link>
-                        <Link to="/politique-remboursement" className="text-slate-400 hover:text-primary transition-colors">
+                        <Link to="/politique-remboursement" className="text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                             Remboursement
                         </Link>
                     </nav>

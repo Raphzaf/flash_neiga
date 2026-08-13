@@ -73,13 +73,19 @@ connecte l'élève. Garde-fous :
 - si l'email correspond à un compte existant, son mot de passe est exigé
   (`403`) — on ne prend jamais la main sur le compte d'un tiers.
 
-## Rattrapage 2 — l'équipe, depuis le CRM
+## L'abonnement appartient à l'élève
 
-Onglet **Paiements** : un bandeau signale les paiements encaissés sans compte,
-et le bouton **Rattacher** crée le compte au besoin puis ouvre l'abonnement
-(`POST /api/admin/crm/transactions/{id}/attach`). Un mot de passe provisoire est
-affiché une seule fois, à transmettre à l'élève. Pour ne lister que ces
-paiements : `GET /api/admin/crm/transactions?needs_account=true`.
+C'est l'élève qui souscrit, change de formule et renouvelle, depuis son espace.
+**Le CRM ne modifie aucun abonnement** : il n'existe plus de route pour en
+accorder un, le prolonger ou le résilier. La fiche élève les affiche en lecture
+seule.
+
+Le seul geste possible côté équipe est de **rattacher un paiement réellement
+encaissé** resté sans compte : onglet **Paiements**, bouton **Rattacher**
+(`POST /api/admin/crm/transactions/{id}/attach`). On ne crée pas un droit, on
+répare l'affectation d'un paiement déjà effectué par l'élève ; le compte est créé
+si besoin, avec un mot de passe provisoire affiché une seule fois. Pour ne lister
+que ces paiements : `GET /api/admin/crm/transactions?needs_account=true`.
 
 ## Si le paiement se passe mal
 
@@ -95,10 +101,12 @@ paiements : `GET /api/admin/crm/transactions?needs_account=true`.
 
 ## Design
 
-`frontend/src/components/funnel/` porte le décor et les champs communs à tout le
-tunnel (`FunnelShell`, `fields.jsx`). Toute nouvelle page du parcours doit les
-réutiliser plutôt que redéfinir ses propres styles : c'est ce qui garantit la
-continuité visuelle entre connexion, inscription, formules et paiement.
+`frontend/src/components/funnel/` porte l'ossature et les champs communs au
+tunnel (`FunnelShell`, `fields.jsx`). Ils s'appuient sur le système d'interface
+déjà utilisé partout ailleurs (`components/ui` : Card, Input, Label, Button,
+palette slate, couleur primaire) : le parcours d'abonnement doit ressembler au
+reste du produit, pas former un univers à part. Toute nouvelle page du parcours
+réutilise ces composants plutôt que de redéfinir ses propres styles.
 
 ## Limite connue
 

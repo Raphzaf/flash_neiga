@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import FunnelShell from '../components/funnel/FunnelShell';
-import { TextField, PasswordField, FormError, primaryButtonClass } from '../components/funnel/fields';
+import { TextField, PasswordField, FormError } from '../components/funnel/fields';
+import { Button } from '../components/ui/button';
 import { rememberPlan, readRememberedPlan } from '../lib/funnel';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -64,12 +65,12 @@ export default function Register() {
     return (
         <FunnelShell
             step={1}
-            title="Crée ton compte"
-            subtitle="Deux minutes suffisent : ton compte, ta formule, et tu commences."
+            title="Créer mon compte"
+            subtitle="Ton compte, ta formule, et tu commences."
             footer={
                 <>
                     Tu as déjà un compte ?{' '}
-                    <Link to="/login" className="font-semibold text-white underline underline-offset-4 hover:text-yellow-200">
+                    <Link to="/login" className="font-medium text-foreground underline underline-offset-4">
                         Se connecter
                     </Link>
                 </>
@@ -125,20 +126,20 @@ export default function Register() {
 
                 <FormError>{error}</FormError>
 
-                <button
+                <Button
                     type="submit"
+                    className="h-10 w-full"
                     disabled={isLoading || !firstName || !lastName || !email || !password}
-                    className={primaryButtonClass}
                     data-testid="register-submit-button"
                 >
-                    {isLoading
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <>Continuer <ArrowRight className="h-4 w-4" /></>}
-                </button>
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuer'}
+                </Button>
 
-                <p className="text-center text-xs text-white/70">
+                <p className="text-center text-xs text-muted-foreground">
                     En créant ton compte, tu acceptes nos{' '}
-                    <Link to="/conditions-generales" className="underline hover:text-white">conditions générales</Link>.
+                    <Link to="/conditions-generales" className="underline hover:text-foreground">
+                        conditions générales
+                    </Link>.
                 </p>
             </form>
         </FunnelShell>

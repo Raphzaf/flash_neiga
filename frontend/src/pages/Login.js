@@ -2,16 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import FunnelShell from '../components/funnel/FunnelShell';
-import { TextField, PasswordField, FormError, Notice, primaryButtonClass, secondaryButtonClass } from '../components/funnel/fields';
+import { TextField, PasswordField, FormError, Notice } from '../components/funnel/fields';
+import { Button } from '../components/ui/button';
 import { readRememberedEmail } from '../lib/funnel';
-import { ArrowRight, Loader2, UserPlus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 // Message d'accueil selon la raison qui a amené l'élève ici : il doit toujours
 // comprendre pourquoi on lui demande de se connecter.
 const REASONS = {
   'payment-success': {
     tone: 'success',
-    text: 'Ton abonnement est actif. Connecte-toi avec le mot de passe choisi à l\'inscription pour commencer.',
+    text: "Ton abonnement est actif. Connecte-toi avec le mot de passe choisi à l'inscription pour commencer.",
   },
   subscribe: { tone: 'info', text: 'Connecte-toi pour choisir ta formule et accéder à la plateforme.' },
   session: { tone: 'info', text: 'Ta session a expiré. Reconnecte-toi pour reprendre où tu en étais.' },
@@ -57,8 +58,16 @@ export default function Login() {
 
   return (
     <FunnelShell
-      title="Content de te revoir"
-      subtitle="Connecte-toi à ton espace Flash Neiga."
+      title="Connexion"
+      subtitle="Accède à ton espace Flash Neiga."
+      footer={
+        <>
+          Mot de passe oublié ? Écris-nous à{' '}
+          <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">
+            support@flash-neiga.com
+          </a>
+        </>
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {reason && <Notice tone={reason.tone}>{reason.text}</Notice>}
@@ -73,6 +82,7 @@ export default function Login() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          data-testid="login-email-input"
         />
 
         <PasswordField
@@ -83,29 +93,24 @@ export default function Login() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          data-testid="login-password-input"
         />
 
         <FormError>{error}</FormError>
 
-        <button type="submit" disabled={isLoading || !email || !password} className={primaryButtonClass}>
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Se connecter <ArrowRight className="h-4 w-4" /></>}
-        </button>
+        <Button type="submit" className="h-10 w-full" disabled={isLoading || !email || !password}>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Se connecter'}
+        </Button>
 
-        <div className="flex items-center gap-3 py-1">
-          <span className="h-px flex-1 bg-white/20" />
-          <span className="text-xs uppercase tracking-wider text-white/50">ou</span>
-          <span className="h-px flex-1 bg-white/20" />
+        <div className="flex items-center gap-3 pt-1">
+          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          <span className="text-xs text-muted-foreground">ou</span>
+          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
         </div>
 
-        <Link to="/register" className={secondaryButtonClass}>
-          <UserPlus className="h-4 w-4" /> Je n'ai pas encore de compte
-        </Link>
-
-        <p className="pt-1 text-center text-xs text-white/70">
-          Mot de passe oublié ? Écris-nous à{' '}
-          <a href="mailto:support@flash-neiga.com" className="underline hover:text-white">support@flash-neiga.com</a>,
-          on te réinitialise l'accès.
-        </p>
+        <Button variant="outline" className="h-10 w-full" asChild>
+          <Link to="/register">Je n'ai pas encore de compte</Link>
+        </Button>
       </form>
     </FunnelShell>
   );

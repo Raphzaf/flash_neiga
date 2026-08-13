@@ -3,12 +3,10 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import FunnelShell from '../components/funnel/FunnelShell';
-import {
-  TextField, PasswordField, FormError, Notice,
-  primaryButtonClass, secondaryButtonClass,
-} from '../components/funnel/fields';
+import { TextField, PasswordField, FormError, Notice } from '../components/funnel/fields';
+import { Button } from '../components/ui/button';
 import { forgetPlan, formatDate, formatPrice, rememberEmail, readRememberedEmail } from '../lib/funnel';
-import { ArrowRight, CheckCircle, KeyRound, Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 
 const MAX_POLLING_ATTEMPTS = 10;
 const POLLING_INTERVAL_MS = 2000;
@@ -76,9 +74,9 @@ function ClaimAccessForm({ transactionId, emailHint, onDone }) {
 
         <FormError>{error}</FormError>
 
-        <button type="submit" disabled={submitting} className={primaryButtonClass}>
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><KeyRound className="h-4 w-4" /> Activer mon accès</>}
-        </button>
+        <Button type="submit" className="h-10 w-full" disabled={submitting}>
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Activer mon accès'}
+        </Button>
       </form>
     </FunnelShell>
   );
@@ -166,11 +164,9 @@ export default function PaymentSuccess() {
   if (loading) {
     return (
       <FunnelShell step={3} title="Validation de ton paiement" subtitle="Encore quelques secondes…">
-        <div className="flex flex-col items-center gap-3 py-8 text-white/80">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          {pollAttempt > 0 && (
-            <p className="text-xs text-white/70">Vérification {pollAttempt}/{MAX_POLLING_ATTEMPTS}</p>
-          )}
+        <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          {pollAttempt > 0 && <p className="text-xs">Vérification {pollAttempt}/{MAX_POLLING_ATTEMPTS}</p>}
         </div>
       </FunnelShell>
     );
@@ -181,12 +177,14 @@ export default function PaymentSuccess() {
       <FunnelShell step={3} title="Paiement en attente de confirmation">
         <div className="space-y-4">
           <FormError>{error}</FormError>
-          <p className="text-sm text-white/80">
+          <p className="text-sm text-muted-foreground">
             Si ta carte a été débitée, ton accès sera ouvert automatiquement. Écris-nous à{' '}
-            <a href="mailto:support@flash-neiga.com" className="underline hover:text-white">support@flash-neiga.com</a>
+            <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">support@flash-neiga.com</a>
             {transactionId && <> en indiquant la référence <span className="font-mono">{transactionId.slice(0, 8)}</span></>}.
           </p>
-          <Link to="/subscribe" className={secondaryButtonClass}>Revenir aux formules</Link>
+          <Button variant="outline" className="w-full" asChild>
+            <Link to="/subscribe">Revenir aux formules</Link>
+          </Button>
         </div>
       </FunnelShell>
     );
@@ -217,57 +215,58 @@ export default function PaymentSuccess() {
           : 'Merci ! Tout est en place, tu peux commencer.'
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         {!pending && (
           <div className="flex justify-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400/20">
-              <CheckCircle className="h-8 w-8 text-emerald-300" />
-            </span>
+            <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
           </div>
         )}
 
-        <dl className="space-y-2 rounded-2xl border border-white/20 bg-white/[0.08] p-4 text-sm">
+        <dl className="space-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700">
           <div className="flex justify-between gap-4">
-            <dt className="text-white/70">Formule</dt>
-            <dd className="font-medium text-white">{sub?.plan_name || transaction?.plan_name || '—'}</dd>
+            <dt className="text-muted-foreground">Formule</dt>
+            <dd className="text-right text-slate-900 dark:text-slate-200">
+              {sub?.plan_name || transaction?.plan_name || '—'}
+            </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-white/70">Montant</dt>
-            <dd className="font-medium text-white">{formatPrice(transaction?.amount, transaction?.currency)}</dd>
+            <dt className="text-muted-foreground">Montant</dt>
+            <dd className="text-slate-900 dark:text-slate-200">
+              {formatPrice(transaction?.amount, transaction?.currency)}
+            </dd>
           </div>
           {sub?.end_date && (
             <div className="flex justify-between gap-4">
-              <dt className="text-white/70">Accès jusqu'au</dt>
-              <dd className="font-medium text-emerald-200">{formatDate(sub.end_date)}</dd>
+              <dt className="text-muted-foreground">Accès jusqu'au</dt>
+              <dd className="font-medium text-slate-900 dark:text-white">{formatDate(sub.end_date)}</dd>
             </div>
           )}
           <div className="flex justify-between gap-4">
-            <dt className="text-white/70">Référence</dt>
-            <dd className="font-mono text-xs text-white/80">{transaction?.id?.slice(0, 8)}</dd>
+            <dt className="text-muted-foreground">Référence</dt>
+            <dd className="font-mono text-xs text-muted-foreground">{transaction?.id?.slice(0, 8)}</dd>
           </div>
         </dl>
 
         {user ? (
-          <Link to="/" className={primaryButtonClass}>
-            Accéder à la plateforme <ArrowRight className="h-4 w-4" />
-          </Link>
+          <Button className="h-10 w-full" asChild>
+            <Link to="/">Accéder à la plateforme</Link>
+          </Button>
         ) : (
           <>
-            <Link
-              to={`/login?reason=payment-success${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ''}`}
-              className={primaryButtonClass}
-            >
-              Me connecter <ArrowRight className="h-4 w-4" />
-            </Link>
-            <p className="text-center text-xs text-white/70">
+            <Button className="h-10 w-full" asChild>
+              <Link to={`/login?reason=payment-success${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ''}`}>
+                Me connecter
+              </Link>
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
               Connecte-toi avec l'email et le mot de passe choisis à l'inscription.
             </p>
           </>
         )}
 
-        <p className="text-center text-xs text-white/70">
+        <p className="text-center text-xs text-muted-foreground">
           Un reçu t'a été envoyé par email. Un souci d'accès ? Écris-nous à{' '}
-          <a href="mailto:support@flash-neiga.com" className="underline hover:text-white">support@flash-neiga.com</a>{' '}
+          <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">support@flash-neiga.com</a>{' '}
           en indiquant ta référence de paiement.
         </p>
       </div>

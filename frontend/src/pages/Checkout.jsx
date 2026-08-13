@@ -3,9 +3,11 @@ import axios from 'axios';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import FunnelShell from '../components/funnel/FunnelShell';
-import { FormError, Notice, inputClass, primaryButtonClass } from '../components/funnel/fields';
+import { FormError, Notice } from '../components/funnel/fields';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { formatDate, formatPrice, forgetPlan, rememberPlan, readRememberedPlan } from '../lib/funnel';
-import { ArrowLeft, CreditCard, Loader2, Lock, ShieldCheck, Tag } from 'lucide-react';
+import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 
 /**
  * Paiement (étape 3).
@@ -111,11 +113,10 @@ export default function Checkout() {
       setError("Le paiement n'a pas pu être ouvert. Réessaie dans un instant.");
       setPaying(false);
     } catch (err) {
-      const status = err?.response?.status;
-      if (status === 401) {
+      if (err?.response?.status === 401) {
         // Session perdue pendant le parcours : on repasse par la connexion, la
         // formule est conservée.
-        navigate(`/login?reason=session`, { replace: true });
+        navigate('/login?reason=session', { replace: true });
         return;
       }
       setError(err?.response?.data?.detail || "Le paiement n'a pas pu être lancé. Réessaie dans un instant.");
@@ -126,8 +127,8 @@ export default function Checkout() {
   if (loading || notFound) {
     return (
       <FunnelShell step={3} width="md" title="Paiement">
-        <div className="flex items-center justify-center gap-3 py-10 text-white/80">
-          <Loader2 className="h-5 w-5 animate-spin" /> Préparation de ta commande…
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Préparation de ta commande…
         </div>
       </FunnelShell>
     );
@@ -156,40 +157,44 @@ export default function Checkout() {
 
         {/* ===== Récapitulatif ===== */}
         <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/70">Ton abonnement</h2>
-          <div className="rounded-2xl border border-white/20 bg-white/[0.08] p-4">
-            <div className="flex items-baseline justify-between gap-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ton abonnement
+          </h2>
+          <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="flex items-baseline justify-between gap-4 p-4">
               <div>
-                <div className="text-base font-bold text-white">Formule {plan.label}</div>
-                <div className="text-sm text-white/70">{plan.period} d'accès complet</div>
+                <div className="font-semibold text-slate-900 dark:text-white">Formule {plan.label}</div>
+                <div className="text-sm text-muted-foreground">{plan.period} d'accès complet</div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-extrabold text-white">{formatPrice(plan.amount, plan.currency)}</div>
+              <div className="font-heading text-xl font-bold text-slate-900 dark:text-white">
+                {formatPrice(plan.amount, plan.currency)}
               </div>
             </div>
 
-            <dl className="mt-4 space-y-2 border-t border-white/15 pt-4 text-sm">
+            <dl className="space-y-2 border-t border-slate-200 p-4 text-sm dark:border-slate-700">
               <div className="flex justify-between gap-4">
-                <dt className="shrink-0 text-white/70">Compte</dt>
+                <dt className="shrink-0 text-muted-foreground">Compte</dt>
                 {/* Les adresses longues doivent rester dans la carte en mobile. */}
-                <dd className="break-all text-right font-medium text-white">{user?.email || '—'}</dd>
+                <dd className="break-all text-right text-slate-900 dark:text-slate-200">{user?.email || '—'}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-white/70">Accès</dt>
-                <dd className="font-medium text-white">
+                <dt className="shrink-0 text-muted-foreground">Accès</dt>
+                <dd className="text-right text-slate-900 dark:text-slate-200">
                   dès le paiement, jusqu'au {formatDate(endDate)}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-white/70">Facturation</dt>
-                <dd className="font-medium text-white">paiement unique, sans reconduction</dd>
+                <dt className="shrink-0 text-muted-foreground">Facturation</dt>
+                <dd className="text-right text-slate-900 dark:text-slate-200">
+                  paiement unique, sans reconduction
+                </dd>
               </div>
             </dl>
           </div>
 
           <Link
             to={`/subscribe?plan=${encodeURIComponent(plan.plan_id)}`}
-            className="mt-2 inline-flex items-center gap-1.5 text-xs text-white/70 underline underline-offset-4 hover:text-white"
+            className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Changer de formule
           </Link>
@@ -197,63 +202,69 @@ export default function Checkout() {
 
         {/* ===== Code promo ===== */}
         <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/70">Code promo</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Code promo
+          </h2>
           <div className="flex gap-2">
-            <input
-              className={inputClass}
+            <Input
+              className="h-10"
               placeholder="Saisis ton code (facultatif)"
               value={promoInput}
               onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
               aria-label="Code promo"
             />
-            <button
+            <Button
               type="button"
+              variant="outline"
+              className="h-10 shrink-0"
               onClick={applyPromo}
               disabled={promoChecking || !promoInput.trim()}
-              className="shrink-0 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-semibold text-white transition-colors hover:bg-white/20 disabled:opacity-50"
             >
-              {promoChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
-            </button>
+              {promoChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Appliquer'}
+            </Button>
           </div>
           {promoMessage && (
-            <p className={`mt-2 text-sm ${promoMessage.ok ? 'text-emerald-200' : 'text-red-200'}`}>
+            <p className={`mt-2 text-sm ${promoMessage.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {promoMessage.text}
             </p>
           )}
         </section>
 
         {/* ===== Total et paiement ===== */}
-        <section className="rounded-2xl border border-white/20 bg-white/[0.08] p-4">
+        <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
           {promo && (
-            <div className="mb-2 flex justify-between text-sm text-white/70">
+            <div className="mb-2 flex justify-between text-sm text-muted-foreground">
               <span>Remise {promo.code}</span>
               <span>− {formatPrice(promo.discount_amount, plan.currency)}</span>
             </div>
           )}
           <div className="flex items-baseline justify-between">
-            <span className="text-sm font-semibold uppercase tracking-wider text-white/80">Total</span>
-            <span className="text-3xl font-extrabold text-white">{formatPrice(total, plan.currency)}</span>
+            <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Total</span>
+            <span className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
+              {formatPrice(total, plan.currency)}
+            </span>
           </div>
 
-          <FormError>{error}</FormError>
-
-          <button type="button" onClick={pay} disabled={paying} className={`${primaryButtonClass} mt-4`}>
-            {paying
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Ouverture du paiement…</>
-              : <><CreditCard className="h-4 w-4" /> Payer {formatPrice(total, plan.currency)}</>}
-          </button>
-
-          <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-white/70">
-            <Lock className="h-3.5 w-3.5" /> Tu vas être redirigé vers la page sécurisée de notre
-            prestataire de paiement.
-          </p>
+          <div className="mt-4 space-y-3">
+            <FormError>{error}</FormError>
+            <Button className="h-11 w-full" onClick={pay} disabled={paying}>
+              {paying
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Ouverture du paiement…</>
+                : `Payer ${formatPrice(total, plan.currency)}`}
+            </Button>
+            <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+              <Lock className="h-3.5 w-3.5" /> Tu vas être redirigé vers la page sécurisée de notre
+              prestataire de paiement.
+            </p>
+          </div>
         </section>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-white/70">
-          <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Paiement sécurisé</span>
-          <span>Aucune donnée bancaire n'est stockée sur nos serveurs</span>
-          <Link to="/politique-remboursement" className="underline hover:text-white">Politique de remboursement</Link>
-        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Aucune donnée bancaire n'est stockée sur nos serveurs.{' '}
+          <Link to="/politique-remboursement" className="underline hover:text-foreground">
+            Politique de remboursement
+          </Link>
+        </p>
       </div>
     </FunnelShell>
   );

@@ -67,6 +67,26 @@ def admin_headers(client, test_db):
 
 
 @pytest.fixture
+def student_with_subscription(client, test_db):
+    """Un élève ayant souscrit lui-même son abonnement."""
+    from datetime import datetime, timedelta
+
+    client.post("/api/auth/register", json={"email": "eleve@example.com", "password": "motdepasse"})
+    user = test_db.query(UserDB).filter(UserDB.email == "eleve@example.com").first()
+    now = datetime.utcnow()
+    subscription = SubscriptionDB(
+        user_id=user.id,
+        plan_id="premium_30d",
+        start_date=now,
+        end_date=now + timedelta(days=30),
+        status="active",
+    )
+    test_db.add(subscription)
+    test_db.commit()
+    return user.id, subscription.id
+
+
+@pytest.fixture
 def orphan_transaction(test_db):
     """Paiement encaissé auquel aucun compte n'est rattaché."""
     transaction = TransactionDB(
@@ -153,6 +173,33 @@ def test_attach_is_refused_twice(client, test_db, admin_headers, orphan_transact
         headers=admin_headers,
     )
     assert second.status_code == 409
+    assert test_db.query(SubscriptionDB).count() == 1
+
+
+def test_admins_cannot_write_subscriptions(client, test_db, admin_headers, student_with_subscription):
+    """L'abonnement appartient à l'élève.
+
+    Un administrateur ne peut ni en accorder un, ni le résilier : ces routes
+    n'existent plus. Le seul geste possible reste de rattacher un paiement déjà
+    encaissé à son compte.
+    """
+    user_id, subscription_id = student_with_subscription
+
+    grant = client.post(
+        f"/api/admin/crm/users/{user_id}/subscriptions",
+        json={"plan_id": "premium_30d"},
+        headers=admin_headers,
+    )
+    cancel = client.post(
+        f"/api/admin/crm/subscriptions/{subscription_id}/cancel", headers=admin_headers
+    )
+
+    assert grant.status_code == 404
+    assert cancel.status_code == 404
+
+    # L'abonnement de l'élève est intact.
+    subscription = test_db.query(SubscriptionDB).filter(SubscriptionDB.id == subscription_id).first()
+    assert subscription.status == "active"
     assert test_db.query(SubscriptionDB).count() == 1
 
 

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import FunnelShell from '../components/funnel/FunnelShell';
-import { Notice, primaryButtonClass, secondaryButtonClass } from '../components/funnel/fields';
+import { Notice } from '../components/funnel/fields';
+import { Button } from '../components/ui/button';
 import { readRememberedPlan } from '../lib/funnel';
-import { RefreshCw, XCircle } from 'lucide-react';
+import { XCircle } from 'lucide-react';
 
 const REASONS = [
   'Fonds insuffisants ou plafond de carte atteint',
@@ -30,32 +31,34 @@ export default function PaymentFailure() {
     >
       <div className="space-y-5">
         <div className="flex justify-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-400/20">
-            <XCircle className="h-8 w-8 text-red-300" />
-          </span>
+          <XCircle className="h-10 w-10 text-red-600 dark:text-red-400" />
         </div>
 
         {message && <Notice tone="warning">{message}</Notice>}
 
-        <div className="rounded-2xl border border-white/20 bg-white/[0.08] p-4">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/70">
+        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Causes les plus fréquentes
           </h2>
-          <ul className="space-y-1.5 text-sm text-white/80">
+          <ul className="space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
             {REASONS.map((reason) => (
               <li key={reason} className="flex gap-2"><span aria-hidden="true">•</span><span>{reason}</span></li>
             ))}
           </ul>
         </div>
 
-        <Link to={retryTo} className={primaryButtonClass}>
-          <RefreshCw className="h-4 w-4" /> Réessayer le paiement
-        </Link>
-        <Link to="/subscribe" className={secondaryButtonClass}>Choisir une autre formule</Link>
+        <div className="space-y-3">
+          <Button className="h-10 w-full" asChild>
+            <Link to={retryTo}>Réessayer le paiement</Link>
+          </Button>
+          <Button variant="outline" className="h-10 w-full" asChild>
+            <Link to="/subscribe">Choisir une autre formule</Link>
+          </Button>
+        </div>
 
-        <p className="text-center text-xs text-white/70">
+        <p className="text-center text-xs text-muted-foreground">
           Besoin d'aide ?{' '}
-          <a href="mailto:support@flash-neiga.com" className="underline hover:text-white">support@flash-neiga.com</a>
+          <a href="mailto:support@flash-neiga.com" className="underline hover:text-foreground">support@flash-neiga.com</a>
           {transactionId && <> — référence <span className="font-mono">{transactionId.slice(0, 8)}</span></>}
         </p>
       </div>

@@ -1,50 +1,52 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader } from '../ui/card';
 
 /**
- * Décor commun à tout le tunnel : connexion, création de compte, choix de la
- * formule, paiement et confirmation.
+ * Ossature commune du tunnel : connexion, création de compte, choix de la
+ * formule, paiement et confirmations.
  *
- * Une seule source pour le fond, la carte, la typographie et les espacements :
- * l'élève doit avoir l'impression de rester au même endroit du début à la fin.
- * Le décor est volontairement calme (deux halos fixes, aucune animation
- * permanente) pour que l'attention aille au contenu et à l'action.
+ * Elle réutilise le système de l'application (cartes, bordures, palette slate,
+ * couleur primaire) et laisse le fond de page à l'ossature générale : ces
+ * écrans doivent ressembler au reste du produit, pas à une parenthèse.
  */
 
 const WIDTHS = {
   sm: 'max-w-md',
   md: 'max-w-xl',
-  lg: 'max-w-4xl',
+  lg: 'max-w-3xl',
 };
 
 export const STEPS = ['Compte', 'Formule', 'Paiement'];
 
 function Steps({ current }) {
   return (
-    <ol className="flex items-center justify-center gap-2 mb-8" aria-label="Étapes de l'abonnement">
+    <ol className="mb-6 flex items-center justify-center gap-3" aria-label="Étapes de l'abonnement">
       {STEPS.map((label, index) => {
         const position = index + 1;
         const done = position < current;
         const active = position === current;
         return (
-          <li key={label} className="flex items-center gap-2">
+          <li key={label} className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span
                 aria-current={active ? 'step' : undefined}
                 className={[
-                  'h-6 w-6 rounded-full text-[11px] font-bold flex items-center justify-center transition-colors',
-                  done ? 'bg-yellow-400/25 text-yellow-200' : '',
-                  active ? 'bg-yellow-400 text-slate-900' : '',
-                  !done && !active ? 'bg-white/10 text-white/50' : '',
+                  'flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold',
+                  done ? 'bg-primary/15 text-primary' : '',
+                  active ? 'bg-primary text-primary-foreground' : '',
+                  !done && !active ? 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400' : '',
                 ].join(' ')}
               >
                 {done ? '✓' : position}
               </span>
-              <span className={`text-xs font-semibold tracking-wide ${active ? 'text-white' : 'text-white/50'}`}>
+              <span className={`text-xs font-medium ${active ? 'text-slate-900 dark:text-white' : 'text-muted-foreground'}`}>
                 {label}
               </span>
             </div>
-            {position < STEPS.length && <span className="h-px w-6 bg-white/15" aria-hidden="true" />}
+            {position < STEPS.length && (
+              <span className="h-px w-5 bg-slate-300 dark:bg-slate-700" aria-hidden="true" />
+            )}
           </li>
         );
       })}
@@ -59,47 +61,39 @@ export default function FunnelShell({
   width = 'sm',
   children,
   footer = null,
-  showLegal = true,
 }) {
-  // <section> et non <main> : l'ossature de l'application fournit déjà le
-  // <main> de la page, et deux <main> imbriqués perturbent les lecteurs d'écran.
   return (
-    <section className="min-h-screen bg-gradient-to-br from-cyan-400 via-blue-500 to-blue-600 px-4 py-10 sm:py-14">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-white/15 blur-3xl" />
-        <div className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-yellow-300/20 blur-3xl" />
-      </div>
-
-      <div className={`relative z-10 mx-auto w-full ${WIDTHS[width] || WIDTHS.sm}`}>
-        <Link to="/" className="mb-8 flex items-center justify-center gap-3" aria-label="Flash Neiga">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-lg shadow-blue-900/20">
-            <img src="/brand-logo.svg" alt="" className="h-6 w-6" />
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-10">
+      <div className={`w-full ${WIDTHS[width] || WIDTHS.sm}`}>
+        <Link
+          to="/"
+          className="mb-6 flex items-center justify-center gap-2.5"
+          aria-label="Flash Neiga"
+        >
+          <img src="/brand-logo.svg" alt="" className="h-7 w-7" />
+          <span className="font-heading text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+            Flash Neiga
           </span>
-          <span className="text-lg font-extrabold tracking-tight text-white">FLASH NEIGA</span>
         </Link>
 
         {step && <Steps current={step} />}
 
-        <div className="animate-fade-in-up rounded-3xl border border-white/25 bg-white/[0.14] p-6 shadow-[0_12px_40px_rgba(2,20,50,0.28)] backdrop-blur-2xl sm:p-8">
+        <Card className="border-slate-200 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           {(title || subtitle) && (
-            <header className="mb-6 text-center">
-              {title && <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{title}</h1>}
-              {subtitle && <p className="mt-2 text-sm text-white/80">{subtitle}</p>}
-            </header>
+            <CardHeader className="space-y-1.5 pb-4 text-center">
+              {title && (
+                <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  {title}
+                </h1>
+              )}
+              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+            </CardHeader>
           )}
-          {children}
-        </div>
+          <CardContent className="pb-6">{children}</CardContent>
+        </Card>
 
-        {footer && <div className="mt-6 text-center text-sm text-white/80">{footer}</div>}
-
-        {showLegal && (
-          <nav className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.18em] text-white/70">
-            <Link to="/conditions-generales" className="hover:text-white transition-colors">CGU</Link>
-            <Link to="/politique-confidentialite" className="hover:text-white transition-colors">Confidentialité</Link>
-            <Link to="/politique-remboursement" className="hover:text-white transition-colors">Remboursement</Link>
-          </nav>
-        )}
+        {footer && <div className="mt-5 text-center text-sm text-muted-foreground">{footer}</div>}
       </div>
-    </section>
+    </div>
   );
 }
