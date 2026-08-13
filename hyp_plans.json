@@ -5,7 +5,17 @@
     "amount": 69,
     "currency": "ILS",
     "duration_days": 14,
-    "type": "basic"
+    "type": "basic",
+    "label": "Standard",
+    "period": "14 jours",
+    "visible": true,
+    "sort_order": 1,
+    "features": [
+      "Questions officielles du Code de la route en Israël",
+      "Cours de code et explications illustrées",
+      "Correction immédiate et mini leçon sur chaque erreur",
+      "Historique de tes erreurs et suivi de ta progression"
+    ]
   },
   "basic_21d": {
     "name": "Formule Standard — 21 jours",
@@ -13,7 +23,17 @@
     "amount": 89,
     "currency": "ILS",
     "duration_days": 21,
-    "type": "basic"
+    "type": "basic",
+    "label": "Standard",
+    "period": "21 jours",
+    "visible": true,
+    "sort_order": 2,
+    "features": [
+      "Questions officielles du Code de la route en Israël",
+      "Cours de code et explications illustrées",
+      "Correction immédiate et mini leçon sur chaque erreur",
+      "Historique de tes erreurs et suivi de ta progression"
+    ]
   },
   "basic_30d": {
     "name": "Formule Standard — 30 jours",
@@ -21,7 +41,17 @@
     "amount": 99,
     "currency": "ILS",
     "duration_days": 30,
-    "type": "basic"
+    "type": "basic",
+    "label": "Standard",
+    "period": "30 jours",
+    "visible": true,
+    "sort_order": 3,
+    "features": [
+      "Questions officielles du Code de la route en Israël",
+      "Cours de code et explications illustrées",
+      "Correction immédiate et mini leçon sur chaque erreur",
+      "Historique de tes erreurs et suivi de ta progression"
+    ]
   },
   "premium_14d": {
     "name": "Formule Premium — 14 jours",
@@ -29,7 +59,17 @@
     "amount": 119,
     "currency": "ILS",
     "duration_days": 14,
-    "type": "premium"
+    "type": "premium",
+    "label": "Premium",
+    "period": "14 jours",
+    "visible": true,
+    "sort_order": 4,
+    "features": [
+      "Tout ce qui est inclus dans la formule Standard",
+      "FLASH Premium : questions illimitées 24/24, 7/7",
+      "Réponses de ton professeur en mini leçons illustrées",
+      "Mises en situation réelles pour progresser plus vite"
+    ]
   },
   "premium_21d": {
     "name": "Formule Premium — 21 jours",
@@ -37,7 +77,17 @@
     "amount": 139,
     "currency": "ILS",
     "duration_days": 21,
-    "type": "premium"
+    "type": "premium",
+    "label": "Premium",
+    "period": "21 jours",
+    "visible": true,
+    "sort_order": 5,
+    "features": [
+      "Tout ce qui est inclus dans la formule Standard",
+      "FLASH Premium : questions illimitées 24/24, 7/7",
+      "Réponses de ton professeur en mini leçons illustrées",
+      "Mises en situation réelles pour progresser plus vite"
+    ]
   },
   "premium_30d": {
     "name": "Formule Premium — 30 jours",
@@ -45,7 +95,17 @@
     "amount": 149,
     "currency": "ILS",
     "duration_days": 30,
-    "type": "premium"
+    "type": "premium",
+    "label": "Premium",
+    "period": "30 jours",
+    "visible": true,
+    "sort_order": 6,
+    "features": [
+      "Tout ce qui est inclus dans la formule Standard",
+      "FLASH Premium : questions illimitées 24/24, 7/7",
+      "Réponses de ton professeur en mini leçons illustrées",
+      "Mises en situation réelles pour progresser plus vite"
+    ]
   },
   "code_14d": {
     "name": "Abonnement Code 14 jours",
