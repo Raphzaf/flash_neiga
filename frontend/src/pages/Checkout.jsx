@@ -20,7 +20,7 @@ import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 export default function Checkout() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, subscription } = useAuth();
+  const { user, subscription, logout } = useAuth();
 
   const planId = searchParams.get('plan') || readRememberedPlan();
 
@@ -114,9 +114,11 @@ export default function Checkout() {
       setPaying(false);
     } catch (err) {
       if (err?.response?.status === 401) {
-        // Session perdue pendant le parcours : on repasse par la connexion, la
-        // formule est conservée.
-        navigate('/login?reason=session', { replace: true });
+        // Session perdue pendant le parcours : on la déclare périmée et la garde
+        // de route renvoie vers la connexion en l'expliquant. Rediriger nous-même
+        // ne servirait à rien — la garde repasserait par-dessus. La formule
+        // choisie, elle, reste mémorisée.
+        logout({ expired: true });
         return;
       }
       setError(err?.response?.data?.detail || "Le paiement n'a pas pu être lancé. Réessaie dans un instant.");

@@ -175,8 +175,14 @@ def is_admin_email(email: Optional[str]) -> bool:
     return bool(email) and email.strip().lower() in admin_emails()
 
 
-def has_active_subscription(db: Session, user_id: str) -> bool:
-    """L'élève dispose-t-il d'un abonnement en cours de validité ?"""
+# Statuts qui donnent encore accès au contenu tant que la date de fin n'est pas
+# passée. « cancelled » en fait partie : résilier signifie « ne pas renouveler »,
+# pas « perdre immédiatement ce qui est déjà payé ».
+VALID_SUBSCRIPTION_STATUSES = ("active", "cancelled")
+
+
+def current_subscription(db: Session, user_id: str):
+    """Abonnement encore valable de l'élève, s'il en a un."""
     from datetime import datetime
     try:
         from models import SubscriptionDB
@@ -184,18 +190,22 @@ def has_active_subscription(db: Session, user_id: str) -> bool:
         from backend.models import SubscriptionDB
 
     now = datetime.utcnow()
-    sub = (
+    candidates = (
         db.query(SubscriptionDB)
         .filter(
             SubscriptionDB.user_id == user_id,
-            SubscriptionDB.status == "active",
+            SubscriptionDB.status.in_(VALID_SUBSCRIPTION_STATUSES),
         )
         .order_by(SubscriptionDB.created_at.desc())
-        .first()
+        .all()
     )
-    # Un abonnement résilié reste valable jusqu'à sa date de fin ; c'est le champ
-    # end_date qui fait foi, pas seulement le statut.
-    return bool(sub and (sub.end_date is None or sub.end_date > now))
+    # C'est la date de fin qui fait foi, pas seulement le statut.
+    return next((s for s in candidates if s.end_date is None or s.end_date > now), None)
+
+
+def has_active_subscription(db: Session, user_id: str) -> bool:
+    """L'élève dispose-t-il d'un abonnement en cours de validité ?"""
+    return current_subscription(db, user_id) is not None
 
 
 async def require_subscription(

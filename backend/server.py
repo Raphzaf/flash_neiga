@@ -86,12 +86,14 @@ try:
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
         find_user_by_email, validate_password, is_admin_email,
+        current_subscription, VALID_SUBSCRIPTION_STATUSES,
     )
 except ImportError:
     from backend.auth import (
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
         find_user_by_email, validate_password, is_admin_email,
+        current_subscription, VALID_SUBSCRIPTION_STATUSES,
     )
 try:
     from migrations.auto_migrate import run_hyp_migration
@@ -718,14 +720,21 @@ async def get_my_subscription(
         from backend.routes.hyp_payments import get_plan
 
     now = datetime.utcnow()
-    subscription = (
+    # Abonnement encore valable (un abonnement résilié le reste jusqu'à sa date
+    # de fin) ; à défaut, le dernier connu, pour proposer un renouvellement.
+    subscription = current_subscription(db, current_user.id) or (
         db.query(SubscriptionDB)
-        .filter(SubscriptionDB.user_id == current_user.id, SubscriptionDB.status == "active")
+        .filter(SubscriptionDB.user_id == current_user.id)
         .order_by(SubscriptionDB.created_at.desc())
         .first()
     )
-    # Un abonnement résilié reste valable jusqu'à sa date de fin.
-    active = bool(subscription and (subscription.end_date is None or subscription.end_date > now))
+    # Un abonnement résilié reste valable jusqu'à sa date de fin ; un abonnement
+    # expiré ou remplacé ne donne plus accès.
+    active = bool(
+        subscription
+        and subscription.status in VALID_SUBSCRIPTION_STATUSES
+        and (subscription.end_date is None or subscription.end_date > now)
+    )
     is_admin = is_admin_email(current_user.email)
 
     payload = {

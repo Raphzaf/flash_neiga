@@ -59,14 +59,19 @@ const AppFooter = () => {
     );
 };
 
+// La redirection vers la connexion explique pourquoi elle a lieu quand la
+// session s'est invalidée en cours de route ; l'élève ne doit pas se retrouver
+// devant un formulaire sans savoir ce qui s'est passé.
+const loginRoute = (sessionExpired) => (sessionExpired ? '/login?reason=session' : '/login');
+
 // Route accessible à tout compte connecté (y compris sans abonnement) :
 // le tunnel d'abonnement et le profil en font partie.
 const AuthenticatedRoute = () => {
-    const { isAuthenticated, loading, hasAccess } = useAuth();
+    const { isAuthenticated, loading, hasAccess, sessionExpired } = useAuth();
     const location = useLocation();
 
     if (loading) return <FullScreenLoader label="Chargement..." />;
-    if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
+    if (!isAuthenticated) return <Navigate to={loginRoute(sessionExpired)} state={{ from: location }} replace />;
     return (
         <>
             <Outlet />
@@ -82,11 +87,11 @@ const AuthenticatedRoute = () => {
 // administrateurs ne sont pas soumis au paywall). Sans abonnement, on envoie au
 // choix d'une formule plutôt que d'attendre un 402 en pleine page.
 const SubscribedRoute = () => {
-    const { isAuthenticated, loading, subscription, subscriptionLoading, hasAccess } = useAuth();
+    const { isAuthenticated, loading, subscription, subscriptionLoading, hasAccess, sessionExpired } = useAuth();
     const location = useLocation();
 
     if (loading) return <FullScreenLoader label="Chargement..." />;
-    if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
+    if (!isAuthenticated) return <Navigate to={loginRoute(sessionExpired)} state={{ from: location }} replace />;
     // On attend de connaître l'état réel de l'abonnement avant de trancher.
     if (subscriptionLoading || !subscription) return <FullScreenLoader label="Chargement..." />;
     if (!hasAccess) return <Navigate to="/subscribe" replace />;
