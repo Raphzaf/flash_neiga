@@ -1,13 +1,19 @@
 """
 Profil utilisateur (Flash Neiga).
 
-- GET  /api/profile                       → infos du compte + abonnement courant
-- PATCH /api/profile                      → modifier prénom / nom
-- POST /api/profile/subscription/cancel   → résilier (ne pas renouveler) l'abonnement actif
+Tout ce qu'un élève gère lui-même sur son compte :
 
-« Passer à un abonnement supérieur » se fait via la page Tarifs (flux de paiement HYP) :
-le front y renvoie l'utilisateur. La résiliation marque l'abonnement comme annulé côté
-application ; l'accès reste valable jusqu'à sa date de fin (plans à durée déterminée).
+- GET   /api/profile                       → infos du compte + abonnement courant
+- PATCH /api/profile                       → modifier prénom / nom
+- POST  /api/profile/password              → changer son mot de passe
+- POST  /api/profile/email                 → changer son email de connexion
+- GET   /api/profile/payments              → historique de ses paiements
+- POST  /api/profile/subscription/cancel   → résilier (ne pas renouveler) l'abonnement
+
+Souscrire, changer de formule ou renouveler passe par le tunnel d'abonnement
+(/subscribe → /checkout → paiement) : c'est l'élève qui décide, jamais un
+administrateur. La résiliation marque l'abonnement comme annulé ; l'accès reste
+ouvert jusqu'à sa date de fin, puisqu'il est déjà payé.
 """
 import json
 import logging
@@ -18,14 +24,33 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel, EmailStr
+
 try:
     from database import get_db
-    from models import UserDB, SubscriptionDB, User, ProfileUpdate
-    from auth import get_current_user
+    from models import UserDB, SubscriptionDB, TransactionDB, User, ProfileUpdate
+    from auth import (
+        get_current_user, current_subscription, hash_password, verify_password,
+        validate_password, normalize_email, find_user_by_email,
+    )
 except ImportError:  # pragma: no cover
     from backend.database import get_db
-    from backend.models import UserDB, SubscriptionDB, User, ProfileUpdate
-    from backend.auth import get_current_user
+    from backend.models import UserDB, SubscriptionDB, TransactionDB, User, ProfileUpdate
+    from backend.auth import (
+        get_current_user, current_subscription, hash_password, verify_password,
+        validate_password, normalize_email, find_user_by_email,
+    )
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class EmailChange(BaseModel):
+    """Le mot de passe est exigé : l'email est l'identifiant de connexion."""
+    new_email: EmailStr
+    current_password: str
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +65,8 @@ except Exception:  # pragma: no cover
 
 
 def _active_subscription(db: Session, user_id: str) -> Optional[SubscriptionDB]:
-    """Abonnement actif de l'élève, sinon le plus récent (pour l'historique)."""
-    active = (
-        db.query(SubscriptionDB)
-        .filter(SubscriptionDB.user_id == user_id, SubscriptionDB.status == "active")
-        .order_by(SubscriptionDB.created_at.desc())
-        .first()
-    )
+    """Abonnement en cours de l'élève, sinon le plus récent (pour l'historique)."""
+    active = current_subscription(db, user_id)
     if active:
         return active
     return (
@@ -62,7 +82,8 @@ def _subscription_payload(sub: Optional[SubscriptionDB]) -> Optional[Dict[str, A
         return None
     plan = PLANS.get(sub.plan_id or "", {})
     now = datetime.utcnow()
-    is_active = sub.status == "active" and (sub.end_date is None or sub.end_date > now)
+    # Un abonnement résilié reste valable jusqu'à sa date de fin : il est déjà payé.
+    is_active = sub.status in ("active", "cancelled") and (sub.end_date is None or sub.end_date > now)
     return {
         "plan_id": sub.plan_id,
         "plan_name": plan.get("name") or sub.plan_id or "Abonnement",
@@ -74,6 +95,9 @@ def _subscription_payload(sub: Optional[SubscriptionDB]) -> Optional[Dict[str, A
         "start_date": sub.start_date,
         "end_date": sub.end_date,
         "canceled_at": sub.canceled_at,
+        "days_left": (
+            max(0, (sub.end_date - now).days) if (is_active and sub.end_date) else None
+        ),
     }
 
 
@@ -123,18 +147,101 @@ async def update_profile(
     }
 
 
+@router.post("/password")
+async def change_password(
+    payload: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change le mot de passe, l'ancien faisant office de confirmation d'identité."""
+    user = db.query(UserDB).filter(UserDB.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=403, detail="Mot de passe actuel incorrect.")
+
+    new_password = validate_password(payload.new_password)
+    if verify_password(new_password, user.hashed_password):
+        raise HTTPException(
+            status_code=400, detail="Le nouveau mot de passe doit être différent de l'ancien."
+        )
+
+    user.hashed_password = hash_password(new_password)
+    db.commit()
+    logger.info("Mot de passe modifié par l'élève %s", user.email)
+    return {"status": "ok", "message": "Ton mot de passe a été modifié."}
+
+
+@router.post("/email")
+async def change_email(
+    payload: EmailChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change l'email de connexion.
+
+    Le mot de passe est exigé : cet email est l'identifiant du compte, et la
+    session reste ouverte ensuite (le jeton porte l'identifiant interne).
+    """
+    user = db.query(UserDB).filter(UserDB.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=403, detail="Mot de passe incorrect.")
+
+    new_email = normalize_email(payload.new_email)
+    if new_email == normalize_email(user.email):
+        raise HTTPException(status_code=400, detail="C'est déjà ton email actuel.")
+
+    existing = find_user_by_email(db, new_email)
+    if existing and existing.id != user.id:
+        raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte.")
+
+    previous = user.email
+    user.email = new_email
+    db.commit()
+    logger.info("Email du compte %s changé en %s", previous, new_email)
+    return {"status": "ok", "email": new_email, "message": "Ton email de connexion a été mis à jour."}
+
+
+@router.get("/payments")
+async def list_my_payments(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Historique des paiements de l'élève : ce qu'il a payé, quand, pour quoi."""
+    transactions = (
+        db.query(TransactionDB)
+        .filter(TransactionDB.user_id == current_user.id, TransactionDB.status == "completed")
+        .order_by(TransactionDB.created_at.desc())
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": t.id,
+                "reference": t.id[:8],
+                "plan_id": t.plan_id,
+                "plan_name": (PLANS.get(t.plan_id or "", {}) or {}).get("name") or t.plan_id,
+                "amount": t.amount,
+                "currency": t.currency,
+                "paid_at": t.completed_at or t.created_at,
+            }
+            for t in transactions
+        ],
+        "count": len(transactions),
+    }
+
+
 @router.post("/subscription/cancel")
 async def cancel_subscription(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    sub = (
-        db.query(SubscriptionDB)
-        .filter(SubscriptionDB.user_id == current_user.id, SubscriptionDB.status == "active")
-        .order_by(SubscriptionDB.created_at.desc())
-        .first()
-    )
-    if not sub:
+    sub = current_subscription(db, current_user.id)
+    if not sub or sub.status != "active":
         raise HTTPException(status_code=404, detail="Aucun abonnement actif à résilier.")
 
     sub.status = "cancelled"

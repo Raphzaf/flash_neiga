@@ -73,6 +73,23 @@ connecte l'élève. Garde-fous :
 - si l'email correspond à un compte existant, son mot de passe est exigé
   (`403`) — on ne prend jamais la main sur le compte d'un tiers.
 
+## Ce que l'élève gère lui-même (`/profile`)
+
+| Depuis son compte | Route |
+|---|---|
+| Prénom / nom | `PATCH /api/profile` |
+| Mot de passe | `POST /api/profile/password` (ancien mot de passe exigé) |
+| Email de connexion | `POST /api/profile/email` (mot de passe exigé, unicité vérifiée) |
+| Historique de ses paiements | `GET /api/profile/payments` |
+| Résilier son abonnement | `POST /api/profile/subscription/cancel` |
+| Changer de formule / renouveler | tunnel `/subscribe` → `/checkout` |
+
+**Résilier veut dire « ne pas renouveler ».** L'abonnement est déjà payé : son
+statut passe à `cancelled` mais l'accès reste ouvert jusqu'à la date de fin.
+C'est `auth.current_subscription()` qui fait foi partout (paywall, gardes de
+routes, profil) : elle accepte les statuts `active` et `cancelled` tant que
+`end_date` n'est pas dépassée.
+
 ## L'abonnement appartient à l'élève
 
 C'est l'élève qui souscrit, change de formule et renouvelle, depuis son espace.
@@ -110,8 +127,9 @@ réutilise ces composants plutôt que de redéfinir ses propres styles.
 
 ## Limite connue
 
-Il n'existe pas d'envoi d'email transactionnel dans le projet : pas de « mot de
-passe oublié » en libre-service. La page de connexion renvoie vers le support,
-qui réinitialise depuis le CRM (fiche élève → *Réinitialiser le mot de passe*).
-Brancher un service d'envoi (SMTP ou API) est le prérequis pour automatiser
-cette étape.
+Il n'existe pas d'envoi d'email transactionnel dans le projet. Un élève
+**connecté** change son mot de passe depuis son compte ; en revanche, un élève
+qui l'a **oublié** ne peut pas le réinitialiser seul : la page de connexion
+renvoie vers le support, qui réinitialise depuis le CRM (fiche élève →
+*Réinitialiser le mot de passe*). Brancher un service d'envoi (SMTP ou API) est
+le prérequis pour automatiser cette dernière étape.

@@ -13,6 +13,8 @@ export const AuthProvider = ({ children }) => {
     // l'élève entre dans l'application ou passe par le choix d'une formule.
     const [subscription, setSubscription] = useState(null);
     const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+    // Vrai quand la session a été invalidée en cours de route (jeton expiré).
+    const [sessionExpired, setSessionExpired] = useState(false);
 
     const loadSubscription = useCallback(async () => {
         setSubscriptionLoading(true);
@@ -66,6 +68,7 @@ export const AuthProvider = ({ children }) => {
     // Ouvre la session à partir d'un token déjà obtenu (connexion classique,
     // inscription, ou rattachement d'un paiement à un compte).
     const loginWithToken = async (newToken) => {
+        setSessionExpired(false);
         localStorage.setItem('token', newToken);
         axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
         setToken(newToken);
@@ -104,12 +107,16 @@ export const AuthProvider = ({ children }) => {
         return await loginWithToken(res.data.access_token);
     };
 
-    const logout = () => {
+    // `expired` distingue une déconnexion volontaire d'une session devenue
+    // invalide : les gardes de routes s'en servent pour expliquer à l'élève
+    // pourquoi on lui redemande ses identifiants.
+    const logout = ({ expired = false } = {}) => {
         localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
         setToken(null);
         setUser(null);
         setSubscription(null);
+        setSessionExpired(expired);
     };
 
     return (
@@ -127,6 +134,7 @@ export const AuthProvider = ({ children }) => {
             subscriptionLoading,
             // `has_access` inclut les administrateurs, non soumis au paywall.
             hasAccess: !!subscription?.has_access,
+            sessionExpired,
             refreshSubscription: loadSubscription,
         }}>
             {children}
