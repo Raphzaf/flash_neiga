@@ -213,8 +213,6 @@ export default function AdminCRM() {
                 last_name: data.last_name || '',
                 email: data.email || '',
             });
-            setGrantPlan('');
-            setGrantDays('');
             setNewPassword('');
         } catch (error) {
             setDetail(null);
