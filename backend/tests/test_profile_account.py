@@ -217,3 +217,38 @@ def test_account_pages_require_authentication(client, test_db):
     assert client.post("/api/profile/password", json={
         "current_password": "x", "new_password": "yyyyyy"
     }).status_code == 403
+
+
+# ===== Téléphone =====
+def test_phone_is_recorded_at_registration(client, test_db):
+    client.post("/api/auth/register", json={
+        "email": "noa@example.com", "password": PASSWORD,
+        "first_name": "Noa", "phone": " 054 123 45 67 ",
+    })
+    user = test_db.query(UserDB).filter(UserDB.email == "noa@example.com").first()
+    # Les espaces superflus sont retirés, la mise en forme de l'élève est gardée.
+    assert user.phone == "054 123 45 67"
+
+
+def test_implausible_phone_is_refused(client, test_db):
+    response = client.post("/api/auth/register", json={
+        "email": "noa@example.com", "password": PASSWORD, "phone": "12",
+    })
+    assert response.status_code == 400
+    assert test_db.query(UserDB).filter(UserDB.email == "noa@example.com").count() == 0
+
+
+def test_registration_still_works_without_phone(client, test_db):
+    """Les comptes existants n'en ont pas : le champ ne doit pas bloquer l'API."""
+    response = client.post("/api/auth/register", json={"email": "noa@example.com", "password": PASSWORD})
+    assert response.status_code == 200
+    assert test_db.query(UserDB).filter(UserDB.email == "noa@example.com").first().phone is None
+
+
+def test_student_updates_their_phone(client, test_db, student):
+    response = client.patch(
+        "/api/profile", json={"phone": "+972 54 987 65 43"}, headers=student["headers"]
+    )
+    assert response.status_code == 200
+    assert response.json()["phone"] == "+972 54 987 65 43"
+    assert client.get("/api/profile", headers=student["headers"]).json()["phone"] == "+972 54 987 65 43"

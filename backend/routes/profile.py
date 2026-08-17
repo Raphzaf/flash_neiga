@@ -31,14 +31,14 @@ try:
     from models import UserDB, SubscriptionDB, TransactionDB, User, ProfileUpdate
     from auth import (
         get_current_user, current_subscription, hash_password, verify_password,
-        validate_password, normalize_email, find_user_by_email,
+        validate_password, normalize_email, find_user_by_email, validate_phone,
     )
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import UserDB, SubscriptionDB, TransactionDB, User, ProfileUpdate
     from backend.auth import (
         get_current_user, current_subscription, hash_password, verify_password,
-        validate_password, normalize_email, find_user_by_email,
+        validate_password, normalize_email, find_user_by_email, validate_phone,
     )
 
 
@@ -117,6 +117,7 @@ async def get_profile(
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "phone": user.phone,
         "created_at": user.created_at,
         "subscription": sub_payload,
         "has_active_subscription": bool(sub_payload and sub_payload["is_active"]),
@@ -137,6 +138,8 @@ async def update_profile(
         user.first_name = payload.first_name.strip() or None
     if payload.last_name is not None:
         user.last_name = payload.last_name.strip() or None
+    if payload.phone is not None:
+        user.phone = validate_phone(payload.phone)
     db.commit()
     db.refresh(user)
     return {
@@ -144,6 +147,7 @@ async def update_profile(
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "phone": user.phone,
     }
 
 

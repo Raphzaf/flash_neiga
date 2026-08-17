@@ -86,14 +86,14 @@ try:
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
         find_user_by_email, validate_password, is_admin_email,
-        current_subscription, VALID_SUBSCRIPTION_STATUSES,
+        current_subscription, VALID_SUBSCRIPTION_STATUSES, validate_phone,
     )
 except ImportError:
     from backend.auth import (
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
         find_user_by_email, validate_password, is_admin_email,
-        current_subscription, VALID_SUBSCRIPTION_STATUSES,
+        current_subscription, VALID_SUBSCRIPTION_STATUSES, validate_phone,
     )
 try:
     from migrations.auto_migrate import run_hyp_migration
@@ -647,6 +647,8 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
     # empêcher la connexion.
     email = normalize_email(user_in.email)
     password = validate_password(user_in.password)
+    # Numéro de contact : demandé à l'inscription pour pouvoir joindre l'élève.
+    phone = validate_phone(user_in.phone)
 
     # Check if user exists
     existing_user = find_user_by_email(db, email)
@@ -672,6 +674,7 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(password),
         first_name=first_name,
         last_name=last_name,
+        phone=phone,
     )
     db.add(user)
     db.commit()

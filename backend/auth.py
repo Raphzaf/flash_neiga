@@ -43,6 +43,35 @@ def normalize_email(email: Optional[str]) -> str:
     return (email or "").strip().lower()
 
 
+def normalize_phone(phone: Optional[str]) -> Optional[str]:
+    """Nettoie un numéro sans le réécrire.
+
+    On retire seulement les espaces superflus : les formats sont variés
+    (0X…, +972…, +33…) et il vaut mieux garder ce que l'élève a saisi, lisible,
+    plutôt que d'imposer une mise en forme qui rendrait un numéro incorrect.
+    """
+    cleaned = " ".join((phone or "").split())
+    return cleaned or None
+
+
+def validate_phone(phone: Optional[str], *, required: bool = False) -> Optional[str]:
+    """Vérifie qu'un numéro est plausible : au moins 8 chiffres."""
+    cleaned = normalize_phone(phone)
+    if not cleaned:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Le numéro de téléphone est obligatoire.",
+            )
+        return None
+    if sum(character.isdigit() for character in cleaned) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce numéro de téléphone ne semble pas valide.",
+        )
+    return cleaned
+
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -125,6 +154,7 @@ async def get_current_user(
         email=user.email,
         first_name=getattr(user, "first_name", None),
         last_name=getattr(user, "last_name", None),
+        phone=getattr(user, "phone", None),
     )
 
 

@@ -17,6 +17,7 @@ export default function Register() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -41,13 +42,17 @@ export default function Register() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
+        if ((phone.match(/\d/g) || []).length < 8) {
+            setError('Ton numéro de téléphone ne semble pas valide.');
+            return;
+        }
         if (password.length < MIN_PASSWORD_LENGTH) {
             setError(`Ton mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`);
             return;
         }
         setIsLoading(true);
         try {
-            await register(email.trim(), password, firstName.trim(), lastName.trim());
+            await register(email.trim(), password, firstName.trim(), lastName.trim(), phone.trim());
             // Le compte est créé ET la session ouverte : on enchaîne directement
             // sur la suite du parcours, sans repasser par la connexion.
             navigate(nextStep(), { replace: true });
@@ -112,6 +117,19 @@ export default function Register() {
                     data-testid="register-email-input"
                 />
 
+                <TextField
+                    label="Téléphone"
+                    type="tel"
+                    placeholder="05X XXX XX XX"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    hint="Pour te joindre en cas de souci avec ton compte ou ton paiement."
+                    data-testid="register-phone-input"
+                />
+
                 <PasswordField
                     label="Mot de passe"
                     placeholder={`Au moins ${MIN_PASSWORD_LENGTH} caractères`}
@@ -129,7 +147,7 @@ export default function Register() {
                 <Button
                     type="submit"
                     className="h-10 w-full"
-                    disabled={isLoading || !firstName || !lastName || !email || !password}
+                    disabled={isLoading || !firstName || !lastName || !email || !phone || !password}
                     data-testid="register-submit-button"
                 >
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuer'}

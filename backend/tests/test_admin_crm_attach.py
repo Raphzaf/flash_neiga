@@ -214,3 +214,26 @@ def test_attach_requires_admin(client, test_db, orphan_transaction):
     )
     assert response.status_code == 403
     assert test_db.query(SubscriptionDB).count() == 0
+
+
+def test_crm_shows_and_searches_by_phone(client, test_db, admin_headers):
+    client.post("/api/auth/register", json={
+        "email": "noa@example.com", "password": "motdepasse",
+        "first_name": "Noa", "phone": "054 123 45 67",
+    })
+
+    listing = client.get(
+        "/api/admin/crm/users", params={"search": "054 123"}, headers=admin_headers
+    ).json()
+    assert [u["email"] for u in listing["items"]] == ["noa@example.com"]
+    assert listing["items"][0]["phone"] == "054 123 45 67"
+
+    user_id = listing["items"][0]["id"]
+    detail = client.get(f"/api/admin/crm/users/{user_id}", headers=admin_headers).json()
+    assert detail["phone"] == "054 123 45 67"
+
+    updated = client.patch(
+        f"/api/admin/crm/users/{user_id}", json={"phone": "052 000 11 22"}, headers=admin_headers
+    )
+    assert updated.status_code == 200
+    assert updated.json()["phone"] == "052 000 11 22"

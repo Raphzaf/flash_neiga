@@ -77,7 +77,7 @@ connecte l'élève. Garde-fous :
 
 | Depuis son compte | Route |
 |---|---|
-| Prénom / nom | `PATCH /api/profile` |
+| Prénom / nom / téléphone | `PATCH /api/profile` |
 | Mot de passe | `POST /api/profile/password` (ancien mot de passe exigé) |
 | Email de connexion | `POST /api/profile/email` (mot de passe exigé, unicité vérifiée) |
 | Historique de ses paiements | `GET /api/profile/payments` |
@@ -103,6 +103,26 @@ encaissé** resté sans compte : onglet **Paiements**, bouton **Rattacher**
 répare l'affectation d'un paiement déjà effectué par l'élève ; le compte est créé
 si besoin, avec un mot de passe provisoire affiché une seule fois. Pour ne lister
 que ces paiements : `GET /api/admin/crm/transactions?needs_account=true`.
+
+## « Cet élève n'a aucun abonnement » : par où chercher
+
+Le compte peut exister sans abonnement, et c'est souvent normal — le parcours
+crée le compte AVANT le paiement. La fiche élève du CRM donne la réponse, tirée
+de ses paiements :
+
+| Ce qu'affiche la fiche | Ce qui s'est passé |
+|---|---|
+| Aucun paiement engagé | Compte créé, parcours abandonné avant le paiement. Le plus fréquent. |
+| Paiement lancé, jamais confirmé (`pending`) | Abandon sur la page bancaire, refus de la banque, **ou** résultat du paiement jamais reçu par notre serveur. |
+| Dernier paiement refusé (`failed`) | La banque a refusé ; l'élève peut réessayer depuis son espace. |
+| Paiement encaissé sans abonnement | Anomalie : à rattacher depuis l'onglet Paiements. |
+
+Le troisième cas de la deuxième ligne est le seul vraiment technique : si HYP
+n'a pas notre URL de retour, un paiement réussi peut rester `pending` chez nous.
+Ces URLs se règlent **dans le back-office HYP**, pas dans le code : les variables
+`HYP_SUCCESS_URL`, `HYP_ERROR_URL` et `HYP_CALLBACK_URL` existent dans la
+configuration mais ne sont envoyées nulle part — elles ne servent à rien
+aujourd'hui.
 
 ## Si le paiement se passe mal
 

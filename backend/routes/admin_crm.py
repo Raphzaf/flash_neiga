@@ -33,7 +33,9 @@ try:
         UserDB, SubscriptionDB, TransactionDB, PaymentDB,
         ExamSessionDB, UserMistakeDB, User, PromoCodeDB, PromoRedemptionDB,
     )
-    from auth import require_admin, hash_password, normalize_email, find_user_by_email
+    from auth import (
+        require_admin, hash_password, normalize_email, find_user_by_email, validate_phone,
+    )
     from routes.hyp_payments import provision_subscription, transaction_email
     import promo as promo_lib
 except ImportError:  # pragma: no cover - import depuis la racine du repo
@@ -42,7 +44,9 @@ except ImportError:  # pragma: no cover - import depuis la racine du repo
         UserDB, SubscriptionDB, TransactionDB, PaymentDB,
         ExamSessionDB, UserMistakeDB, User, PromoCodeDB, PromoRedemptionDB,
     )
-    from backend.auth import require_admin, hash_password, normalize_email, find_user_by_email
+    from backend.auth import (
+        require_admin, hash_password, normalize_email, find_user_by_email, validate_phone,
+    )
     from backend.routes.hyp_payments import provision_subscription, transaction_email
     from backend import promo as promo_lib
 
@@ -67,6 +71,7 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    phone: Optional[str] = None
 
 
 class PasswordReset(BaseModel):
@@ -78,6 +83,7 @@ class TransactionAttach(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
     password: Optional[str] = None   # None = mot de passe provisoire généré
 
 
@@ -267,6 +273,8 @@ async def list_users(
                 UserDB.email.ilike(like),
                 UserDB.first_name.ilike(like),
                 UserDB.last_name.ilike(like),
+                # Recherche par numéro : c'est souvent ce que l'équipe a sous la main.
+                UserDB.phone.ilike(like),
             )
         )
 
@@ -295,6 +303,7 @@ async def list_users(
             "email": u.email,
             "first_name": u.first_name,
             "last_name": u.last_name,
+            "phone": u.phone,
             "created_at": u.created_at,
             "subscription": payload,
             "has_active_subscription": active,
@@ -365,6 +374,7 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "phone": user.phone,
         "created_at": user.created_at,
         "subscriptions": [_sub_payload(s) for s in subs],
         "current_subscription": _sub_payload(next((s for s in subs if _is_active(s)), subs[0] if subs else None)),
@@ -427,6 +437,8 @@ async def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(g
         user.first_name = payload.first_name.strip() or None
     if payload.last_name is not None:
         user.last_name = payload.last_name.strip() or None
+    if payload.phone is not None:
+        user.phone = validate_phone(payload.phone)
 
     db.add(user)
     db.commit()
@@ -436,6 +448,7 @@ async def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(g
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "phone": user.phone,
     }
 
 
@@ -588,6 +601,7 @@ async def attach_transaction(
             hashed_password=hash_password(temporary_password),
             first_name=(payload.first_name or "").strip() or None,
             last_name=(payload.last_name or "").strip() or None,
+            phone=validate_phone(payload.phone),
         )
         db.add(user)
         db.flush()
@@ -612,7 +626,7 @@ async def attach_transaction(
     logger.info("CRM : paiement %s rattaché à %s par %s", transaction.id, email, admin.email)
     return {
         "status": "ok",
-        "user": {"id": user.id, "email": user.email},
+        "user": {"id": user.id, "email": user.email, "phone": user.phone},
         # Renvoyé une seule fois, à transmettre à l'élève : il pourra le changer.
         "temporary_password": temporary_password,
         "subscription": _sub_payload(subscription),

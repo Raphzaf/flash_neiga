@@ -23,6 +23,8 @@ class UserDB(Base):
     hashed_password = Column(String, nullable=False)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
+    # Numéro de contact : sert au suivi des élèves (rappel, dépannage).
+    phone = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class QuestionDB(Base):
@@ -290,6 +292,7 @@ class UserCreate(BaseModel):
     password: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
     full_name: Optional[str] = None  # compat ascendante (ancien formulaire)
 
 
@@ -302,11 +305,13 @@ class User(BaseModel):
     email: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class ProfileUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class ExamSession(BaseModel):

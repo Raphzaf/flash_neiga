@@ -23,6 +23,34 @@ const money = (v, currency = 'ILS') =>
 
 const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—');
 
+/**
+ * Pourquoi cet élève n'a-t-il pas d'abonnement ?
+ *
+ * La question revient à chaque fois qu'un compte apparaît « sans abonnement ».
+ * La réponse est déjà dans ses paiements : on la formule au lieu de laisser
+ * l'équipe la deviner.
+ */
+function explainNoSubscription(transactions = []) {
+    if (!transactions.length) {
+        return "Aucun paiement engagé : le compte a été créé, mais le parcours s'est arrêté avant le paiement.";
+    }
+    const pending = transactions.find((t) => t.status === 'pending');
+    if (pending) {
+        return `Paiement lancé le ${date(pending.created_at)} et jamais confirmé : abandon en cours de route, `
+            + 'refus de la banque, ou notification de paiement non reçue par le serveur.';
+    }
+    const failed = transactions.find((t) => t.status === 'failed');
+    if (failed) {
+        return `Dernier paiement refusé le ${date(failed.created_at)}. L'élève peut réessayer depuis son espace.`;
+    }
+    const completed = transactions.find((t) => t.status === 'completed');
+    if (completed) {
+        return `Un paiement du ${date(completed.created_at)} est encaissé sans abonnement ouvert : `
+            + 'à signaler, cela ne devrait pas arriver.';
+    }
+    return null;
+}
+
 function StatCard({ icon: Icon, label, value, hint }) {
     return (
         <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
@@ -73,7 +101,7 @@ export default function AdminCRM() {
     const [txLoading, setTxLoading] = useState(false);
     // Rattachement d'un paiement encaissé sans compte
     const [attachTx, setAttachTx] = useState(null);
-    const [attachForm, setAttachForm] = useState({ email: '', first_name: '', last_name: '' });
+    const [attachForm, setAttachForm] = useState({ email: '', first_name: '', last_name: '', phone: '' });
     const [attachSaving, setAttachSaving] = useState(false);
     const [attachResult, setAttachResult] = useState(null);
 
@@ -89,7 +117,7 @@ export default function AdminCRM() {
     // Fiche élève
     const [detail, setDetail] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
-    const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '' });
+    const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '', phone: '' });
     const [newPassword, setNewPassword] = useState('');
 
     const handleError = useCallback((error, fallback) => {
@@ -183,6 +211,7 @@ export default function AdminCRM() {
                     email: attachForm.email.trim(),
                     first_name: attachForm.first_name.trim() || null,
                     last_name: attachForm.last_name.trim() || null,
+                    phone: attachForm.phone.trim() || null,
                 },
             );
             setAttachResult(data);
@@ -212,6 +241,7 @@ export default function AdminCRM() {
                 first_name: data.first_name || '',
                 last_name: data.last_name || '',
                 email: data.email || '',
+                phone: data.phone || '',
             });
             setNewPassword('');
         } catch (error) {
@@ -391,7 +421,7 @@ export default function AdminCRM() {
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                     <Input
                                         className="pl-9"
-                                        placeholder="Rechercher un email, un prénom, un nom…"
+                                        placeholder="Rechercher un email, un prénom, un nom, un téléphone…"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && fetchUsers(0)}
@@ -436,6 +466,11 @@ export default function AdminCRM() {
                                                             {[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}
                                                         </div>
                                                         <div className="text-xs text-slate-500 dark:text-slate-400">{u.email}</div>
+                                                        {u.phone && (
+                                                            <a href={`tel:${u.phone}`} className="text-xs text-sky-600 hover:underline dark:text-sky-400">
+                                                                {u.phone}
+                                                            </a>
+                                                        )}
                                                     </td>
                                                     <td className="py-2 pr-3"><SubscriptionBadge sub={u.subscription} /></td>
                                                     <td className="py-2 pr-3 text-slate-700 dark:text-slate-200">{money(u.total_spent)}</td>
@@ -681,7 +716,7 @@ export default function AdminCRM() {
                                                                 onClick={() => {
                                                                     setAttachTx(t);
                                                                     setAttachResult(null);
-                                                                    setAttachForm({ email: t.user_email || '', first_name: '', last_name: '' });
+                                                                    setAttachForm({ email: t.user_email || '', first_name: '', last_name: '', phone: '' });
                                                                 }}
                                                             >
                                                                 <UserPlus className="h-4 w-4 mr-1" /> Rattacher
@@ -749,6 +784,15 @@ export default function AdminCRM() {
                                     <Input placeholder="Email" type="email" value={editForm.email}
                                         onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
                                 </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <Input className="max-w-xs" placeholder="Téléphone" type="tel" value={editForm.phone}
+                                        onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                                    {detail.phone && (
+                                        <a href={`tel:${detail.phone}`} className="text-sm text-sky-600 hover:underline dark:text-sky-400">
+                                            Appeler {detail.phone}
+                                        </a>
+                                    )}
+                                </div>
                                 <Button size="sm" onClick={saveUser}><Save className="h-4 w-4 mr-2" /> Enregistrer</Button>
                             </section>
 
@@ -774,7 +818,12 @@ export default function AdminCRM() {
                             <section className="space-y-3">
                                 <h3 className="font-semibold text-slate-900 dark:text-white">Abonnements</h3>
                                 {detail.subscriptions.length === 0 ? (
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">Aucun abonnement.</p>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-1">
+                                        <p className="text-sm font-medium text-slate-900 dark:text-white">Aucun abonnement.</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            {explainNoSubscription(detail.transactions)}
+                                        </p>
+                                    </div>
                                 ) : (
                                     <div className="space-y-2">
                                         {detail.subscriptions.map((s) => (
@@ -878,6 +927,8 @@ export default function AdminCRM() {
                                 <Input placeholder="Nom" value={attachForm.last_name}
                                     onChange={(e) => setAttachForm((f) => ({ ...f, last_name: e.target.value }))} />
                             </div>
+                            <Input placeholder="Téléphone (facultatif)" type="tel" value={attachForm.phone}
+                                onChange={(e) => setAttachForm((f) => ({ ...f, phone: e.target.value }))} />
                         </div>
                     )}
 

@@ -54,6 +54,7 @@ export default function Profile() {
 
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
+    const [phone, setPhone] = useState('');
     const [saving, setSaving] = useState(false);
 
     const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
@@ -75,6 +76,7 @@ export default function Profile() {
             setProfile(profileRes.data);
             setFirstName(profileRes.data.first_name || '');
             setLastName(profileRes.data.last_name || '');
+            setPhone(profileRes.data.phone || '');
             setPayments(paymentsRes.data.items || []);
         } catch (e) {
             toast.error('Impossible de charger ton profil.');
@@ -89,9 +91,11 @@ export default function Profile() {
         e.preventDefault();
         setSaving(true);
         try {
-            await axios.patch('/api/profile', { first_name: firstName, last_name: lastName });
+            await axios.patch('/api/profile', {
+                first_name: firstName, last_name: lastName, phone,
+            });
             toast.success('Profil mis à jour');
-            setProfile((p) => ({ ...p, first_name: firstName, last_name: lastName }));
+            setProfile((p) => ({ ...p, first_name: firstName, last_name: lastName, phone }));
         } catch (err) {
             toast.error(err.response?.data?.detail || 'La mise à jour a échoué.');
         } finally {
@@ -203,6 +207,12 @@ export default function Profile() {
                                             <Label htmlFor="lastName">Nom</Label>
                                             <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Ton nom" />
                                         </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="phone">Téléphone</Label>
+                                        <Input id="phone" type="tel" inputMode="tel" autoComplete="tel"
+                                            value={phone} onChange={(e) => setPhone(e.target.value)}
+                                            placeholder="05X XXX XX XX" data-testid="profile-phone-input" />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
                                         <span className="flex items-center gap-2"><Mail className="h-4 w-4" /> {profile?.email}</span>

@@ -96,13 +96,14 @@ export const AuthProvider = ({ children }) => {
         return await loginWithToken(res.data.access_token);
     };
 
-    const register = async (email, password, firstName, lastName) => {
+    const register = async (email, password, firstName, lastName, phone) => {
         // L'inscription renvoie déjà un token : inutile de rejouer une connexion.
         const res = await axios.post('/api/auth/register', {
             email,
             password,
             first_name: firstName,
             last_name: lastName,
+            phone,
         });
         return await loginWithToken(res.data.access_token);
     };
