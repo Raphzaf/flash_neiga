@@ -1,42 +1,62 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { GraduationCap, BookOpen, AlertTriangle, Lightbulb, Loader2 } from 'lucide-react';
+import { GraduationCap, BookOpen, AlertTriangle, Lightbulb, Loader2, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import InlineChat from './InlineChat';
+import { getCachedLesson, prefetchLesson, fetchLesson } from '../lib/aiLessonCache';
 
 /**
  * Bouton « Petite leçon de code sur ce sujet » + dialog affichant la mini-leçon
  * générée par le coach IA pour une (question, réponse fausse).
  *
+ * Dès que le composant s'affiche (donc dès que l'élève voit son erreur), on
+ * demande au serveur si la leçon est DÉJÀ mémorisée — une lecture gratuite, qui
+ * ne déclenche aucune génération. Quand c'est le cas, et ce sera la règle une
+ * fois le cache constitué, la leçon s'ouvre instantanément au clic.
+ *
  * Props :
  *  - questionId (string, requis)
  *  - selectedOptionId (string, requis) : la mauvaise réponse donnée par l'élève
  *  - label (string, optionnel)
+ *  - prefetch (bool) : précharger la leçon déjà en cache (défaut : oui)
  *  - variant / className : passés au bouton
  */
-export default function AiLesson({ questionId, selectedOptionId, label, variant = 'outline', className = '' }) {
+export default function AiLesson({ questionId, selectedOptionId, label, prefetch = true, variant = 'outline', className = '' }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [lesson, setLesson] = useState(null);
+    const [lesson, setLesson] = useState(() => getCachedLesson(questionId, selectedOptionId));
+    // Évite un setState après démontage (l'élève enchaîne souvent les questions).
+    const mounted = useRef(true);
+
+    useEffect(() => () => { mounted.current = false; }, []);
+
+    useEffect(() => {
+        // La leçon change avec la question : on repart de ce que l'on sait déjà.
+        const known = getCachedLesson(questionId, selectedOptionId);
+        setLesson(known);
+        if (known || !prefetch || !questionId || !selectedOptionId) return;
+
+        let cancelled = false;
+        prefetchLesson(questionId, selectedOptionId).then((preloaded) => {
+            if (preloaded && !cancelled && mounted.current) setLesson(preloaded);
+        });
+        return () => { cancelled = true; };
+    }, [questionId, selectedOptionId, prefetch]);
 
     const loadLesson = async () => {
         setOpen(true);
-        if (lesson) return; // déjà chargée
+        if (lesson) return; // déjà chargée (préchargement ou consultation précédente)
         setLoading(true);
         try {
-            const res = await axios.post('/api/ai-coach/lesson', {
-                question_id: questionId,
-                selected_option_id: selectedOptionId,
-            });
-            setLesson(res.data);
+            const data = await fetchLesson(questionId, selectedOptionId);
+            if (mounted.current) setLesson(data);
         } catch (e) {
             const msg = e.response?.data?.detail || "Le prof est momentanément indisponible, réessaie dans un instant.";
             toast.error(msg);
-            setOpen(false);
+            if (mounted.current) setOpen(false);
         } finally {
-            setLoading(false);
+            if (mounted.current) setLoading(false);
         }
     };
 
@@ -68,6 +88,17 @@ export default function AiLesson({ questionId, selectedOptionId, label, variant 
                         </div>
                     ) : lesson ? (
                         <div className="space-y-5">
+                            {/* Repli : le prof n'a pas pu être joint, on affiche la correction officielle */}
+                            {lesson.degraded && (
+                                <p className="flex items-start gap-2 text-xs p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                                    <WifiOff className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <span>
+                                        Voici la correction officielle. Ton prof n'est pas joignable à cet instant :
+                                        rouvre cette leçon dans quelques minutes pour l'explication détaillée.
+                                    </span>
+                                </p>
+                            )}
+
                             {/* Explication */}
                             <section>
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white mb-1">

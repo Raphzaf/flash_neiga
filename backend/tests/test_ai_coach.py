@@ -24,7 +24,7 @@ from database import Base, get_db  # noqa: E402
 from models import (  # noqa: E402
     UserDB, QuestionDB, ExamSessionDB, UserMistakeDB, AILessonDB, User,
 )
-from auth import get_current_user, get_current_user_optional  # noqa: E402
+from auth import get_current_user, get_current_user_optional, require_subscription  # noqa: E402
 import routes.ai_coach as ai_coach  # noqa: E402
 import routes.trap_questions as trap_questions  # noqa: E402
 
@@ -85,6 +85,9 @@ def db(monkeypatch):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_current_user
     app.dependency_overrides[get_current_user_optional] = override_current_user
+    # L'élève de test n'a pas d'abonnement en base : sans cet override, toutes
+    # les routes IA répondraient 402 avant d'atteindre le code testé.
+    app.dependency_overrides[require_subscription] = override_current_user
 
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
@@ -132,9 +135,30 @@ def test_lesson_generated_then_cached(db, monkeypatch):
     assert db.query(AILessonDB).count() == 1
 
 
-def test_lesson_503_when_ai_unavailable_and_no_cache(db, monkeypatch):
+def test_lesson_falls_back_to_official_correction_when_ai_down(db, monkeypatch):
+    """IA injoignable : l'élève reçoit quand même l'explication de son erreur."""
     monkeypatch.setattr(ai_coach, "ai_configured", lambda: False)
     r = client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "b"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "fallback"
+    assert body["degraded"] is True
+    # La correction officielle et la bonne réponse sont bien restituées.
+    assert "Explication officielle q1" in body["explication"]
+    assert "Bonne réponse" in body["explication"]
+    assert body["erreurs_a_eviter"]
+
+
+def test_lesson_503_when_ai_down_and_question_has_no_material(db, monkeypatch):
+    """Sans correction ni bonne réponse, mieux vaut un 503 honnête qu'un texte vide."""
+    monkeypatch.setattr(ai_coach, "ai_configured", lambda: False)
+    db.add(QuestionDB(
+        id="q-vide", text="Question sans correction", category="Divers",
+        options=[{"id": "a", "text": "Une option", "is_correct": False}],
+        explanation=None,
+    ))
+    db.commit()
+    r = client.post("/api/ai-coach/lesson", json={"question_id": "q-vide", "selected_option_id": "a"})
     assert r.status_code == 503
     assert "prof" in r.json()["detail"].lower()
 

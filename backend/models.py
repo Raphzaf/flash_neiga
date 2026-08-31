@@ -217,6 +217,40 @@ class AILessonDB(Base):
     )
 
 
+class AIAnswerCacheDB(Base):
+    """Mémoire longue durée du prof IA : toute réponse produite est conservée et
+    resservie telle quelle au prochain élève qui pose la même question.
+
+    C'est le cœur de l'économie d'appels. Une explication générée aujourd'hui
+    pour un élève sert à tous ceux qui se tromperont sur la même question dans
+    une semaine, un mois ou un an — sans jamais rappeler (ni repayer) le modèle.
+
+    La clé (`cache_key`) est un SHA-256 qui intègre la version du prompt : le
+    jour où l'on change la façon d'enseigner, les anciennes réponses cessent
+    naturellement d'être servies sans qu'il faille purger la table.
+    """
+    __tablename__ = "ai_answer_cache"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    cache_key = Column(String(64), unique=True, index=True, nullable=False)
+    # Nature du contenu : "lesson" (explication d'une erreur), "chat" (question
+    # libre au prof)… Sert à piloter les purges et les statistiques.
+    kind = Column(String, index=True, nullable=False)
+    # Sujet rattaché quand il y en a un (question_id pour une leçon) : permet
+    # d'invalider toutes les réponses d'une question dont on corrige l'énoncé.
+    subject_id = Column(String, index=True, nullable=True)
+    # Extrait lisible de la demande : indispensable pour auditer le cache côté admin.
+    prompt_preview = Column(Text, nullable=True)
+    payload_json = Column(Text, nullable=False)
+    provider = Column(String, nullable=True)
+    model = Column(String, nullable=True)
+    prompt_version = Column(String, index=True, nullable=True)
+    # Nombre de fois où cette réponse a été resservie = appels API économisés.
+    hit_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_used_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class SeriesReportDB(Base):
     """Cache du bilan de série généré par le coach IA après un examen/série."""
     __tablename__ = "series_reports"
