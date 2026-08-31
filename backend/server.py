@@ -78,6 +78,10 @@ try:
 except ImportError:
     from backend.routes.profile import router as profile_router
 try:
+    from routes.invoices import router as invoices_router
+except ImportError:
+    from backend.routes.invoices import router as invoices_router
+try:
     from routes.admin_crm import router as admin_crm_router
 except ImportError:
     from backend.routes.admin_crm import router as admin_crm_router
@@ -155,6 +159,7 @@ app.include_router(ai_coach_router)
 app.include_router(trap_questions_router)
 app.include_router(profile_router)
 app.include_router(admin_crm_router)
+app.include_router(invoices_router)
 
 
 # ===== Health Check Endpoint =====

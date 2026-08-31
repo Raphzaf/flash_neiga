@@ -445,3 +445,120 @@ def test_reponse_de_chat_vide_en_cache_traitee_comme_absente(db, monkeypatch):
     assert r.status_code == 200
     assert r.json()["reply"] == "En ville : 50 km/h."
     assert calls["n"] == 1  # on a bien régénéré plutôt que servir du vide
+
+
+# ===== Préchargement « une fois pour toutes » =====
+def test_couverture_du_prechargement(db, monkeypatch):
+    """L'admin doit pouvoir voir ce qui reste à précharger."""
+    # 3 options dont 2 fausses : 2 explications attendues pour cette question.
+    db.add(QuestionDB(
+        id="q2", text="Combien de temps garder ses distances ?", category="Conduite",
+        options=[
+            {"id": "a", "text": "2 secondes", "is_correct": True},
+            {"id": "b", "text": "0,5 seconde", "is_correct": False},
+            {"id": "c", "text": "Peu importe", "is_correct": False},
+        ],
+        explanation="La règle des deux secondes.",
+    ))
+    # Question sans bonne réponse : aucune erreur n'y est explicable.
+    db.add(QuestionDB(
+        id="q-sans", text="Question mal saisie", category="Divers",
+        options=[{"id": "a", "text": "Une option", "is_correct": False}],
+    ))
+    db.commit()
+
+    r = client.get("/api/ai-coach/cache-coverage")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["explications_attendues"] == 3  # q1 (1 fausse) + q2 (2 fausses)
+    assert body["questions_sans_bonne_reponse"] == 1
+    assert body["explications_en_cache"] == 0
+    assert body["couverture_pct"] == 0
+
+    # On en préremplit une : la couverture doit suivre.
+    monkeypatch.setattr(ai_coach, "call_structured", lambda **kw: dict(FAKE_LESSON))
+    client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "b"})
+
+    body = client.get("/api/ai-coach/cache-coverage").json()
+    assert body["explications_en_cache"] == 1
+    assert body["explications_manquantes"] == 2
+    assert body["manquantes_par_categorie"]["Conduite"] == 2
+
+
+def test_script_de_prechargement_inventorie_et_reprend(db, monkeypatch):
+    """Le script ne doit produire que ce qui manque, et être relançable sans risque."""
+    import scripts.warm_ai_cache as warm
+
+    db.add(QuestionDB(
+        id="q2", text="Deuxième question", category="Conduite",
+        options=[
+            {"id": "a", "text": "Bon", "is_correct": True},
+            {"id": "b", "text": "Faux 1", "is_correct": False},
+            {"id": "c", "text": "Faux 2", "is_correct": False},
+        ],
+        explanation="Explication.",
+    ))
+    db.commit()
+
+    # Le script ouvre ses propres sessions : on les fait pointer sur la base de test.
+    monkeypatch.setattr(warm, "SessionLocal", TestingSessionLocal)
+
+    pairs = warm.collect_pairs()
+    assert {(p.question_id, p.option_id) for p in pairs} == {("q1", "b"), ("q2", "b"), ("q2", "c")}
+
+    calls = {"n": 0}
+
+    def fake_generate(question, option_id):
+        calls["n"] += 1
+        return dict(FAKE_LESSON)
+
+    monkeypatch.setattr(warm, "_generate_lesson", fake_generate)
+
+    progress = warm.Progress(total=len(pairs))
+    session = TestingSessionLocal()
+    try:
+        for pair in pairs:
+            warm.warm_one(session, pair, progress, delay=0)
+    finally:
+        session.close()
+
+    assert calls["n"] == 3
+    assert progress.done == 3 and progress.failed == 0
+
+    # Deuxième passage : tout est en cache, plus aucun appel.
+    progress2 = warm.Progress(total=len(pairs))
+    session = TestingSessionLocal()
+    try:
+        for pair in pairs:
+            warm.warm_one(session, pair, progress2, delay=0)
+    finally:
+        session.close()
+
+    assert calls["n"] == 3  # rien de regénéré
+    assert progress2.skipped == 3
+
+
+def test_prechargement_survit_a_un_echec_isole(db, monkeypatch):
+    """Un échec sur une question ne doit pas interrompre des heures de travail."""
+    import scripts.warm_ai_cache as warm
+    from ai_client import AICoachUnavailable
+
+    monkeypatch.setattr(warm, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(warm, "_stop", threading.Event())  # pas de pause réelle
+
+    def boom(question, option_id):
+        raise AICoachUnavailable("quota épuisé")
+
+    monkeypatch.setattr(warm, "_generate_lesson", boom)
+
+    progress = warm.Progress(total=1)
+    session = TestingSessionLocal()
+    try:
+        warm.warm_one(session, warm.Pair("q1", "b", "Panneaux"), progress, delay=0)
+    finally:
+        session.close()
+
+    assert progress.failed == 1
+    assert progress.done == 0
+    # Rien n'a été écrit : le prochain passage retentera ce couple.
+    assert db.query(AIAnswerCacheDB).filter(AIAnswerCacheDB.kind == "lesson").count() == 0

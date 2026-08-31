@@ -26,6 +26,7 @@ try:
     from database import get_db
     from models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
+        AIAnswerCacheDB,
     )
     from auth import get_current_user, require_admin, require_subscription
     from ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
@@ -34,6 +35,7 @@ except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
+        AIAnswerCacheDB,
     )
     from backend.auth import get_current_user, require_admin, require_subscription
     from backend.ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
@@ -408,6 +410,57 @@ def ai_selftest(current_user: User = Depends(get_current_user)):
         return {"ok": False, "error": str(exc)[:500], "diagnostics": diagnostics()}
     except Exception as exc:  # filet de sécurité : on renvoie l'erreur au lieu d'un 500 opaque
         return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:500]}", "diagnostics": diagnostics()}
+
+
+@router.get("/cache-coverage", dependencies=[Depends(require_admin)])
+def cache_coverage(db: Session = Depends(get_db)):
+    """Couverture du préchargement : combien d'erreurs possibles sont déjà expliquées.
+
+    Répond à la question « reste-t-il des élèves qui attendront ? ». Le
+    préchargement lui-même se lance avec `backend/scripts/warm_ai_cache.py` :
+    plusieurs milliers d'appels ne tiennent pas dans une requête web, qu'un
+    redéploiement interromprait.
+    """
+    questions = db.query(QuestionDB).all()
+
+    expected: Dict[str, str] = {}   # clé de cache -> catégorie
+    skipped_questions = 0
+    for question in questions:
+        options = question.options or []
+        if not any(opt.get("is_correct") for opt in options):
+            # Sans bonne réponse identifiée, aucune erreur n'est explicable.
+            skipped_questions += 1
+            continue
+        for opt in options:
+            if opt.get("is_correct") or not opt.get("id"):
+                continue
+            expected[_lesson_cache_key(question, opt["id"])] = question.category or "Général"
+
+    cached_keys = {
+        row[0] for row in
+        db.query(AIAnswerCacheDB.cache_key).filter(AIAnswerCacheDB.kind == "lesson").all()
+    }
+
+    missing_by_category: Dict[str, int] = {}
+    covered = 0
+    for key, category in expected.items():
+        if key in cached_keys:
+            covered += 1
+        else:
+            missing_by_category[category] = missing_by_category.get(category, 0) + 1
+
+    total = len(expected)
+    return {
+        "questions": len(questions),
+        "questions_sans_bonne_reponse": skipped_questions,
+        "explications_attendues": total,
+        "explications_en_cache": covered,
+        "explications_manquantes": total - covered,
+        "couverture_pct": round(100 * covered / total) if total else 0,
+        "manquantes_par_categorie": dict(
+            sorted(missing_by_category.items(), key=lambda kv: -kv[1])[:20]
+        ),
+    }
 
 
 @router.get("/cache-stats", dependencies=[Depends(require_admin)])
