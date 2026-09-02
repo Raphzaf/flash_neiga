@@ -25,3 +25,7 @@ google-genai>=1.0.0
 openai>=1.55.0
 # Optionnel : fournisseur Claude (AI_PROVIDER=claude). Décommenter si besoin.
 # anthropic[vertex]>=0.40.0
+# Factures d'abonnement : génération des PDF remis à la comptable.
+# Sans cette bibliothèque l'app démarre quand même — seul l'export PDF est
+# indisponible, l'export CSV continue de fonctionner.
+reportlab>=4.0.0

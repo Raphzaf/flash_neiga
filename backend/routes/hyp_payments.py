@@ -230,6 +230,45 @@ def provision_subscription(db: Session, transaction: TransactionDB) -> Optional[
     return subscription
 
 
+def issue_invoice_safely(db: Session, transaction: TransactionDB) -> None:
+    """Émet la facture d'un paiement encaissé, sans jamais compromettre le paiement.
+
+    À appeler APRÈS le commit du paiement : l'émission a besoin de la transaction
+    et de l'abonnement déjà en base, et elle committe pour son propre compte
+    (l'attribution du numéro dépend de la contrainte d'unicité).
+
+    Un échec ici — mentions légales non renseignées, base indisponible — ne doit
+    jamais faire échouer l'encaissement : l'élève a payé, il doit avoir son accès.
+    Les factures manquantes se rattrapent avec /api/admin/invoices/generate.
+    """
+    try:
+        import invoicing
+    except ImportError:  # pragma: no cover - import depuis la racine du dépôt
+        from backend import invoicing
+
+    if transaction is None or transaction.status != "completed" or not transaction.amount:
+        return
+    try:
+        if not invoicing.invoicing_configured():
+            logger.info(
+                "Facture non émise pour %s : identité de l'entreprise incomplète (%s). "
+                "Renseigne INVOICE_COMPANY_NAME et INVOICE_COMPANY_LEGAL_ID, puis lance "
+                "/api/admin/invoices/generate pour rattraper.",
+                transaction.id, ", ".join(invoicing.missing_issuer_fields()),
+            )
+            return
+        plan_name = (HYP_PLANS.get(transaction.plan_id or "") or {}).get("name")
+        invoice = invoicing.issue_invoice(db, transaction, plan_name=plan_name)
+        logger.info("Facture %s émise pour le paiement %s", invoice.number, transaction.id)
+    except Exception as exc:
+        logger.error("Facture non émise pour le paiement %s : %s — à rattraper via "
+                     "/api/admin/invoices/generate", transaction.id, exc, exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 def _hyp_coin(currency: str) -> int:
     """Map an ISO currency code to the HYP `Coin` code (defaults to ILS)."""
     return CURRENCY_TO_COIN.get((currency or "ILS").upper(), 1)
@@ -636,6 +675,7 @@ async def create_payment(
             user_id=request.user_id, user_email=user_email, transaction_id=transaction.id,
         )
         db.commit()
+        issue_invoice_safely(db, transaction)
         logger.info("Accès offert via le code %s pour %s", applied_promo.code, user_email)
         return CreatePaymentResponse(
             payment_url=None,
@@ -840,6 +880,7 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
             transaction.event_data = event_data
 
         db.commit()
+        issue_invoice_safely(db, transaction)
         logger.info(f"Transaction {transaction_id} completed successfully")
 
         return {"status": "success", "message": "Payment completed"}
@@ -1010,6 +1051,10 @@ async def claim_payment(request: ClaimAccessRequest, db: Session = Depends(get_d
 
     subscription = provision_subscription(db, transaction)
     db.commit()
+
+    # Le paiement n'avait pas de compte à l'encaissement : sa facture n'a donc
+    # pas pu porter de client. Maintenant qu'il est rattaché, on l'émet.
+    issue_invoice_safely(db, transaction)
 
     logger.info("Paiement %s rattaché au compte %s", transaction.id, email)
 

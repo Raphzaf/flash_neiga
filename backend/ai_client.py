@@ -38,7 +38,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+import random
+import threading
+import time
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +91,210 @@ class AICoachUnavailable(Exception):
     """Levée quand le coach IA ne peut pas répondre (non configuré ou API en erreur)."""
 
 
+class AITransientError(AICoachUnavailable):
+    """Échec passager côté modèle (réponse vide, JSON tronqué) : une relance peut aboutir.
+
+    Sous-classe d'AICoachUnavailable pour que tout le code appelant existant
+    (`except AICoachUnavailable`) continue de fonctionner à l'identique.
+    """
+
+
+# ===== Réglages de latence et de robustesse =====
+# Un élève qui attend est un élève qui décroche : on préfère échouer vite et
+# laisser l'appelant servir son repli plutôt que de faire patienter une minute.
+_DEFAULT_REQUEST_TIMEOUT = 25.0   # durée max d'UN appel réseau
+_DEFAULT_TOTAL_DEADLINE = 40.0    # budget total d'un appel logique, relances comprises
+_DEFAULT_MAX_ATTEMPTS = 3
+_BACKOFF_BASE = 0.6               # 1re relance ~0,6 s, puis 1,2 s, 2,4 s…
+_BACKOFF_MAX = 5.0
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name) or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name) or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def request_timeout() -> float:
+    """Délai maximal d'un appel unitaire au fournisseur (secondes)."""
+    return _env_float("AI_REQUEST_TIMEOUT", _DEFAULT_REQUEST_TIMEOUT)
+
+
+def total_deadline() -> float:
+    """Budget total accordé à un appel logique, relances comprises (secondes)."""
+    return _env_float("AI_TOTAL_DEADLINE", _DEFAULT_TOTAL_DEADLINE)
+
+
+def max_attempts() -> int:
+    """Nombre total de tentatives (1 = aucune relance)."""
+    return _env_int("AI_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
+
+
+# ===== Disjoncteur =====
+class _CircuitBreaker:
+    """Coupe-circuit par fournisseur.
+
+    Quand l'API du modèle tombe, chaque requête coûte un timeout complet à
+    l'élève. Après `AI_BREAKER_THRESHOLD` échecs passagers consécutifs, on
+    ouvre le circuit : les appels suivants échouent instantanément (l'appelant
+    sert alors son repli) pendant `AI_BREAKER_COOLDOWN` secondes, puis une
+    requête « sonde » est de nouveau laissée passer.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._failures: Dict[str, int] = {}
+        self._open_until: Dict[str, float] = {}
+
+    def blocked_for(self, provider: str) -> float:
+        """Secondes restantes avant réouverture (0 si le circuit est fermé)."""
+        with self._lock:
+            remaining = self._open_until.get(provider, 0.0) - time.monotonic()
+        return remaining if remaining > 0 else 0.0
+
+    def record_success(self, provider: str) -> None:
+        with self._lock:
+            self._failures.pop(provider, None)
+            self._open_until.pop(provider, None)
+
+    def record_failure(self, provider: str) -> None:
+        threshold = _env_int("AI_BREAKER_THRESHOLD", 4)
+        cooldown = _env_float("AI_BREAKER_COOLDOWN", 30.0)
+        with self._lock:
+            count = self._failures.get(provider, 0) + 1
+            self._failures[provider] = count
+            if count >= threshold:
+                self._open_until[provider] = time.monotonic() + cooldown
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            now = time.monotonic()
+            return {
+                "consecutive_failures": dict(self._failures),
+                "open_providers": {
+                    prov: round(until - now, 1)
+                    for prov, until in self._open_until.items()
+                    if until > now
+                },
+            }
+
+    def reset(self) -> None:
+        with self._lock:
+            self._failures.clear()
+            self._open_until.clear()
+
+
+_breaker = _CircuitBreaker()
+
+
+def reset_breaker() -> None:
+    """Referme le disjoncteur (utilisé par les tests et l'endpoint d'admin)."""
+    _breaker.reset()
+
+
+# ===== Classement des erreurs =====
+# Un 401 (clé invalide) ou un 400 (schéma refusé) ne guérira pas tout seul :
+# relancer ne ferait qu'ajouter de l'attente. Seuls les codes ci-dessous valent
+# une relance.
+_TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
+_TRANSIENT_MARKERS = (
+    "timeout", "timed out", "deadline", "temporarily", "unavailable",
+    "overloaded", "rate limit", "too many requests", "connection",
+    "broken pipe", "reset by peer", "try again", "internal error",
+    "service_unavailable", "server error",
+)
+
+
+def _status_code(exc: Exception) -> Optional[int]:
+    for attr in ("status_code", "http_status", "code"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+    response = getattr(exc, "response", None)
+    value = getattr(response, "status_code", None)
+    return value if isinstance(value, int) else None
+
+
+def _is_transient(exc: Exception) -> bool:
+    """L'erreur vaut-elle une relance ?"""
+    if isinstance(exc, AITransientError):
+        return True
+    if isinstance(exc, AICoachUnavailable):
+        return False  # erreur de configuration : inutile d'insister
+    status = _status_code(exc)
+    if status is not None:
+        return status in _TRANSIENT_STATUS
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    haystack = f"{type(exc).__name__}: {exc}".lower()
+    return any(marker in haystack for marker in _TRANSIENT_MARKERS)
+
+
+_T = TypeVar("_T")
+
+
+def _with_retries(provider: str, operation: str, fn: Callable[[], _T]) -> _T:
+    """Exécute `fn` avec relances à backoff exponentiel, sous disjoncteur.
+
+    Le budget total prime sur le nombre de tentatives : on ne relance jamais si
+    le temps restant ne permet pas d'aboutir — mieux vaut rendre la main à
+    l'appelant, qui a un repli à servir, que de dépasser le délai.
+    """
+    blocked = _breaker.blocked_for(provider)
+    if blocked > 0:
+        raise AICoachUnavailable(
+            f"Service « {provider} » temporairement coupé après plusieurs échecs "
+            f"(nouvelle tentative possible dans {blocked:.0f} s)."
+        )
+
+    deadline = time.monotonic() + total_deadline()
+    attempts = max_attempts()
+    last_exc: Optional[Exception] = None
+    used = 0
+
+    for attempt in range(1, attempts + 1):
+        used = attempt
+        try:
+            result = fn()
+        except Exception as exc:
+            last_exc = exc
+            if not _is_transient(exc):
+                raise
+            _breaker.record_failure(provider)
+            remaining = deadline - time.monotonic()
+            if attempt >= attempts or remaining <= 0:
+                break
+            delay = min(_BACKOFF_BASE * (2 ** (attempt - 1)), _BACKOFF_MAX)
+            delay += random.uniform(0, delay / 2)  # jitter : évite les rafales synchronisées
+            if delay >= remaining:
+                break
+            logger.warning(
+                "IA %s/%s : tentative %s/%s en échec (%s) — relance dans %.1f s",
+                provider, operation, attempt, attempts, exc, delay,
+            )
+            time.sleep(delay)
+            continue
+        _breaker.record_success(provider)
+        return result
+
+    detail = str(last_exc) if last_exc else "cause inconnue"
+    raise AICoachUnavailable(
+        f"Le modèle « {provider} » n'a pas répondu après {used} tentative(s) : {detail}"
+    )
+
+
 _client = None  # cache du client
+_client_provider: Optional[str] = None  # fournisseur pour lequel `_client` a été construit
 
 
 # ===== Détection de configuration =====
@@ -181,17 +387,70 @@ def diagnostics() -> Dict[str, Any]:
         "use_vertex": use_vertex,
         "configured": ai_configured(),
         "reason": reason,
+        "request_timeout_s": request_timeout(),
+        "total_deadline_s": total_deadline(),
+        "max_attempts": max_attempts(),
+        "breaker": _breaker.snapshot(),
     }
 
 
 # ===== Construction du client =====
+def _gemini_http_options():
+    """HttpOptions avec timeout, si la version du SDK les expose.
+
+    Sans timeout explicite, un incident réseau côté Google fait attendre l'élève
+    indéfiniment. Les SDK plus anciens n'ont pas `HttpOptions` : on dégrade
+    proprement plutôt que de casser l'app.
+    """
+    if _genai_types is None or not hasattr(_genai_types, "HttpOptions"):
+        return None
+    try:
+        # Le SDK google-genai attend des millisecondes.
+        return _genai_types.HttpOptions(timeout=int(request_timeout() * 1000))
+    except Exception:  # pragma: no cover - dépend de la version du SDK
+        return None
+
+
+def _new_gemini_client():
+    http_options = _gemini_http_options()
+    if _gemini_use_vertex():
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION")
+        if not (project and location):
+            raise AICoachUnavailable(
+                "Config Vertex (Gemini) incomplète : GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION requis."
+            )
+        kwargs: Dict[str, Any] = dict(vertexai=True, project=project, location=location)
+    else:
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise AICoachUnavailable("GEMINI_API_KEY (ou GOOGLE_API_KEY) manquant.")
+        kwargs = dict(api_key=api_key)
+
+    if http_options is not None:
+        try:
+            return _genai.Client(http_options=http_options, **kwargs)
+        except TypeError:  # pragma: no cover - SDK sans http_options
+            logger.info("SDK google-genai sans http_options : client sans timeout explicite.")
+    return _genai.Client(**kwargs)
+
+
+def reset_client() -> None:
+    """Oublie le client mis en cache (changement de config, tests)."""
+    global _client, _client_provider
+    _client = None
+    _client_provider = None
+
+
 def get_client():
     """Retourne (et met en cache) le client IA adapté au fournisseur/config."""
-    global _client
-    if _client is not None:
-        return _client
+    global _client, _client_provider
 
     provider = _provider()
+    # Le cache est indexé par fournisseur : changer AI_PROVIDER en cours de vie
+    # du process doit reconstruire le client, pas réutiliser l'ancien.
+    if _client is not None and _client_provider == provider:
+        return _client
 
     if provider == "claude":
         if _anthropic is None:
@@ -202,11 +461,17 @@ def get_client():
             if not (project_id and region):
                 raise AICoachUnavailable("Config Vertex (Claude) incomplète.")
             from anthropic import AnthropicVertex  # type: ignore
-            _client = AnthropicVertex(project_id=project_id, region=region)
+            _client = AnthropicVertex(
+                project_id=project_id,
+                region=region,
+                timeout=request_timeout(),
+                max_retries=0,  # les relances sont pilotées par _with_retries
+            )
         else:
             if not os.environ.get("ANTHROPIC_API_KEY"):
                 raise AICoachUnavailable("ANTHROPIC_API_KEY manquant.")
-            _client = _anthropic.Anthropic()
+            _client = _anthropic.Anthropic(timeout=request_timeout(), max_retries=0)
+        _client_provider = provider
         return _client
 
     if provider == "moonshot":
@@ -221,24 +486,16 @@ def get_client():
             api_key=api_key,
             base_url=MOONSHOT_BASE_URL,
             max_retries=0,
-            timeout=120.0,
+            timeout=request_timeout(),
         )
+        _client_provider = provider
         return _client
 
     # --- Gemini (défaut) ---
     if _genai is None:
         raise AICoachUnavailable(f"SDK google-genai indisponible : {_GENAI_IMPORT_ERROR}")
-    if _gemini_use_vertex():
-        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        location = os.environ.get("GOOGLE_CLOUD_LOCATION")
-        if not (project and location):
-            raise AICoachUnavailable("Config Vertex (Gemini) incomplète : GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION requis.")
-        _client = _genai.Client(vertexai=True, project=project, location=location)
-    else:
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            raise AICoachUnavailable("GEMINI_API_KEY (ou GOOGLE_API_KEY) manquant.")
-        _client = _genai.Client(api_key=api_key)
+    _client = _new_gemini_client()
+    _client_provider = provider
     return _client
 
 
@@ -300,14 +557,20 @@ def _gemini_config(system: str, max_tokens: int, with_thinking: bool, response_s
     return _genai_types.GenerateContentConfig(**kwargs)
 
 
-def _describe_empty(response) -> str:
-    parts = []
+def _block_reason(response) -> Optional[str]:
     try:
         pf = getattr(response, "prompt_feedback", None)
-        if pf and getattr(pf, "block_reason", None):
-            parts.append(f"block_reason={pf.block_reason}")
+        reason = getattr(pf, "block_reason", None) if pf else None
+        return str(reason) if reason else None
     except Exception:
-        pass
+        return None
+
+
+def _describe_empty(response) -> str:
+    parts = []
+    blocked = _block_reason(response)
+    if blocked:
+        parts.append(f"block_reason={blocked}")
     try:
         cands = getattr(response, "candidates", None) or []
         if cands and getattr(cands[0], "finish_reason", None):
@@ -315,6 +578,15 @@ def _describe_empty(response) -> str:
     except Exception:
         pass
     return ", ".join(parts) or "aucun texte renvoyé"
+
+
+def _empty_response_error(response) -> AICoachUnavailable:
+    """Un blocage sécurité se reproduira à l'identique : inutile de relancer.
+    Une réponse vide sans motif, elle, est un aléa du modèle : on retente."""
+    detail = _describe_empty(response)
+    if _block_reason(response):
+        return AICoachUnavailable(f"Réponse du modèle bloquée ({detail}).")
+    return AITransientError(f"Réponse du modèle vide ({detail}).")
 
 
 def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client) -> Dict[str, Any]:
@@ -351,6 +623,11 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
             break
         except Exception as exc:
             last_exc = exc
+            # Une panne ou un quota ne se règle pas en changeant de variante de
+            # config : on remonte tout de suite pour que _with_retries applique
+            # son backoff, au lieu d'enchaîner 3 appels dans la seconde.
+            if _is_transient(exc):
+                raise
             continue
     if response is None:
         logger.warning("Appel Gemini en échec : %s", last_exc)
@@ -358,7 +635,7 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
 
     text = getattr(response, "text", None)
     if not text:
-        raise AICoachUnavailable(f"Réponse Gemini vide ou bloquée ({_describe_empty(response)}).")
+        raise _empty_response_error(response)
     return _parse_json(text)
 
 
@@ -373,7 +650,9 @@ def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tok
         )
     except Exception as exc:
         logger.warning("Appel Claude en échec : %s", exc)
-        raise AICoachUnavailable(str(exc)) from exc
+        # On laisse l'exception d'origine remonter : _is_transient a besoin de
+        # son status_code pour décider s'il faut relancer.
+        raise
 
     if getattr(response, "stop_reason", None) == "refusal":
         raise AICoachUnavailable("La réponse a été refusée par le modèle.")
@@ -384,7 +663,7 @@ def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tok
             text = block.text
             break
     if not text:
-        raise AICoachUnavailable("Réponse Claude vide.")
+        raise AITransientError("Réponse Claude vide.")
     return _parse_json(text)
 
 
@@ -395,14 +674,17 @@ def _moonshot_error(exc: Exception) -> AICoachUnavailable:
     (tokens d'entrée + max_completion_tokens), donc une valeur de sortie trop
     haute déclenche un 429 immédiat, même sans trafic.
     """
-    status = getattr(exc, "status_code", None)
+    status = _status_code(exc)
     if status == 429:
-        return AICoachUnavailable(
+        # Retentable : une relance espacée passe souvent (le quota se libère).
+        return AITransientError(
             "Limite de débit Moonshot atteinte (429). Réduis max_completion_tokens "
             "ou recharge le compte pour passer au palier supérieur."
         )
     if status == 401:
         return AICoachUnavailable("Clé MOONSHOT_API_KEY invalide ou non activée (401).")
+    if status in _TRANSIENT_STATUS or _is_transient(exc):
+        return AITransientError(f"Appel Moonshot en échec (passager) : {exc}")
     return AICoachUnavailable(f"Appel Moonshot en échec : {exc}")
 
 
@@ -423,10 +705,10 @@ def _log_moonshot_usage(response) -> None:
 def _moonshot_text(response) -> str:
     choices = getattr(response, "choices", None) or []
     if not choices:
-        raise AICoachUnavailable("Réponse Moonshot vide.")
+        raise AITransientError("Réponse Moonshot vide.")
     content = getattr(choices[0].message, "content", None)
     if not content or not content.strip():
-        raise AICoachUnavailable("Réponse Moonshot vide.")
+        raise AITransientError("Réponse Moonshot vide.")
     return content.strip()
 
 
@@ -501,8 +783,8 @@ def _parse_json(text: str) -> Dict[str, Any]:
             obj, _ = decoder.raw_decode(text[start:])
             return obj
         except json.JSONDecodeError as exc:
-            raise AICoachUnavailable(f"JSON invalide renvoyé par le modèle : {exc}") from exc
-    raise AICoachUnavailable("Réponse du modèle sans JSON exploitable.")
+            raise AITransientError(f"JSON invalide renvoyé par le modèle : {exc}") from exc
+    raise AITransientError("Réponse du modèle sans JSON exploitable.")
 
 
 def _chat_gemini(system: str, history: list, max_tokens: int, client) -> str:
@@ -527,16 +809,18 @@ def _chat_gemini(system: str, history: list, max_tokens: int, client) -> str:
 
     try:
         response = _do(with_thinking=True)
-    except Exception:
+    except Exception as exc:
+        if _is_transient(exc):
+            raise  # backoff géré par _with_retries, pas de second appel immédiat
         try:
             response = _do(with_thinking=False)
         except Exception as exc2:
             logger.warning("Chat Gemini en échec : %s", exc2)
-            raise AICoachUnavailable(str(exc2)) from exc2
+            raise
 
     text = getattr(response, "text", None)
     if not text:
-        raise AICoachUnavailable(f"Réponse Gemini vide ou bloquée ({_describe_empty(response)}).")
+        raise _empty_response_error(response)
     return text.strip()
 
 
@@ -556,13 +840,13 @@ def _chat_claude(system: str, history: list, max_tokens: int, client) -> str:
         )
     except Exception as exc:
         logger.warning("Chat Claude en échec : %s", exc)
-        raise AICoachUnavailable(str(exc)) from exc
+        raise
     if getattr(response, "stop_reason", None) == "refusal":
         raise AICoachUnavailable("La réponse a été refusée par le modèle.")
     for block in getattr(response, "content", []) or []:
         if getattr(block, "type", None) == "text":
             return block.text.strip()
-    raise AICoachUnavailable("Réponse Claude vide.")
+    raise AITransientError("Réponse Claude vide.")
 
 
 def call_chat(system: str, history: list, max_tokens: int = 2048, client=None) -> str:
@@ -570,14 +854,22 @@ def call_chat(system: str, history: list, max_tokens: int = 2048, client=None) -
 
     `history` : liste de {role: "user"|"assistant", content: str}, se terminant
     par le dernier message de l'élève. Renvoie la réponse texte du prof.
+
+    Relances automatiques sur incident passager, sous disjoncteur : en cas de
+    panne durable du fournisseur, l'appel échoue immédiatement au lieu de faire
+    patienter l'élève pendant tout le timeout.
     """
     cli = client or get_client()
     provider = _provider()
-    if provider == "claude":
-        return _chat_claude(system, history, max_tokens, cli)
-    if provider == "moonshot":
-        return _chat_moonshot(system, history, max_tokens, cli)
-    return _chat_gemini(system, history, max_tokens, cli)
+
+    def _run() -> str:
+        if provider == "claude":
+            return _chat_claude(system, history, max_tokens, cli)
+        if provider == "moonshot":
+            return _chat_moonshot(system, history, max_tokens, cli)
+        return _chat_gemini(system, history, max_tokens, cli)
+
+    return _with_retries(provider, "chat", _run)
 
 
 def call_structured(
@@ -590,12 +882,18 @@ def call_structured(
     """Appelle le modèle en mode JSON structuré et renvoie le dict parsé.
 
     Interface stable pour toutes les routes IA (indépendante du fournisseur).
-    Lève `AICoachUnavailable` en cas d'erreur (refus, vide, JSON invalide, API).
+    Relance automatiquement les incidents passagers (429, 5xx, JSON tronqué) avec
+    backoff, dans la limite du budget `AI_TOTAL_DEADLINE`, et lève
+    `AICoachUnavailable` quand il n'y a plus rien à tenter.
     """
     cli = client or get_client()
     provider = _provider()
-    if provider == "claude":
-        return _call_claude(system, user_content, schema, max_tokens, cli)
-    if provider == "moonshot":
-        return _call_moonshot(system, user_content, schema, max_tokens, cli)
-    return _call_gemini(system, user_content, schema, max_tokens, cli)
+
+    def _run() -> Dict[str, Any]:
+        if provider == "claude":
+            return _call_claude(system, user_content, schema, max_tokens, cli)
+        if provider == "moonshot":
+            return _call_moonshot(system, user_content, schema, max_tokens, cli)
+        return _call_gemini(system, user_content, schema, max_tokens, cli)
+
+    return _with_retries(provider, "structured", _run)

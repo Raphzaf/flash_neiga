@@ -134,6 +134,74 @@ class SubscriptionDB(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class InvoiceDB(Base):
+    """Facture émise pour un paiement encaissé.
+
+    Une facture est un document comptable : une fois émise, elle ne change plus.
+    C'est pourquoi tout y est recopié (nom du client, intitulé de la formule,
+    montants, taux de TVA) plutôt que lu par jointure : si l'élève change de nom
+    l'an prochain, la facture de cette année doit rester exactement ce qui a été
+    remis à la comptable.
+
+    On ne supprime jamais une facture — la numérotation doit rester continue.
+    Une erreur se corrige par un avoir (`credit_note`), qui porte son propre
+    numéro et des montants négatifs, et qui référence la facture annulée.
+    """
+    __tablename__ = "invoices"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    # Numéro séquentiel, sans trou : INV-2026-0001. Contrainte d'unicité en base
+    # car c'est la garantie qui tient réellement en cas d'émissions simultanées.
+    number = Column(String, unique=True, index=True, nullable=False)
+    year = Column(Integer, index=True, nullable=False)
+    sequence = Column(Integer, nullable=False)
+
+    # facture | avoir. Un avoir annule une facture antérieure.
+    document_type = Column(String, index=True, nullable=False, default="facture")
+    cancels_invoice_id = Column(String, index=True, nullable=True)
+
+    # Une transaction ne peut donner qu'une facture (relances de webhook incluses).
+    transaction_id = Column(String, unique=True, index=True, nullable=True)
+
+    # --- Client, figé au moment de l'émission ---
+    user_id = Column(String, index=True, nullable=True)
+    customer_name = Column(String, nullable=True)
+    customer_email = Column(String, nullable=True)
+
+    # --- Prestation, figée elle aussi ---
+    plan_id = Column(String, index=True, nullable=True)
+    plan_name = Column(String, nullable=True)
+    service_start = Column(DateTime, nullable=True)
+    service_end = Column(DateTime, nullable=True)
+
+    # --- Montants (dans la devise indiquée) ---
+    # total = net + tva. Les prix affichés aux élèves sont TTC : c'est le total
+    # qui fait foi, le net est recalculé à partir de lui.
+    currency = Column(String, nullable=False, default="ILS")
+    amount_total = Column(Float, nullable=False, default=0)
+    amount_net = Column(Float, nullable=False, default=0)
+    vat_rate = Column(Float, nullable=False, default=0)
+    vat_amount = Column(Float, nullable=False, default=0)
+
+    # --- Émetteur, recopié : les coordonnées de l'entreprise peuvent changer,
+    # une facture déjà remise ne doit pas changer avec elles. ---
+    issuer_snapshot = Column(JSON, nullable=True)
+
+    issued_at = Column(DateTime, default=datetime.utcnow, index=True)
+    paid_at = Column(DateTime, nullable=True)
+
+    status = Column(String, index=True, nullable=False, default="issued")  # issued | cancelled
+    cancelled_at = Column(DateTime, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("year", "sequence", "document_type", name="uq_invoice_sequence"),
+    )
+
+
 class PromoCodeDB(Base):
     """Code promotionnel : réduction en pourcentage, en shekels, ou accès offert.
 
@@ -215,6 +283,40 @@ class AILessonDB(Base):
     __table_args__ = (
         UniqueConstraint("question_id", "selected_option_id", name="uq_ai_lesson"),
     )
+
+
+class AIAnswerCacheDB(Base):
+    """Mémoire longue durée du prof IA : toute réponse produite est conservée et
+    resservie telle quelle au prochain élève qui pose la même question.
+
+    C'est le cœur de l'économie d'appels. Une explication générée aujourd'hui
+    pour un élève sert à tous ceux qui se tromperont sur la même question dans
+    une semaine, un mois ou un an — sans jamais rappeler (ni repayer) le modèle.
+
+    La clé (`cache_key`) est un SHA-256 qui intègre la version du prompt : le
+    jour où l'on change la façon d'enseigner, les anciennes réponses cessent
+    naturellement d'être servies sans qu'il faille purger la table.
+    """
+    __tablename__ = "ai_answer_cache"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    cache_key = Column(String(64), unique=True, index=True, nullable=False)
+    # Nature du contenu : "lesson" (explication d'une erreur), "chat" (question
+    # libre au prof)… Sert à piloter les purges et les statistiques.
+    kind = Column(String, index=True, nullable=False)
+    # Sujet rattaché quand il y en a un (question_id pour une leçon) : permet
+    # d'invalider toutes les réponses d'une question dont on corrige l'énoncé.
+    subject_id = Column(String, index=True, nullable=True)
+    # Extrait lisible de la demande : indispensable pour auditer le cache côté admin.
+    prompt_preview = Column(Text, nullable=True)
+    payload_json = Column(Text, nullable=False)
+    provider = Column(String, nullable=True)
+    model = Column(String, nullable=True)
+    prompt_version = Column(String, index=True, nullable=True)
+    # Nombre de fois où cette réponse a été resservie = appels API économisés.
+    hit_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_used_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class SeriesReportDB(Base):
