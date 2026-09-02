@@ -15,6 +15,8 @@ tombe jamais en panne.
 """
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -23,22 +25,28 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 try:
-    from database import get_db
+    from database import get_db, SessionLocal
     from models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
         AIAnswerCacheDB,
     )
     from auth import get_current_user, require_admin, require_subscription
-    from ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
+    from ai_client import (
+        call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics,
+        interactive_budget,
+    )
     import ai_cache
 except ImportError:  # pragma: no cover
-    from backend.database import get_db
+    from backend.database import get_db, SessionLocal
     from backend.models import (
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
         AIAnswerCacheDB,
     )
     from backend.auth import get_current_user, require_admin, require_subscription
-    from backend.ai_client import call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics
+    from backend.ai_client import (
+        call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics,
+        interactive_budget,
+    )
     from backend import ai_cache
 
 logger = logging.getLogger(__name__)
@@ -74,6 +82,18 @@ MAX_CHAT_HISTORY = 20  # nombre de messages récents conservés par tour
 # datait d'une époque où le prof pouvait renvoyer un schéma SVG ; le prompt
 # l'interdit désormais. Un plafond serré, c'est une réponse plus rapide — et,
 # chez les fournisseurs qui facturent le quota d'avance, moins de 429.
+# Budget d'attente d'un élève sur une leçon. Court volontairement : la leçon a
+# un repli immédiat (la correction officielle), donc mieux vaut la servir vite
+# et finir le travail en arrière-plan que faire patienter devant un écran vide.
+LESSON_INTERACTIVE_TIMEOUT = 6.0
+LESSON_INTERACTIVE_DEADLINE = 9.0
+
+# Budget de la production en arrière-plan : large, puisque plus personne
+# n'attend, mais borné quand même — à l'arrêt du serveur (redéploiement), Python
+# attend la fin des tâches en cours, et un budget illimité retarderait d'autant.
+LESSON_BACKGROUND_TIMEOUT = 20.0
+LESSON_BACKGROUND_DEADLINE = 30.0
+
 LESSON_MAX_TOKENS = 1200
 # Volontairement inchangé (2048) : une réponse coupée en plein milieu serait
 # mémorisée puis resservie à tous les élèves suivants. Le gain de vitesse vient
@@ -262,8 +282,18 @@ def _fallback_lesson(question: QuestionDB, selected_option_id: str) -> Optional[
     }
 
 
-def _generate_lesson(question: QuestionDB, selected_option_id: str) -> Dict[str, Any]:
-    """Appelle le modèle pour produire la mini-leçon. Lève AICoachUnavailable."""
+def _generate_lesson(
+    question: QuestionDB,
+    selected_option_id: str,
+    request_timeout_s: Optional[float] = None,
+    total_deadline_s: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Appelle le modèle pour produire la mini-leçon. Lève AICoachUnavailable.
+
+    Sans budget explicite, ce sont les budgets d'arrière-plan qui s'appliquent :
+    c'est ce que l'on veut hors requête HTTP (préchargement, file de fond), où
+    personne n'attend et où il vaut mieux insister que renoncer.
+    """
     _, correct_text = _correct_option(question)
     chosen_text = _option_text(question, selected_option_id) or "(réponse inconnue)"
     options_txt = "\n".join(
@@ -290,6 +320,8 @@ def _generate_lesson(question: QuestionDB, selected_option_id: str) -> Dict[str,
         user_content=user_content,
         schema=LESSON_SCHEMA,
         max_tokens=LESSON_MAX_TOKENS,
+        request_timeout_s=request_timeout_s,
+        total_deadline_s=total_deadline_s,
     )
 
 
@@ -308,7 +340,93 @@ def lookup_lesson(db: Session, question: QuestionDB, selected_option_id: str) ->
     return {**cached, "cached": True, "source": "cache"}
 
 
-def get_or_create_lesson(db: Session, question: QuestionDB, selected_option_id: str) -> Dict[str, Any]:
+# Deux tâches de fond suffisent : elles rattrapent les leçons manquantes sans
+# concurrencer les requêtes des élèves pour les connexions à la base.
+_background = ThreadPoolExecutor(max_workers=2, thread_name_prefix="lecon-fond")
+_pending_lock = threading.Lock()
+_pending: set = set()
+# Au-delà, on cesse d'empiler : le préchargement hors ligne est le bon outil
+# pour un rattrapage massif, pas la file d'un serveur web.
+_PENDING_MAX = 200
+
+
+def _produce_lesson_offline(question_id: str, selected_option_id: str, cache_key: str) -> None:
+    """Produit la leçon hors de la requête HTTP, avec un budget confortable.
+
+    Tourne dans son propre thread et sa propre session : l'élève a déjà reçu sa
+    réponse, plus personne n'attend. Ne lève jamais — au pire la leçon reste à
+    produire et le prochain élève la redemandera.
+    """
+    session = SessionLocal()
+    try:
+        question = session.query(QuestionDB).filter(QuestionDB.id == question_id).first()
+        if question is None:
+            return
+        if lookup_lesson(session, question, selected_option_id) is not None:
+            return  # quelqu'un d'autre l'a produite entre-temps
+
+        with ai_cache.single_flight(cache_key):
+            if lookup_lesson(session, question, selected_option_id) is not None:
+                return
+            lesson = _generate_lesson(
+                question, selected_option_id,
+                request_timeout_s=LESSON_BACKGROUND_TIMEOUT,
+                total_deadline_s=LESSON_BACKGROUND_DEADLINE,
+            )
+            ai_cache.store(
+                session, cache_key, "lesson", lesson,
+                subject_id=question.id,
+                prompt_preview=f"[{question.category or 'Général'}] {question.text}",
+                **_model_tags(),
+            )
+            _store_legacy_lesson(session, question.id, selected_option_id, lesson)
+        logger.info("Leçon produite en arrière-plan pour %s/%s", question_id, selected_option_id)
+    except AICoachUnavailable as exc:
+        logger.warning("Leçon d'arrière-plan impossible (%s/%s) : %s",
+                       question_id, selected_option_id, str(exc)[:200])
+    except Exception:
+        logger.exception("Échec inattendu de la leçon d'arrière-plan %s/%s",
+                         question_id, selected_option_id)
+    finally:
+        session.close()
+        with _pending_lock:
+            _pending.discard(cache_key)
+
+
+def schedule_lesson(question: QuestionDB, selected_option_id: str, cache_key: str) -> bool:
+    """Met la production de cette leçon en file d'arrière-plan.
+
+    Renvoie True si elle a été acceptée. Une leçon déjà en file n'est pas
+    empilée deux fois : trente élèves sur la même question ne doivent pas
+    déclencher trente générations.
+    """
+    with _pending_lock:
+        if cache_key in _pending:
+            return True
+        if len(_pending) >= _PENDING_MAX:
+            logger.warning("File des leçons pleine (%s) — production différée.", _PENDING_MAX)
+            return False
+        _pending.add(cache_key)
+
+    try:
+        _background.submit(
+            _produce_lesson_offline, question.id, selected_option_id, cache_key
+        )
+        return True
+    except Exception as exc:  # pragma: no cover - file saturée ou arrêt en cours
+        with _pending_lock:
+            _pending.discard(cache_key)
+        logger.warning("Impossible de programmer la leçon en arrière-plan : %s", exc)
+        return False
+
+
+def get_or_create_lesson(
+    db: Session,
+    question: QuestionDB,
+    selected_option_id: str,
+    request_timeout_s: Optional[float] = None,
+    total_deadline_s: Optional[float] = None,
+) -> Dict[str, Any]:
     """Mini-leçon sur une réponse fausse, servie depuis la mémoire partagée si possible.
 
     Ordre : cache partagé → ancien cache → production (un seul appel même en
@@ -328,7 +446,9 @@ def get_or_create_lesson(db: Session, question: QuestionDB, selected_option_id: 
         if cached is not None:
             return cached
 
-        lesson = _generate_lesson(question, selected_option_id)
+        lesson = _generate_lesson(
+            question, selected_option_id, request_timeout_s, total_deadline_s
+        )
 
         ai_cache.store(
             db, key, "lesson", lesson,
@@ -541,8 +661,16 @@ def chat(
     if context:
         system += f"\n\nContexte de l'élève (question en cours) : {context[:1500]}"
 
+    chat_timeout, chat_deadline = interactive_budget()
+
     def _ask() -> str:
-        return call_chat(system=system, history=history, max_tokens=CHAT_MAX_TOKENS)
+        # Le chat n'a pas de repli : on lui laisse plus de marge que la leçon,
+        # mais toujours sous la coupure du proxy — un 503 rapide et explicite
+        # vaut mieux qu'un 504 opaque après une minute d'attente.
+        return call_chat(
+            system=system, history=history, max_tokens=CHAT_MAX_TOKENS,
+            request_timeout_s=chat_timeout, total_deadline_s=chat_deadline,
+        )
 
     try:
         if cache_key is None:
@@ -619,22 +747,35 @@ def generate_lesson(
     reason: Optional[str] = None
     if ai_configured():
         try:
-            # Sert le cache partagé si la leçon existe déjà (aucun appel IA),
-            # sinon la produit une seule fois pour tous les élèves suivants.
-            return get_or_create_lesson(db, question, selected_option_id)
+            # Attente BORNÉE : si le modèle répond vite, l'élève a sa vraie leçon
+            # tout de suite. Sinon on renonce assez tôt pour que le repli lui
+            # parvienne — le proxy qui sert le site coupe la requête à 26 s.
+            return get_or_create_lesson(
+                db, question, selected_option_id,
+                request_timeout_s=LESSON_INTERACTIVE_TIMEOUT,
+                total_deadline_s=LESSON_INTERACTIVE_DEADLINE,
+            )
         except AICoachUnavailable as exc:
             reason = str(exc)[:300]
             logger.warning("Leçon indisponible pour la question %s : %s", question_id, reason)
     else:
         reason = "coach IA non configuré"
 
-    # Dernier rempart : l'élève doit toujours comprendre son erreur, même si le
-    # modèle est injoignable. On lui rend la correction officielle mise en forme.
+    # L'élève doit toujours comprendre son erreur : on lui rend la correction
+    # officielle mise en forme, immédiatement.
     fallback = _fallback_lesson(question, selected_option_id)
-    if fallback is not None:
-        return fallback
+    if fallback is None:
+        raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{reason}]")
 
-    raise HTTPException(status_code=503, detail=f"{AI_UNAVAILABLE_MSG} [{reason}]")
+    # …et on finit le travail hors de la requête, sans limite de temps serrée :
+    # la vraie leçon sera en cache d'ici quelques secondes, pour cet élève s'il
+    # rouvre la fenêtre comme pour tous les suivants.
+    if ai_configured():
+        cache_key = _lesson_cache_key(question, selected_option_id)
+        if schedule_lesson(question, selected_option_id, cache_key):
+            fallback["retry_after_s"] = 8
+
+    return fallback
 
 
 @router.post("/series-report", dependencies=[Depends(require_subscription)])

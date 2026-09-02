@@ -31,8 +31,16 @@ export function getCachedLesson(questionId, selectedOptionId) {
     return lessons.get(lessonKey(questionId, selectedOptionId)) || null;
 }
 
+/**
+ * Ne mémorise QUE les vraies leçons.
+ *
+ * Un repli (la correction officielle, servie quand le prof n'a pas répondu à
+ * temps) ne doit jamais être gardé : la vraie leçon arrive quelques secondes
+ * plus tard en base, et la mettre en cache ici la rendrait inaccessible pour
+ * tout le reste de la session.
+ */
 function remember(key, lesson) {
-    if (lesson) lessons.set(key, lesson);
+    if (lesson && !lesson.degraded) lessons.set(key, lesson);
     return lesson;
 }
 
@@ -87,8 +95,23 @@ export function fetchLesson(questionId, selectedOptionId) {
         .then((res) => remember(key, res.data))
         .finally(() => inflight.delete(key));
 
+
     inflight.set(key, promise);
     return promise;
+}
+
+/**
+ * Attend que la leçon produite en arrière-plan soit disponible, puis la renvoie.
+ *
+ * Après un repli, le serveur a mis la vraie leçon en file : elle arrive en base
+ * quelques secondes plus tard. On repasse par `peek` (lecture gratuite) plutôt
+ * que de redemander une génération. Renvoie null si elle n'est pas prête —
+ * ce n'est pas une erreur, l'élève garde la correction officielle sous les yeux.
+ */
+export async function awaitBackgroundLesson(questionId, selectedOptionId, delayMs, signal) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (signal?.aborted) return null;
+    return prefetchLesson(questionId, selectedOptionId);
 }
 
 /** Oublie une leçon (utile après correction d'une question). */

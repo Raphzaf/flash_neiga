@@ -107,6 +107,9 @@ _DEFAULT_TOTAL_DEADLINE = 40.0    # budget total d'un appel logique, relances co
 _DEFAULT_MAX_ATTEMPTS = 3
 _BACKOFF_BASE = 0.6               # 1re relance ~0,6 s, puis 1,2 s, 2,4 s…
 _BACKOFF_MAX = 5.0
+# En dessous de ce reste de budget, relancer ne sert qu'à consommer le délai
+# de l'élève sans espoir de réponse.
+_MIN_USEFUL_ATTEMPT = 2.0
 
 
 def _env_float(name: str, default: float) -> float:
@@ -133,6 +136,22 @@ def request_timeout() -> float:
 def total_deadline() -> float:
     """Budget total accordé à un appel logique, relances comprises (secondes)."""
     return _env_float("AI_TOTAL_DEADLINE", _DEFAULT_TOTAL_DEADLINE)
+
+
+# Le site est servi derrière un proxy (Netlify) qui coupe une requête proxifiée
+# au bout de ~26 s. Tout appel déclenché par un clic d'élève doit donc aboutir
+# NETTEMENT avant : au-delà, l'élève reçoit un 504 du proxy et ne voit jamais le
+# repli que le backend avait préparé — le durcissement ne sert alors à rien.
+# Ces budgets-là sont volontairement courts ; le travail long se fait hors requête.
+EDGE_PROXY_LIMIT = 26.0
+
+
+def interactive_budget() -> "tuple[float, float]":
+    """(timeout par appel, budget total) pour un appel né d'une requête d'élève."""
+    return (
+        _env_float("AI_INTERACTIVE_REQUEST_TIMEOUT", 15.0),
+        _env_float("AI_INTERACTIVE_TOTAL_DEADLINE", 20.0),
+    )
 
 
 def max_attempts() -> int:
@@ -243,12 +262,21 @@ def _is_transient(exc: Exception) -> bool:
 _T = TypeVar("_T")
 
 
-def _with_retries(provider: str, operation: str, fn: Callable[[], _T]) -> _T:
-    """Exécute `fn` avec relances à backoff exponentiel, sous disjoncteur.
+def _with_retries(
+    provider: str,
+    operation: str,
+    fn: Callable[[float], _T],
+    request_timeout_s: Optional[float] = None,
+    total_deadline_s: Optional[float] = None,
+) -> _T:
+    """Exécute `fn(timeout)` avec relances à backoff exponentiel, sous disjoncteur.
 
-    Le budget total prime sur le nombre de tentatives : on ne relance jamais si
-    le temps restant ne permet pas d'aboutir — mieux vaut rendre la main à
-    l'appelant, qui a un repli à servir, que de dépasser le délai.
+    Le budget total est une garantie, pas une indication : une tentative n'est
+    lancée que si son échéance tient DANS le temps restant, et son timeout est
+    rogné à ce qui reste. Sans cette double précaution, une deuxième tentative
+    démarrée juste avant la fin du budget le dépassait de tout son timeout —
+    c'est ainsi qu'un appel censé rendre la main en 40 s en prenait 51, assez
+    pour que le proxy coupe la requête et renvoie un 504 à l'élève.
     """
     blocked = _breaker.blocked_for(provider)
     if blocked > 0:
@@ -257,15 +285,27 @@ def _with_retries(provider: str, operation: str, fn: Callable[[], _T]) -> _T:
             f"(nouvelle tentative possible dans {blocked:.0f} s)."
         )
 
-    deadline = time.monotonic() + total_deadline()
+    per_call = request_timeout_s if request_timeout_s is not None else request_timeout()
+    budget = total_deadline_s if total_deadline_s is not None else total_deadline()
+    deadline = time.monotonic() + budget
     attempts = max_attempts()
     last_exc: Optional[Exception] = None
     used = 0
 
     for attempt in range(1, attempts + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        # Le timeout de cette tentative ne peut pas déborder du budget restant.
+        effective_timeout = min(per_call, remaining)
+        if attempt > 1 and effective_timeout < _MIN_USEFUL_ATTEMPT:
+            # Trop peu de temps pour espérer une réponse : on rend la main
+            # maintenant plutôt que de consommer le reste pour rien.
+            break
+
         used = attempt
         try:
-            result = fn()
+            result = fn(effective_timeout)
         except Exception as exc:
             last_exc = exc
             if not _is_transient(exc):
@@ -276,8 +316,8 @@ def _with_retries(provider: str, operation: str, fn: Callable[[], _T]) -> _T:
                 break
             delay = min(_BACKOFF_BASE * (2 ** (attempt - 1)), _BACKOFF_MAX)
             delay += random.uniform(0, delay / 2)  # jitter : évite les rafales synchronisées
-            if delay >= remaining:
-                break
+            if delay + _MIN_USEFUL_ATTEMPT >= remaining:
+                break  # attendre puis retenter ne tiendrait pas dans le budget
             logger.warning(
                 "IA %s/%s : tentative %s/%s en échec (%s) — relance dans %.1f s",
                 provider, operation, attempt, attempts, exc, delay,
@@ -287,7 +327,7 @@ def _with_retries(provider: str, operation: str, fn: Callable[[], _T]) -> _T:
         _breaker.record_success(provider)
         return result
 
-    detail = str(last_exc) if last_exc else "cause inconnue"
+    detail = str(last_exc) if last_exc else "budget épuisé avant toute réponse"
     raise AICoachUnavailable(
         f"Le modèle « {provider} » n'a pas répondu après {used} tentative(s) : {detail}"
     )
@@ -639,7 +679,7 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
     return _parse_json(text)
 
 
-def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client) -> Dict[str, Any]:
+def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client, timeout: Optional[float] = None) -> Dict[str, Any]:
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
@@ -647,6 +687,7 @@ def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tok
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user_content}],
             output_config={"format": {"type": "json_schema", "schema": schema}},
+            **_timeout_kwargs(timeout),
         )
     except Exception as exc:
         logger.warning("Appel Claude en échec : %s", exc)
@@ -712,7 +753,7 @@ def _moonshot_text(response) -> str:
     return content.strip()
 
 
-def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client) -> Dict[str, Any]:
+def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client, timeout: Optional[float] = None) -> Dict[str, Any]:
     prompt = (
         f"{user_content}\n\n"
         "Réponds UNIQUEMENT avec un objet JSON valide (aucun texte autour, pas de balise Markdown) "
@@ -729,6 +770,7 @@ def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_t
             # max_completion_tokens remplace max_tokens (déprécié).
             max_completion_tokens=max_tokens,
             response_format={"type": "json_object"},
+            **_timeout_kwargs(timeout),
         )
     except Exception as exc:
         logger.warning("Appel Moonshot en échec : %s", exc)
@@ -738,7 +780,7 @@ def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_t
     return _parse_json(_moonshot_text(response))
 
 
-def _chat_moonshot(system: str, history: list, max_tokens: int, client) -> str:
+def _chat_moonshot(system: str, history: list, max_tokens: int, client, timeout: Optional[float] = None) -> str:
     messages = [{"role": "system", "content": system}]
     messages += [
         {"role": ("assistant" if m.get("role") == "assistant" else "user"), "content": m.get("content") or ""}
@@ -751,6 +793,7 @@ def _chat_moonshot(system: str, history: list, max_tokens: int, client) -> str:
             model=MOONSHOT_MODEL,
             messages=messages,
             max_completion_tokens=max_tokens,
+            **_timeout_kwargs(timeout),
         )
     except Exception as exc:
         logger.warning("Chat Moonshot en échec : %s", exc)
@@ -758,6 +801,17 @@ def _chat_moonshot(system: str, history: list, max_tokens: int, client) -> str:
 
     _log_moonshot_usage(response)
     return _moonshot_text(response)
+
+
+def _timeout_kwargs(timeout: Optional[float]) -> Dict[str, Any]:
+    """Surcharge de timeout à passer au SDK, quand il y en a une à passer.
+
+    Les SDK OpenAI et Anthropic acceptent `timeout` par requête, ce qui permet
+    de resserrer un appel interactif sans reconstruire le client. Le SDK Google
+    ne l'expose pas de la même façon : là, seul le timeout du client s'applique,
+    et c'est l'admission par budget de `_with_retries` qui borne la durée totale.
+    """
+    return {"timeout": timeout} if timeout and timeout > 0 else {}
 
 
 def _parse_json(text: str) -> Dict[str, Any]:
@@ -824,7 +878,7 @@ def _chat_gemini(system: str, history: list, max_tokens: int, client) -> str:
     return text.strip()
 
 
-def _chat_claude(system: str, history: list, max_tokens: int, client) -> str:
+def _chat_claude(system: str, history: list, max_tokens: int, client, timeout: Optional[float] = None) -> str:
     messages = [
         {"role": ("assistant" if m.get("role") == "assistant" else "user"), "content": m.get("content") or ""}
         for m in history if (m.get("content") or "").strip()
@@ -837,6 +891,7 @@ def _chat_claude(system: str, history: list, max_tokens: int, client) -> str:
             max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=messages,
+            **_timeout_kwargs(timeout),
         )
     except Exception as exc:
         logger.warning("Chat Claude en échec : %s", exc)
@@ -849,7 +904,14 @@ def _chat_claude(system: str, history: list, max_tokens: int, client) -> str:
     raise AITransientError("Réponse Claude vide.")
 
 
-def call_chat(system: str, history: list, max_tokens: int = 2048, client=None) -> str:
+def call_chat(
+    system: str,
+    history: list,
+    max_tokens: int = 2048,
+    client=None,
+    request_timeout_s: Optional[float] = None,
+    total_deadline_s: Optional[float] = None,
+) -> str:
     """Conversation libre (multi-tours) avec le prof IA.
 
     `history` : liste de {role: "user"|"assistant", content: str}, se terminant
@@ -862,14 +924,14 @@ def call_chat(system: str, history: list, max_tokens: int = 2048, client=None) -
     cli = client or get_client()
     provider = _provider()
 
-    def _run() -> str:
+    def _run(timeout: float) -> str:
         if provider == "claude":
-            return _chat_claude(system, history, max_tokens, cli)
+            return _chat_claude(system, history, max_tokens, cli, timeout)
         if provider == "moonshot":
-            return _chat_moonshot(system, history, max_tokens, cli)
+            return _chat_moonshot(system, history, max_tokens, cli, timeout)
         return _chat_gemini(system, history, max_tokens, cli)
 
-    return _with_retries(provider, "chat", _run)
+    return _with_retries(provider, "chat", _run, request_timeout_s, total_deadline_s)
 
 
 def call_structured(
@@ -878,22 +940,28 @@ def call_structured(
     schema: Dict[str, Any],
     max_tokens: int = 2048,
     client=None,
+    request_timeout_s: Optional[float] = None,
+    total_deadline_s: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Appelle le modèle en mode JSON structuré et renvoie le dict parsé.
 
     Interface stable pour toutes les routes IA (indépendante du fournisseur).
     Relance automatiquement les incidents passagers (429, 5xx, JSON tronqué) avec
-    backoff, dans la limite du budget `AI_TOTAL_DEADLINE`, et lève
-    `AICoachUnavailable` quand il n'y a plus rien à tenter.
+    backoff, et lève `AICoachUnavailable` quand il n'y a plus rien à tenter.
+
+    `request_timeout_s` / `total_deadline_s` resserrent le budget pour un appel
+    né d'une requête d'élève : la durée totale est alors GARANTIE sous cette
+    valeur, ce qui évite qu'un proxy coupe la requête avant que le repli soit
+    servi. Sans eux, ce sont les budgets d'arrière-plan qui s'appliquent.
     """
     cli = client or get_client()
     provider = _provider()
 
-    def _run() -> Dict[str, Any]:
+    def _run(timeout: float) -> Dict[str, Any]:
         if provider == "claude":
-            return _call_claude(system, user_content, schema, max_tokens, cli)
+            return _call_claude(system, user_content, schema, max_tokens, cli, timeout)
         if provider == "moonshot":
-            return _call_moonshot(system, user_content, schema, max_tokens, cli)
+            return _call_moonshot(system, user_content, schema, max_tokens, cli, timeout)
         return _call_gemini(system, user_content, schema, max_tokens, cli)
 
-    return _with_retries(provider, "structured", _run)
+    return _with_retries(provider, "structured", _run, request_timeout_s, total_deadline_s)

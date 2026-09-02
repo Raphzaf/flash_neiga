@@ -62,3 +62,37 @@ Rendement du cache (entrées mémorisées, appels économisés) :
 ```
 GET /api/ai-coach/cache-stats
 ```
+
+## Pourquoi une leçon s'affiche parfois en version courte
+
+Quand la leçon n'est pas encore en cache, l'élève ne doit jamais attendre le
+modèle. Le déroulé est le suivant :
+
+1. **Cache** → la leçon s'affiche instantanément. C'est le cas normal une fois
+   le préchargement passé.
+2. **Sinon**, le serveur laisse au modèle quelques secondes (9 s au plus). S'il
+   répond, l'élève a sa vraie leçon tout de suite.
+3. **Sinon**, l'élève reçoit immédiatement la correction officielle, signalée
+   comme telle, et le serveur met la vraie leçon en file d'arrière-plan. Elle
+   arrive en base quelques secondes plus tard et **remplace le texte sous ses
+   yeux**, sans qu'il ait à refermer la fenêtre.
+
+Ce budget court n'est pas un choix esthétique. Le site est servi derrière un
+proxy qui **coupe toute requête proxifiée au bout de ~26 s** : un appel plus long
+fait recevoir un 504 à l'élève, qui ne voit alors jamais le repli. C'est
+exactement ce qui se produisait avec `kimi-k3` (deux tentatives de 25 s = 51 s).
+
+Réglages : `AI_INTERACTIVE_REQUEST_TIMEOUT` et `AI_INTERACTIVE_TOTAL_DEADLINE`
+pour le chat, `LESSON_INTERACTIVE_*` dans `routes/ai_coach.py` pour la leçon.
+Toute valeur totale au-delà de ~20 s ramène le problème.
+
+## Le choix du modèle compte
+
+`kimi-k3` raisonne systématiquement : plus de 25 s observées pour une simple
+mini-leçon, et un coût par appel élevé. Avec lui, presque toutes les leçons non
+préchargées passent par le repli puis l'arrière-plan.
+
+Un modèle rapide (`MOONSHOT_MODEL=kimi-k2.5`) permet au contraire de rédiger la
+plupart des leçons dans le budget interactif. Cela dit, **le préchargement reste
+la vraie réponse** : une leçon déjà en cache est servie en quelques
+millisecondes, quel que soit le modèle.

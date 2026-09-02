@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { GraduationCap, BookOpen, AlertTriangle, Lightbulb, Loader2, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import InlineChat from './InlineChat';
-import { getCachedLesson, prefetchLesson, fetchLesson } from '../lib/aiLessonCache';
+import { getCachedLesson, prefetchLesson, fetchLesson, awaitBackgroundLesson } from '../lib/aiLessonCache';
 
 /**
  * Bouton « Petite leçon de code sur ce sujet » + dialog affichant la mini-leçon
@@ -46,11 +46,23 @@ export default function AiLesson({ questionId, selectedOptionId, label, prefetch
 
     const loadLesson = async () => {
         setOpen(true);
-        if (lesson) return; // déjà chargée (préchargement ou consultation précédente)
+        if (lesson && !lesson.degraded) return; // déjà chargée pour de bon
         setLoading(true);
         try {
             const data = await fetchLesson(questionId, selectedOptionId);
-            if (mounted.current) setLesson(data);
+            if (!mounted.current) return;
+            setLesson(data);
+
+            // Repli : le prof n'a pas répondu dans le temps imparti, mais le
+            // serveur produit la vraie leçon en arrière-plan. On va la chercher
+            // dès qu'elle est prête et on remplace le texte sous les yeux de
+            // l'élève, sans qu'il ait à refermer et rouvrir.
+            if (data?.degraded && data?.retry_after_s) {
+                const better = await awaitBackgroundLesson(
+                    questionId, selectedOptionId, data.retry_after_s * 1000,
+                );
+                if (better && mounted.current) setLesson(better);
+            }
         } catch (e) {
             const msg = e.response?.data?.detail || "Le prof est momentanément indisponible, réessaie dans un instant.";
             toast.error(msg);
@@ -93,8 +105,9 @@ export default function AiLesson({ questionId, selectedOptionId, label, prefetch
                                 <p className="flex items-start gap-2 text-xs p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
                                     <WifiOff className="h-4 w-4 shrink-0 mt-0.5" />
                                     <span>
-                                        Voici la correction officielle. Ton prof n'est pas joignable à cet instant :
-                                        rouvre cette leçon dans quelques minutes pour l'explication détaillée.
+                                        {lesson.retry_after_s
+                                            ? "Voici la correction officielle. Ton prof rédige l'explication détaillée : elle s'affichera ici dans quelques secondes."
+                                            : "Voici la correction officielle. Ton prof n'est pas joignable à cet instant : rouvre cette leçon dans quelques minutes pour l'explication détaillée."}
                                     </span>
                                 </p>
                             )}
