@@ -144,7 +144,7 @@ def test_timeout_reseau_reconnu_sans_code_http():
 def test_relance_puis_succes():
     calls = {"n": 0}
 
-    def flaky():
+    def flaky(timeout):
         calls["n"] += 1
         if calls["n"] < 3:
             raise _HttpError(503)
@@ -158,7 +158,7 @@ def test_abandon_apres_le_nombre_max_de_tentatives(monkeypatch):
     monkeypatch.setenv("AI_MAX_ATTEMPTS", "2")
     calls = {"n": 0}
 
-    def always_down():
+    def always_down(timeout):
         calls["n"] += 1
         raise _HttpError(503)
 
@@ -170,7 +170,7 @@ def test_abandon_apres_le_nombre_max_de_tentatives(monkeypatch):
 def test_aucune_relance_sur_erreur_definitive():
     calls = {"n": 0}
 
-    def bad_key():
+    def bad_key(timeout):
         calls["n"] += 1
         raise _HttpError(401)
 
@@ -187,7 +187,7 @@ def test_disjoncteur_coupe_apres_plusieurs_pannes(monkeypatch):
 
     calls = {"n": 0}
 
-    def down():
+    def down(timeout):
         calls["n"] += 1
         raise _HttpError(503)
 
@@ -207,14 +207,14 @@ def test_disjoncteur_referme_apres_un_succes(monkeypatch):
     monkeypatch.setenv("AI_MAX_ATTEMPTS", "1")
     monkeypatch.setenv("AI_BREAKER_THRESHOLD", "3")
 
-    def down():
+    def down(timeout):
         raise _HttpError(503)
 
     for _ in range(2):  # sous le seuil
         with pytest.raises(ai_client.AICoachUnavailable):
             ai_client._with_retries("gemini", "test", down)
 
-    assert ai_client._with_retries("gemini", "test", lambda: "ok") == "ok"
+    assert ai_client._with_retries("gemini", "test", lambda timeout: "ok") == "ok"
 
     # Le compteur est reparti de zéro : deux nouvelles pannes n'ouvrent pas encore.
     for _ in range(2):
@@ -229,7 +229,7 @@ def test_disjoncteur_isole_les_fournisseurs(monkeypatch):
     monkeypatch.setenv("AI_BREAKER_COOLDOWN", "60")
 
     with pytest.raises(ai_client.AICoachUnavailable):
-        ai_client._with_retries("gemini", "test", lambda: (_ for _ in ()).throw(_HttpError(503)))
+        ai_client._with_retries("gemini", "test", lambda timeout: (_ for _ in ()).throw(_HttpError(503)))
 
     assert ai_client._breaker.blocked_for("gemini") > 0
     assert ai_client._breaker.blocked_for("moonshot") == 0
@@ -243,7 +243,7 @@ def test_budget_total_borne_l_attente(monkeypatch):
     started = time.monotonic()
     with pytest.raises(ai_client.AICoachUnavailable):
         ai_client._with_retries("gemini", "test",
-                                lambda: (_ for _ in ()).throw(_HttpError(503)))
+                                lambda timeout: (_ for _ in ()).throw(_HttpError(503)))
     assert time.monotonic() - started < 2.0
 
 
@@ -261,3 +261,90 @@ def test_client_reconstruit_quand_le_fournisseur_change(monkeypatch):
 def test_json_invalide_est_classe_comme_passager():
     with pytest.raises(ai_client.AITransientError):
         ai_client._parse_json("ceci n'est pas du JSON")
+
+
+# ===== Le budget est une garantie, pas une indication =====
+# Régression : en production, une 2e tentative lancée juste avant la fin du
+# budget le dépassait de tout son timeout (40 s annoncés, 51 s réels). Le proxy
+# qui sert le site coupe à 26 s : l'élève recevait un 504 et ne voyait jamais le
+# repli. La durée totale doit donc rester sous le budget, quoi qu'il arrive.
+def test_budget_respecte_meme_avec_des_tentatives_lentes(monkeypatch):
+    monkeypatch.setattr(ai_client, "_MIN_USEFUL_ATTEMPT", 0.05)
+    monkeypatch.setenv("AI_MAX_ATTEMPTS", "3")
+
+    def lente(timeout):
+        # Comme un vrai appel réseau : consomme tout son timeout, puis échoue.
+        time.sleep(timeout)
+        raise _HttpError(408, "Request timed out.")
+
+    budget = 0.6
+    started = time.monotonic()
+    with pytest.raises(ai_client.AICoachUnavailable):
+        ai_client._with_retries("moonshot", "structured", lente,
+                                request_timeout_s=0.4, total_deadline_s=budget)
+    elapsed = time.monotonic() - started
+
+    # Marge de 50 % pour l'ordonnancement, très loin du dépassement de 27 %
+    # qu'on observait (51 s pour 40 s annoncés).
+    assert elapsed <= budget * 1.5, f"budget de {budget}s dépassé : {elapsed:.2f}s"
+
+
+def test_timeout_dune_tentative_rogne_au_budget_restant(monkeypatch):
+    """Une tentative ne peut jamais déborder du temps qui reste."""
+    monkeypatch.setattr(ai_client, "_MIN_USEFUL_ATTEMPT", 0.01)
+    monkeypatch.setenv("AI_MAX_ATTEMPTS", "3")
+    vus = []
+
+    def note(timeout):
+        vus.append(timeout)
+        time.sleep(timeout)
+        raise _HttpError(408)
+
+    with pytest.raises(ai_client.AICoachUnavailable):
+        ai_client._with_retries("moonshot", "structured", note,
+                                request_timeout_s=0.3, total_deadline_s=0.5)
+
+    assert vus[0] == 0.3            # 1re tentative : le timeout demandé
+    assert len(vus) > 1
+    assert vus[1] < 0.3             # 2e : rognée à ce qui reste
+    assert sum(vus) <= 0.5
+
+
+def test_aucune_tentative_lancee_sans_temps_utile(monkeypatch):
+    """Budget déjà consommé : on rend la main au lieu de lancer un appel perdu."""
+    monkeypatch.setattr(ai_client, "_MIN_USEFUL_ATTEMPT", 0.2)
+    monkeypatch.setenv("AI_MAX_ATTEMPTS", "5")
+    appels = {"n": 0}
+
+    def compte(timeout):
+        appels["n"] += 1
+        time.sleep(timeout)
+        raise _HttpError(408)
+
+    with pytest.raises(ai_client.AICoachUnavailable):
+        ai_client._with_retries("moonshot", "structured", compte,
+                                request_timeout_s=0.25, total_deadline_s=0.3)
+
+    assert appels["n"] == 1  # la 2e n'avait plus assez de temps pour aboutir
+
+
+def test_budget_interactif_sous_la_limite_du_proxy():
+    """Le budget d'un appel né d'un clic doit tenir sous la coupure du proxy."""
+    per_call, total = ai_client.interactive_budget()
+    assert per_call <= total
+    assert total < ai_client.EDGE_PROXY_LIMIT, (
+        "au-delà, l'élève reçoit un 504 et ne voit jamais le repli"
+    )
+
+
+def test_budget_interactif_configurable(monkeypatch):
+    monkeypatch.setenv("AI_INTERACTIVE_REQUEST_TIMEOUT", "6")
+    monkeypatch.setenv("AI_INTERACTIVE_TOTAL_DEADLINE", "9")
+    assert ai_client.interactive_budget() == (6.0, 9.0)
+
+
+def test_timeout_transmis_au_sdk():
+    """Sans surcharge par requête, un budget interactif court n'aurait aucun effet."""
+    assert ai_client._timeout_kwargs(12.0) == {"timeout": 12.0}
+    assert ai_client._timeout_kwargs(None) == {}
+    assert ai_client._timeout_kwargs(0) == {}

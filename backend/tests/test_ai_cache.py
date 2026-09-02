@@ -562,3 +562,120 @@ def test_prechargement_survit_a_un_echec_isole(db, monkeypatch):
     assert progress.done == 0
     # Rien n'a été écrit : le prochain passage retentera ce couple.
     assert db.query(AIAnswerCacheDB).filter(AIAnswerCacheDB.kind == "lesson").count() == 0
+
+
+# ===== Régression du 504 : l'élève reçoit toujours une réponse, vite =====
+def test_modele_trop_lent_repli_immediat_et_rattrapage_en_fond(db, monkeypatch):
+    """Le modèle ne répond pas dans le budget : repli tout de suite, vraie leçon
+    produite en arrière-plan. C'est le scénario qui renvoyait un 504."""
+    from ai_client import AICoachUnavailable
+
+    def trop_lent(**kwargs):
+        raise AICoachUnavailable("Request timed out.")
+
+    monkeypatch.setattr(ai_coach, "call_structured", trop_lent)
+
+    programmees = []
+    monkeypatch.setattr(
+        ai_coach, "schedule_lesson",
+        lambda question, option_id, key: programmees.append((question.id, option_id, key)) or True,
+    )
+
+    r = client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "b"})
+
+    assert r.status_code == 200          # surtout pas d'erreur ni d'attente infinie
+    body = r.json()
+    assert body["source"] == "fallback"
+    assert body["degraded"] is True
+    assert "Le triangle pointe en bas" in body["explication"]   # la correction officielle
+    assert body["retry_after_s"] > 0     # le front sait qu'il peut revenir chercher mieux
+
+    assert len(programmees) == 1         # la vraie leçon est en file
+    assert programmees[0][0] == "q1"
+
+
+def test_repli_sans_rattrapage_quand_lia_nest_pas_configuree(db, monkeypatch):
+    """Rien à programmer si le modèle n'est de toute façon pas joignable."""
+    monkeypatch.setattr(ai_coach, "ai_configured", lambda: False)
+    programmees = []
+    monkeypatch.setattr(ai_coach, "schedule_lesson",
+                        lambda *a: programmees.append(a) or True)
+
+    body = client.post("/api/ai-coach/lesson",
+                       json={"question_id": "q1", "selected_option_id": "b"}).json()
+    assert body["source"] == "fallback"
+    assert "retry_after_s" not in body
+    assert programmees == []
+
+
+def test_file_darriere_plan_ne_double_pas_les_generations(db, monkeypatch):
+    """Trente élèves sur la même question = une seule génération programmée."""
+    soumissions = []
+    monkeypatch.setattr(ai_coach._background, "submit",
+                        lambda fn, *a: soumissions.append(a))
+    ai_coach._pending.clear()
+
+    question = db.query(QuestionDB).filter(QuestionDB.id == "q1").first()
+    key = ai_coach._lesson_cache_key(question, "b")
+
+    for _ in range(30):
+        assert ai_coach.schedule_lesson(question, "b", key) is True
+
+    assert len(soumissions) == 1
+    ai_coach._pending.clear()
+
+
+def test_file_darriere_plan_bornee(db, monkeypatch):
+    """La file d'un serveur web n'est pas l'outil d'un rattrapage massif."""
+    monkeypatch.setattr(ai_coach._background, "submit", lambda fn, *a: None)
+    monkeypatch.setattr(ai_coach, "_PENDING_MAX", 3)
+    ai_coach._pending.clear()
+
+    question = db.query(QuestionDB).filter(QuestionDB.id == "q1").first()
+    acceptees = [ai_coach.schedule_lesson(question, "b", f"cle-{i}") for i in range(6)]
+
+    assert acceptees.count(True) == 3
+    assert acceptees.count(False) == 3
+    ai_coach._pending.clear()
+
+
+def test_generation_de_fond_remplit_le_cache(db, monkeypatch):
+    """Après le passage en arrière-plan, la vraie leçon est servie au suivant."""
+    monkeypatch.setattr(ai_coach, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(ai_coach, "call_structured", lambda **kw: dict(FAKE_LESSON))
+
+    question = db.query(QuestionDB).filter(QuestionDB.id == "q1").first()
+    key = ai_coach._lesson_cache_key(question, "b")
+
+    ai_coach._produce_lesson_offline("q1", "b", key)
+
+    r = client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "b"})
+    assert r.json()["source"] == "cache"
+    assert r.json()["explication"] == FAKE_LESSON["explication"]
+
+
+def test_generation_de_fond_avale_les_echecs(db, monkeypatch):
+    """Une tâche de fond ne doit jamais remonter d'exception : personne ne l'attend."""
+    from ai_client import AICoachUnavailable
+
+    monkeypatch.setattr(ai_coach, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(ai_coach, "call_structured",
+                        lambda **kw: (_ for _ in ()).throw(AICoachUnavailable("panne")))
+
+    question = db.query(QuestionDB).filter(QuestionDB.id == "q1").first()
+    key = ai_coach._lesson_cache_key(question, "b")
+    ai_coach._pending.add(key)
+
+    ai_coach._produce_lesson_offline("q1", "b", key)  # ne doit pas lever
+
+    assert key not in ai_coach._pending  # la file est bien libérée
+    assert db.query(AIAnswerCacheDB).filter(AIAnswerCacheDB.kind == "lesson").count() == 0
+
+
+def test_lecon_servie_directement_quand_le_modele_est_rapide(db, monkeypatch):
+    """Le repli ne doit pas masquer une vraie leçon obtenue dans les temps."""
+    monkeypatch.setattr(ai_coach, "call_structured", lambda **kw: dict(FAKE_LESSON))
+    body = client.post("/api/ai-coach/lesson",
+                       json={"question_id": "q1", "selected_option_id": "b"}).json()
+    assert body["source"] == "ai"
+    assert body.get("degraded") is not True
