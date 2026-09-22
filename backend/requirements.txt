@@ -29,3 +29,7 @@ openai>=1.55.0
 # Sans cette bibliothèque l'app démarre quand même — seul l'export PDF est
 # indisponible, l'export CSV continue de fonctionner.
 reportlab>=4.0.0
+# Factures en image (JPG / PNG), pour les envoyer par messagerie. reportlab
+# l'installe déjà en dépendance, mais on la déclare : le rendu image ne doit pas
+# disparaître si reportlab change ses dépendances demain.
+pillow>=10.0.0
