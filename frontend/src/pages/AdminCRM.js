@@ -15,13 +15,41 @@ import {
 import {
     Search, RefreshCw, Users, CreditCard, TrendingUp, Clock, ArrowLeft,
     Trash2, Save, KeyRound, ShieldAlert, Ticket, Plus, Power, UserPlus,
-    AlertTriangle,
+    AlertTriangle, FileText, Download, Image as ImageIcon, Building2, ExternalLink,
 } from 'lucide-react';
 
 const money = (v, currency = 'ILS') =>
     v == null ? '—' : `${Number(v).toLocaleString('fr-FR')} ${currency === 'ILS' ? '₪' : currency}`;
 
 const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—');
+
+// Formulaire d'identité de l'entreprise, tel qu'attendu par PUT /invoices/config.
+const EMPTY_ISSUER = {
+    company_name: '', company_legal_id: '', company_address: '', company_city: '',
+    company_country: '', company_email: '', company_phone: '', company_vat_id: '',
+    footer: '',
+};
+
+// Les factures sont servies par des routes protégées : un <a href> classique
+// n'emporte pas le jeton d'authentification. On récupère donc le fichier via
+// axios (qui ajoute l'en-tête), puis on l'ouvre ou on l'enregistre depuis un
+// blob local.
+const openInvoiceFile = async (url, filename, { download = false } = {}) => {
+    const { data } = await axios.get(url, { responseType: 'blob' });
+    const blobUrl = URL.createObjectURL(data);
+    if (download) {
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    } else {
+        window.open(blobUrl, '_blank', 'noopener');
+    }
+    // L'onglet a besoin du blob le temps de l'afficher : on ne libère qu'après.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+};
 
 /**
  * Pourquoi cet élève n'a-t-il pas d'abonnement ?
@@ -117,6 +145,13 @@ export default function AdminCRM() {
     // Fiche élève
     const [detail, setDetail] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [invoiceRefreshing, setInvoiceRefreshing] = useState(false);
+
+    // Facturation : identité de l'entreprise, saisie ici plutôt que dans les
+    // variables du serveur — c'est ce qui débloque l'émission des factures.
+    const [invoiceConfig, setInvoiceConfig] = useState(null);
+    const [issuerForm, setIssuerForm] = useState(EMPTY_ISSUER);
+    const [issuerSaving, setIssuerSaving] = useState(false);
     const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '', phone: '' });
     const [newPassword, setNewPassword] = useState('');
 
@@ -225,11 +260,73 @@ export default function AdminCRM() {
         }
     }, [attachTx, attachForm, fetchTransactions, fetchStats, handleError]);
 
+    const loadInvoiceConfig = useCallback(async () => {
+        try {
+            const { data } = await axios.get('/api/admin/invoices/config');
+            setInvoiceConfig(data);
+            const issuer = data.issuer || {};
+            setIssuerForm({
+                company_name: issuer.name || '',
+                company_legal_id: issuer.legal_id || '',
+                company_address: issuer.address || '',
+                company_city: issuer.city || '',
+                company_country: issuer.country || '',
+                company_email: issuer.email || '',
+                company_phone: issuer.phone || '',
+                company_vat_id: issuer.vat_id || '',
+                footer: issuer.footer || '',
+            });
+        } catch (error) {
+            handleError(error, 'Configuration de facturation illisible');
+        }
+    }, [handleError]);
+
+    const saveIssuer = useCallback(async () => {
+        if (!issuerForm.company_name.trim() || !issuerForm.company_legal_id.trim()) {
+            toast.error("La raison sociale et le numéro d'entreprise sont obligatoires : sans eux, une facture n'a aucune valeur légale.");
+            return;
+        }
+        setIssuerSaving(true);
+        try {
+            const { data } = await axios.put('/api/admin/invoices/config', issuerForm);
+            setInvoiceConfig(data);
+            toast.success('Identité enregistrée — les factures peuvent être émises.');
+        } catch (error) {
+            handleError(error, 'Enregistrement impossible');
+        } finally {
+            setIssuerSaving(false);
+        }
+    }, [issuerForm, handleError]);
+
+    // Réémet les factures manquantes du client affiché, puis recharge la liste.
+    // Utile juste après avoir renseigné l'identité de l'entreprise.
+    const refreshInvoices = useCallback(async () => {
+        if (!detail?.id) return;
+        setInvoiceRefreshing(true);
+        try {
+            const { data } = await axios.get(`/api/admin/crm/users/${detail.id}/invoices`);
+            setDetail((current) => (
+                current && current.id === data.user.id
+                    ? { ...current, invoices: data.invoices, invoicing: data.invoicing }
+                    : current
+            ));
+            const created = data.invoicing?.generated?.factures_creees || 0;
+            toast.success(created > 0
+                ? `${created} facture(s) émise(s).`
+                : 'Factures à jour.');
+        } catch (error) {
+            handleError(error, 'Factures indisponibles');
+        } finally {
+            setInvoiceRefreshing(false);
+        }
+    }, [detail?.id, handleError]);
+
     useEffect(() => {
         fetchStats();
         loadUsers(0, '', 'all');
         loadPlans();
-    }, [fetchStats, loadUsers, loadPlans]);
+        loadInvoiceConfig();
+    }, [fetchStats, loadUsers, loadPlans, loadInvoiceConfig]);
 
     const openUser = async (userId) => {
         setDetailLoading(true);
@@ -402,11 +499,18 @@ export default function AdminCRM() {
                     if (v === 'promos' && !promos.length) loadPromos();
                 }}
             >
-                <TabsList className="grid w-full grid-cols-4 mb-6">
+                <TabsList className="grid w-full grid-cols-5 mb-6">
                     <TabsTrigger value="users">Élèves <Badge variant="outline" className="ml-2">{usersTotal}</Badge></TabsTrigger>
                     <TabsTrigger value="promos">Codes promo</TabsTrigger>
                     <TabsTrigger value="transactions">Paiements</TabsTrigger>
                     <TabsTrigger value="plans">Formules actives</TabsTrigger>
+                    <TabsTrigger value="billing">
+                        Facturation
+                        {/* Un point d'alerte tant qu'aucune facture ne peut sortir. */}
+                        {invoiceConfig && !invoiceConfig.configured && (
+                            <span className="ml-2 h-2 w-2 rounded-full bg-amber-500" aria-label="à configurer" />
+                        )}
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* ===== Élèves ===== */}
@@ -755,6 +859,94 @@ export default function AdminCRM() {
                         </CardContent>
                     </Card>
                 </TabsContent>
+
+                {/* ===== Facturation ===== */}
+                <TabsContent value="billing">
+                    <div className="space-y-6">
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Building2 className="h-5 w-5" /> Identité de l'entreprise
+                                </CardTitle>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    Ces mentions figurent en tête de chaque facture. Elles sont recopiées
+                                    dans la facture au moment de l'émission : les modifier plus tard ne
+                                    réécrit pas les factures déjà remises.
+                                </p>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {invoiceConfig && (
+                                    <div className={`rounded-lg border p-3 text-sm ${invoiceConfig.configured
+                                        ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200'
+                                        : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200'}`}>
+                                        {invoiceConfig.configured ? (
+                                            <>Facturation active — TVA appliquée : {invoiceConfig.vat_rate} %
+                                                {invoiceConfig.prices_include_vat
+                                                    ? ' (les tarifs affichés sont TTC).'
+                                                    : ' (les tarifs affichés sont HT).'}</>
+                                        ) : (
+                                            <>Facturation inactive : aucune facture n'est émise tant que la
+                                                raison sociale et le numéro d'entreprise ne sont pas renseignés.</>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    {[
+                                        ['company_name', "Raison sociale *", 'Flash Neiga Ltd'],
+                                        ['company_legal_id', "N° d'entreprise (ח.פ / ע.מ) *", '515123456'],
+                                        ['company_vat_id', 'N° TVA (si distinct)', ''],
+                                        ['company_email', 'E-mail', 'contact@flash-neiga.com'],
+                                        ['company_phone', 'Téléphone', '+972 ...'],
+                                        ['company_address', 'Adresse', ''],
+                                        ['company_city', 'Ville', 'Tel Aviv'],
+                                        ['company_country', 'Pays', 'Israël'],
+                                    ].map(([field, label, placeholder]) => (
+                                        <div key={field}>
+                                            <label className="text-sm text-slate-600 dark:text-slate-300" htmlFor={`issuer-${field}`}>
+                                                {label}
+                                            </label>
+                                            <Input
+                                                id={`issuer-${field}`}
+                                                className="mt-1"
+                                                placeholder={placeholder}
+                                                value={issuerForm[field]}
+                                                onChange={(e) => setIssuerForm({ ...issuerForm, [field]: e.target.value })}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div>
+                                    <label className="text-sm text-slate-600 dark:text-slate-300" htmlFor="issuer-footer">
+                                        Mention de bas de facture (coordonnées bancaires, conditions…)
+                                    </label>
+                                    <Input
+                                        id="issuer-footer"
+                                        className="mt-1"
+                                        value={issuerForm.footer}
+                                        onChange={(e) => setIssuerForm({ ...issuerForm, footer: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                    <Button size="sm" onClick={saveIssuer} disabled={issuerSaving}>
+                                        <Save className="h-4 w-4 mr-2" />
+                                        {issuerSaving ? 'Enregistrement…' : 'Enregistrer'}
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={loadInvoiceConfig}>
+                                        <RefreshCw className="h-4 w-4 mr-2" /> Recharger
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Une fois renseignée, la facture de chaque client est émise
+                                    automatiquement : elle apparaît dans sa fiche, en PDF, JPG, PNG ou
+                                    page imprimable.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
             </Tabs>
 
             {/* ===== Fiche élève ===== */}
@@ -855,6 +1047,100 @@ export default function AdminCRM() {
                                                 <span className="text-slate-700 dark:text-slate-200">{t.plan_name}</span>
                                                 <span className="text-slate-700 dark:text-slate-200">{money(t.amount, t.currency)}</span>
                                                 <Badge variant={t.status === 'completed' ? 'default' : 'secondary'}>{t.status}</Badge>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </section>
+
+                            {/* Factures — émises automatiquement à l'ouverture de la fiche */}
+                            <section>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                        <FileText className="h-4 w-4" /> Factures
+                                    </h3>
+                                    <Button size="sm" variant="outline" onClick={refreshInvoices} disabled={invoiceRefreshing}>
+                                        <RefreshCw className={`h-4 w-4 mr-2 ${invoiceRefreshing ? 'animate-spin' : ''}`} />
+                                        Actualiser
+                                    </Button>
+                                </div>
+
+                                {/* Facturation non configurée : on dit quoi faire, et où. */}
+                                {detail.invoicing && !detail.invoicing.configured && (
+                                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
+                                        <div className="flex items-start gap-2">
+                                            <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                            <div className="text-amber-900 dark:text-amber-200">
+                                                <p className="font-medium">Aucune facture ne peut être émise pour l'instant.</p>
+                                                <p className="mt-1">
+                                                    Renseigne la raison sociale et le numéro d'entreprise dans
+                                                    l'onglet <strong>Facturation</strong> : les factures de ce client
+                                                    seront alors émises automatiquement.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {detail.invoicing?.configured && (detail.invoices?.length || 0) === 0 && (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Aucune facture : ce client n'a pas de paiement encaissé.
+                                    </p>
+                                )}
+
+                                {(detail.invoices?.length || 0) > 0 && (
+                                    <ul className="space-y-2">
+                                        {detail.invoices.map((inv) => (
+                                            <li
+                                                key={inv.id}
+                                                className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                                            >
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
+                                                                {inv.number}
+                                                            </span>
+                                                            {inv.document_type === 'avoir' && (
+                                                                <Badge variant="secondary">Avoir</Badge>
+                                                            )}
+                                                            {inv.status === 'cancelled' && (
+                                                                <Badge variant="destructive">Annulée</Badge>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                                                            {inv.plan_name} — émise le {date(inv.issued_at)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="font-semibold text-slate-900 dark:text-white">
+                                                            {money(inv.amount_total, inv.currency)}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                            dont {money(inv.vat_amount, inv.currency)} de TVA
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Une facture, quatre formes : chacun prend celle qui l'arrange. */}
+                                                <div className="flex flex-wrap gap-2 mt-3">
+                                                    <Button size="sm" variant="outline"
+                                                        onClick={() => openInvoiceFile(inv.downloads.pdf, `${inv.number}.pdf`)}>
+                                                        <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
+                                                    </Button>
+                                                    <Button size="sm" variant="outline"
+                                                        onClick={() => openInvoiceFile(inv.downloads.jpg, `${inv.number}.jpg`, { download: true })}>
+                                                        <ImageIcon className="h-3.5 w-3.5 mr-1.5" /> JPG
+                                                    </Button>
+                                                    <Button size="sm" variant="outline"
+                                                        onClick={() => openInvoiceFile(inv.downloads.png, `${inv.number}.png`, { download: true })}>
+                                                        <ImageIcon className="h-3.5 w-3.5 mr-1.5" /> PNG
+                                                    </Button>
+                                                    <Button size="sm" variant="outline"
+                                                        onClick={() => openInvoiceFile(inv.downloads.html, `${inv.number}.html`)}>
+                                                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Ouvrir / imprimer
+                                                    </Button>
+                                                </div>
                                             </li>
                                         ))}
                                     </ul>

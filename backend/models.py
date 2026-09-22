@@ -358,6 +358,22 @@ class CourseDB(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AppSettingDB(Base):
+    """Réglage d'exploitation, modifiable depuis l'espace administrateur.
+
+    Les variables d'environnement conviennent aux secrets (clés d'API), mais pas
+    aux informations que l'exploitant doit pouvoir corriger lui-même : changer la
+    raison sociale ne doit pas demander un redéploiement. Ces réglages-là vivent
+    donc en base, et l'environnement ne sert plus que de valeur par défaut.
+    """
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String, nullable=True)
+
+
 # ===== Pydantic Models =====
 class QuestionOption(BaseModel):
     id: str
