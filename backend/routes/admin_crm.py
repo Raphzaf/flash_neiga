@@ -11,6 +11,7 @@ utilisateur authentifié dont l'email figure dans ADMIN_EMAILS).
   PATCH  /api/admin/crm/users/{user_id}                → modifier prénom / nom / email
   DELETE /api/admin/crm/users/{user_id}                → supprimer un compte et ses données
   POST   /api/admin/crm/users/{user_id}/password       → réinitialiser le mot de passe
+  GET    /api/admin/crm/users/{user_id}/invoices       → factures du client (émises à la demande)
   GET    /api/admin/crm/transactions                   → historique des paiements
   POST   /api/admin/crm/transactions/{id}/attach       → rattacher un paiement à un compte
   GET    /api/admin/crm/plans                          → catalogue des formules
@@ -38,6 +39,7 @@ try:
     )
     from routes.hyp_payments import provision_subscription, transaction_email
     import promo as promo_lib
+    import invoicing
 except ImportError:  # pragma: no cover - import depuis la racine du repo
     from backend.database import get_db
     from backend.models import (
@@ -49,6 +51,7 @@ except ImportError:  # pragma: no cover - import depuis la racine du repo
     )
     from backend.routes.hyp_payments import provision_subscription, transaction_email
     from backend import promo as promo_lib
+    from backend import invoicing
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +120,16 @@ def _plan_name(plan_id: Optional[str]) -> str:
     return (PLANS.get(plan_id or "") or {}).get("name") or plan_id or "—"
 
 
+def _plan_names_map() -> Dict[str, str]:
+    """Intitulés des formules, tels qu'ils seront recopiés sur les factures.
+
+    Le tiret cadratin de `_plan_name` sert d'affichage pour une formule inconnue ;
+    sur une facture, on préfère l'identifiant brut à un tiret, qui ne dirait rien
+    à la comptable.
+    """
+    return {pid: (plan or {}).get("name") or pid for pid, plan in PLANS.items()}
+
+
 def _is_active(sub: Optional[SubscriptionDB], now: Optional[datetime] = None) -> bool:
     if sub is None:
         return False
@@ -176,6 +189,75 @@ def _spent_by_user(db: Session, user_ids: List[str]) -> Dict[str, float]:
         .all()
     )
     return {uid: float(total or 0) for uid, total in rows}
+
+
+def _invoice_payload(invoice) -> Dict[str, Any]:
+    """Une facture telle que la fiche client l'affiche.
+
+    `downloads` porte toutes les formes disponibles : le front se contente
+    d'ouvrir le lien correspondant au bouton cliqué, sans rien reconstruire.
+    """
+    base = f"/api/admin/invoices/{invoice.id}"
+    return {
+        "id": invoice.id,
+        "number": invoice.number,
+        "document_type": invoice.document_type,
+        "status": invoice.status,
+        "plan_name": invoice.plan_name or invoice.plan_id,
+        "currency": invoice.currency,
+        "amount_net": invoice.amount_net,
+        "vat_rate": invoice.vat_rate,
+        "vat_amount": invoice.vat_amount,
+        "amount_total": invoice.amount_total,
+        "issued_at": invoice.issued_at,
+        "paid_at": invoice.paid_at,
+        "service_start": invoice.service_start,
+        "service_end": invoice.service_end,
+        "cancellation_reason": invoice.cancellation_reason,
+        "downloads": {
+            "pdf": f"{base}.pdf",
+            "html": f"{base}.html",
+            "jpg": f"{base}.jpg",
+            "png": f"{base}.png",
+        },
+    }
+
+
+def _client_invoices(db: Session, user_id: str) -> Dict[str, Any]:
+    """Les factures d'un client, en émettant d'abord celles qui manquent.
+
+    C'est ce qui rend la facture automatique du point de vue de l'exploitant :
+    ouvrir la fiche d'un client suffit à ce que ses paiements encaissés soient
+    facturés. L'émission reste idempotente (une transaction ne donne qu'une
+    facture), donc rouvrir la fiche ne crée pas de doublon.
+
+    Une facturation non configurée n'est pas une erreur ici : la fiche doit
+    s'ouvrir quand même, en disant ce qu'il manque.
+    """
+    generated: Optional[Dict[str, Any]] = None
+    blocked: Optional[Dict[str, Any]] = None
+
+    try:
+        generated = invoicing.generate_missing_invoices_for_user(
+            db, user_id, plan_names=_plan_names_map(),
+        )
+    except invoicing.InvoicingNotConfigured as exc:
+        blocked = {"message": str(exc), "aide": invoicing.configuration_help(db)}
+    except Exception as exc:  # une facture en échec ne doit pas fermer la fiche
+        logger.exception("Factures du client %s non émises : %s", user_id, exc)
+        blocked = {"message": f"Émission impossible : {exc}"}
+
+    invoices = invoicing.invoices_for_user(db, user_id)
+    return {
+        "invoices": [_invoice_payload(i) for i in invoices],
+        "invoicing": {
+            "configured": invoicing.invoicing_configured(db),
+            "generated": generated,
+            "blocked": blocked,
+            # Récapitulatif d'un coup d'œil, avoirs déduits (montants négatifs).
+            "total_facture": round(sum(i.amount_total or 0 for i in invoices), 2),
+        },
+    }
 
 
 def _counts(db: Session, model, user_ids: List[str]) -> Dict[str, int]:
@@ -415,7 +497,32 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
         "total_spent": round(
             sum(float(t.amount or 0) for t in transactions if t.status == "completed"), 2
         ),
+        # Factures du client, émises à l'ouverture de la fiche si elles manquent :
+        # l'exploitant n'a aucun traitement à lancer pour les obtenir.
+        **_client_invoices(db, user_id),
     }
+
+
+@router.get("/users/{user_id}/invoices")
+async def get_user_invoices(user_id: str, db: Session = Depends(get_db)):
+    """Factures d'un client, les manquantes étant émises au passage.
+
+    Même contenu que la section « Factures » de la fiche, isolé pour pouvoir
+    rafraîchir la liste — après avoir renseigné l'identité de l'entreprise, par
+    exemple — sans recharger toute la fiche.
+    """
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    payload = _client_invoices(db, user_id)
+    payload["user"] = {
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+    }
+    return payload
 
 
 @router.patch("/users/{user_id}")

@@ -9,6 +9,7 @@ Couvre :
 - l'enregistrement des erreurs à la fin d'un examen.
 """
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,9 @@ sys.path.insert(0, str(backend_path))
 
 from server import app  # noqa: E402
 from database import Base, get_db  # noqa: E402
-from models import UserDB, QuestionDB, ExamSessionDB, UserMistakeDB, User  # noqa: E402
+from models import (  # noqa: E402
+    UserDB, QuestionDB, ExamSessionDB, SubscriptionDB, UserMistakeDB, User,
+)
 from auth import get_current_user, get_current_user_optional  # noqa: E402
 
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test_mistakes.db"
@@ -67,6 +70,15 @@ def db():
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     session.add(UserDB(id="user-1", email="eleve@test.fr", hashed_password="x"))
+    # Abonnement actif : l'entraînement et l'examen sont derrière le paywall
+    # (`require_subscription`). Sans lui, ces tests recevraient 402 — et ils ne
+    # diraient plus rien de la mémoire des erreurs, qu'ils sont censés couvrir.
+    # On abonne l'élève plutôt que de neutraliser le paywall, pour que le
+    # parcours testé soit celui d'un élève réel.
+    session.add(SubscriptionDB(
+        id="sub-1", user_id="user-1", plan_id="basic_30d", status="active",
+        start_date=datetime.utcnow(), end_date=datetime.utcnow() + timedelta(days=30),
+    ))
     session.add(QuestionDB(id="q1", text="Question 1", category="Priorités", options=_opts()))
     session.add(QuestionDB(id="q2", text="Question 2", category="Croisements", options=_opts()))
     session.commit()

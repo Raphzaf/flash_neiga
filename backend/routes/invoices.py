@@ -10,8 +10,12 @@ en deux clics.
   GET    /api/admin/invoices/summary         → total encaissé et TVA collectée
   GET    /api/admin/invoices/export.csv      → récapitulatif tableur
   GET    /api/admin/invoices/export.zip      → toutes les factures PDF de la période
+  PUT    /api/admin/invoices/config          → renseigner l'identité de l'entreprise
   GET    /api/admin/invoices/{invoice_id}    → détail d'une facture
-  GET    /api/admin/invoices/{invoice_id}.pdf → la facture en PDF
+  GET    /api/admin/invoices/{invoice_id}.pdf  → la facture en PDF
+  GET    /api/admin/invoices/{invoice_id}.html → la facture en page web imprimable
+  GET    /api/admin/invoices/{invoice_id}.jpg  → la facture en image (JPG)
+  GET    /api/admin/invoices/{invoice_id}.png  → la facture en image (PNG)
   POST   /api/admin/invoices/{invoice_id}/cancel → annuler par un avoir
 
 Toutes les routes sont réservées aux administrateurs (`require_admin`).
@@ -32,16 +36,20 @@ from sqlalchemy.orm import Session
 
 try:
     from database import get_db
-    from models import InvoiceDB, TransactionDB
+    from models import InvoiceDB, TransactionDB, User
     from auth import require_admin
+    import app_settings
     import invoicing
     import invoice_pdf
+    import invoice_formats
 except ImportError:  # pragma: no cover - import depuis la racine du dépôt
     from backend.database import get_db
-    from backend.models import InvoiceDB, TransactionDB
+    from backend.models import InvoiceDB, TransactionDB, User
     from backend.auth import require_admin
+    from backend import app_settings
     from backend import invoicing
     from backend import invoice_pdf
+    from backend import invoice_formats
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +79,27 @@ class GenerateRequest(BaseModel):
 
 class CancelRequest(BaseModel):
     reason: str
+
+
+class IssuerConfig(BaseModel):
+    """Identité légale de l'émetteur, saisie depuis le CRM.
+
+    Tous les champs sont facultatifs dans le schéma : une modification partielle
+    (corriger seulement le téléphone) ne doit pas effacer le reste. Un champ
+    laissé à `None` n'est pas touché ; un champ vidé volontairement (chaîne
+    vide) revient à la valeur de l'environnement.
+    """
+    company_name: Optional[str] = None
+    company_legal_id: Optional[str] = None
+    company_address: Optional[str] = None
+    company_city: Optional[str] = None
+    company_country: Optional[str] = None
+    company_email: Optional[str] = None
+    company_phone: Optional[str] = None
+    company_vat_id: Optional[str] = None
+    footer: Optional[str] = None
+    vat_rate: Optional[float] = None
+    prices_include_vat: Optional[bool] = None
 
 
 # ===== Helpers =====
@@ -116,6 +145,7 @@ def _query_period(db: Session, since: Optional[datetime], until: Optional[dateti
 
 def _payload(invoice: InvoiceDB) -> Dict[str, Any]:
     return {
+        "downloads": _download_links(invoice.id),
         "id": invoice.id,
         "number": invoice.number,
         "document_type": invoice.document_type,
@@ -152,16 +182,85 @@ def _safe_filename(number: str) -> str:
     return "".join(c for c in (number or "facture") if c.isalnum() or c in "-_")
 
 
+def _download_links(invoice_id: str) -> Dict[str, str]:
+    """Les formes sous lesquelles une facture est récupérable.
+
+    Fournies par le serveur plutôt que reconstruites côté navigateur : ajouter
+    une forme demain n'obligera pas à retoucher le front.
+    """
+    base = f"/api/admin/invoices/{invoice_id}"
+    return {
+        "pdf": f"{base}.pdf",
+        "html": f"{base}.html",
+        "jpg": f"{base}.jpg",
+        "png": f"{base}.png",
+    }
+
+
 # ===== Configuration =====
 @router.get("/config")
-def invoice_config():
+def invoice_config(db: Session = Depends(get_db)):
     """Ce qu'il reste à renseigner avant de pouvoir émettre.
 
     Tant que la raison sociale et le numéro d'entreprise ne sont pas définis,
     aucune facture n'est émise : un PDF sans mentions légales n'aurait aucune
     valeur pour la comptable.
     """
-    return invoicing.configuration_help()
+    return invoicing.configuration_help(db)
+
+
+# Correspondance entre les champs du formulaire et les clés de réglage.
+_CONFIG_KEYS = {
+    "company_name": "INVOICE_COMPANY_NAME",
+    "company_legal_id": "INVOICE_COMPANY_LEGAL_ID",
+    "company_address": "INVOICE_COMPANY_ADDRESS",
+    "company_city": "INVOICE_COMPANY_CITY",
+    "company_country": "INVOICE_COMPANY_COUNTRY",
+    "company_email": "INVOICE_COMPANY_EMAIL",
+    "company_phone": "INVOICE_COMPANY_PHONE",
+    "company_vat_id": "INVOICE_COMPANY_VAT_ID",
+    "footer": "INVOICE_FOOTER",
+}
+
+
+@router.put("/config")
+def update_invoice_config(
+    payload: IssuerConfig,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Enregistre l'identité de l'entreprise, sans redéploiement.
+
+    C'est ce qui débloque l'émission : avant, ces informations n'existaient que
+    dans les variables du serveur, et une facture ne pouvait donc pas être
+    émise tant que personne n'y touchait.
+    """
+    values: Dict[str, Optional[str]] = {}
+    for field, key in _CONFIG_KEYS.items():
+        value = getattr(payload, field)
+        if value is not None:
+            values[key] = value
+
+    if payload.vat_rate is not None:
+        if not 0 <= payload.vat_rate <= 100:
+            raise HTTPException(
+                status_code=400,
+                detail="Le taux de TVA doit être compris entre 0 et 100.",
+            )
+        values["INVOICE_VAT_RATE"] = str(payload.vat_rate)
+
+    if payload.prices_include_vat is not None:
+        values["INVOICE_PRICES_INCLUDE_VAT"] = "true" if payload.prices_include_vat else "false"
+
+    if not values:
+        raise HTTPException(status_code=400, detail="Aucun réglage à enregistrer.")
+
+    try:
+        app_settings.set_many(db, values, updated_by=current_user.email)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return invoicing.configuration_help(db)
 
 
 # ===== Émission =====
@@ -181,7 +280,7 @@ def generate_invoices(payload: GenerateRequest, db: Session = Depends(get_db)):
             status_code=409,
             detail={
                 "message": str(exc),
-                "aide": invoicing.configuration_help(),
+                "aide": invoicing.configuration_help(db),
             },
         )
 
@@ -337,6 +436,55 @@ def get_invoice_pdf(invoice_id: str, db: Session = Depends(get_db)):
             "Content-Disposition": f'inline; filename="{_safe_filename(invoice.number)}.pdf"',
         },
     )
+
+
+# Les routes « {invoice_id}.<extension> » sont déclarées AVANT « {invoice_id} » :
+# sinon la route générique attraperait « abc.jpg » et chercherait une facture
+# dont l'identifiant contient l'extension.
+@router.get("/{invoice_id}.html", response_class=Response)
+def get_invoice_html(invoice_id: str, db: Session = Depends(get_db)):
+    """La facture en page web : s'ouvre partout, s'imprime en PDF depuis le navigateur.
+
+    Ne dépend d'aucune bibliothèque : c'est la forme qui reste disponible même si
+    la génération PDF ou image manque sur le serveur.
+    """
+    invoice = _get_or_404(db, invoice_id)
+    return Response(
+        content=invoice_formats.render_invoice_html(invoice),
+        media_type="text/html; charset=utf-8",
+    )
+
+
+def _image_response(db: Session, invoice_id: str, fmt: str, extension: str) -> Response:
+    invoice = _get_or_404(db, invoice_id)
+    try:
+        content = invoice_formats.render_invoice_image(invoice, fmt)
+    except invoice_formats.ImageUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    return Response(
+        content=content,
+        media_type=f"image/{fmt}",
+        headers={
+            # `inline` : l'image s'affiche dans l'onglet, on l'enregistre d'un
+            # clic droit — c'est le geste attendu pour l'envoyer par messagerie.
+            "Content-Disposition": (
+                f'inline; filename="{_safe_filename(invoice.number)}.{extension}"'
+            ),
+        },
+    )
+
+
+@router.get("/{invoice_id}.jpg", response_class=Response)
+def get_invoice_jpg(invoice_id: str, db: Session = Depends(get_db)):
+    """La facture en image JPG — la forme la plus légère à envoyer par messagerie."""
+    return _image_response(db, invoice_id, "jpeg", "jpg")
+
+
+@router.get("/{invoice_id}.png", response_class=Response)
+def get_invoice_png(invoice_id: str, db: Session = Depends(get_db)):
+    """La facture en image PNG — sans perte, pour l'impression ou l'archivage."""
+    return _image_response(db, invoice_id, "png", "png")
 
 
 @router.get("/{invoice_id}")

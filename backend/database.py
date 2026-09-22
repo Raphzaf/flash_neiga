@@ -1,8 +1,52 @@
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import os
 import logging
+
+logger = logging.getLogger(__name__)
+
+# Paramètres d'URL que d'autres écosystèmes (Prisma, Supabase) ajoutent à la
+# chaîne de connexion et que psycopg2 refuse : il lève « invalid dsn: invalid
+# connection option » et le serveur ne démarre pas du tout. Coller l'URL fournie
+# par Supabase suffisait donc à mettre l'application à terre ; on les retire.
+_UNSUPPORTED_QUERY_PARAMS = {"pgbouncer", "connection_limit", "pool_timeout", "schema"}
+
+
+def normalize_database_url(url: str) -> str:
+    """Rend une URL PostgreSQL utilisable par psycopg2.
+
+    Deux corrections, toutes deux dues à la façon dont les hébergeurs écrivent
+    l'URL plutôt qu'à un choix de notre part :
+
+    * `postgres://` → `postgresql://` (Render fournit la première forme,
+      SQLAlchemy attend la seconde) ;
+    * suppression des paramètres propres à d'autres pilotes (`pgbouncer=true`
+      en tête), que psycopg2 rejette.
+    """
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    if not url.startswith("postgresql"):
+        return url
+
+    parts = urlsplit(url)
+    if not parts.query:
+        return url
+
+    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k.lower() not in _UNSUPPORTED_QUERY_PARAMS]
+    dropped = [k for k, _ in parse_qsl(parts.query, keep_blank_values=True)
+               if k.lower() in _UNSUPPORTED_QUERY_PARAMS]
+    if dropped:
+        logger.info(
+            "Paramètres de connexion ignorés (non pris en charge par psycopg2) : %s",
+            ", ".join(sorted(set(dropped))),
+        )
+
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
+
 
 # Support both PostgreSQL (production) and SQLite (local development)
 # Check for DATABASE_URL environment variable first
@@ -16,9 +60,7 @@ if not DATABASE_URL:
     connect_args = {"check_same_thread": False}
 else:
     # Production - PostgreSQL
-    # Render provides postgres:// but SQLAlchemy needs postgresql://
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = normalize_database_url(DATABASE_URL)
     connect_args = {}
 
 engine = create_engine(
@@ -30,8 +72,6 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
-
-logger = logging.getLogger(__name__)
 
 
 def get_db():

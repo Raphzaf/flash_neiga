@@ -358,6 +358,22 @@ class CourseDB(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AppSettingDB(Base):
+    """Réglage d'exploitation, modifiable depuis l'espace administrateur.
+
+    Les variables d'environnement conviennent aux secrets (clés d'API), mais pas
+    aux informations que l'exploitant doit pouvoir corriger lui-même : changer la
+    raison sociale ne doit pas demander un redéploiement. Ces réglages-là vivent
+    donc en base, et l'environnement ne sert plus que de valeur par défaut.
+    """
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String, nullable=True)
+
+
 # ===== Pydantic Models =====
 class QuestionOption(BaseModel):
     id: str
@@ -376,6 +392,28 @@ class QuestionCreate(BaseModel):
 class Question(QuestionCreate):
     id: str
     created_at: Optional[datetime] = None  # ← Rends created_at optionnel aussi
+
+
+class StudentQuestionOption(BaseModel):
+    """Une option telle que l'élève la reçoit : sans la clé de correction.
+
+    `is_correct` est volontairement absent. Le servir au navigateur revient à
+    livrer le corrigé avec le sujet : la correction est faite par le serveur
+    (`/api/training/check`, `/api/exam/{id}/finish`).
+    """
+    id: str
+    text: str
+
+
+class StudentQuestion(BaseModel):
+    """Une question telle qu'elle est servie à l'élève pendant l'entraînement."""
+    id: str
+    text: str
+    category: str
+    options: List[StudentQuestionOption]
+    explanation: Optional[str] = None
+    image_url: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 class TrafficSignCreate(BaseModel):
     number: str

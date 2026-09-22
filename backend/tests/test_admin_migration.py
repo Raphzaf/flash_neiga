@@ -35,9 +35,21 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+
 # Setup and teardown
 @pytest.fixture(scope="function")
-def test_db():
+def test_db(monkeypatch):
+    """Base de test, ET redirection du moteur utilisé par la migration.
+
+    La route `/api/admin/run-migration` n'emprunte pas `get_db` : elle agit sur
+    le moteur du module `database`, importé à son chargement. Sans la
+    redirection ci-dessous, ces tests exécutaient des `ALTER TABLE` sur la base
+    désignée par DATABASE_URL — la base de production sur une machine de
+    développement qui la renseigne. On force donc le moteur de test.
+    """
+    import routes.admin_migration as admin_migration
+    monkeypatch.setattr(admin_migration, "engine", engine)
+
     Base.metadata.create_all(bind=engine)
     yield TestingSessionLocal()
     Base.metadata.drop_all(bind=engine)

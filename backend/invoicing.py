@@ -15,7 +15,8 @@ non des choix techniques :
 3. **On n'annule pas, on émet un avoir.** Une facture erronée reste en base ;
    un avoir (numéro propre, montants négatifs) vient la neutraliser.
 
-L'identité de l'entreprise n'est jamais codée en dur : elle vient de variables
+L'identité de l'entreprise n'est jamais codée en dur : elle est saisie depuis
+l'espace administrateur (et conservée en base), avec repli sur les variables
 d'environnement (voir `.env.example`). Tant qu'elle n'est pas renseignée, aucune
 facture n'est émise — mieux vaut un message clair qu'un PDF sans mentions
 légales envoyé à une comptable.
@@ -33,8 +34,10 @@ from sqlalchemy.orm import Session
 
 try:
     from models import InvoiceDB, SubscriptionDB, TransactionDB, UserDB
+    import app_settings
 except ImportError:  # pragma: no cover - import depuis la racine du dépôt
     from backend.models import InvoiceDB, SubscriptionDB, TransactionDB, UserDB
+    from backend import app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +65,21 @@ class InvoicingNotConfigured(Exception):
 
 
 # ===== Identité de l'émetteur =====
-def _env(name: str, default: str = "") -> str:
-    return (os.environ.get(name) or default).strip()
+# Chaque réglage est cherché d'abord en base (modifiable depuis l'espace
+# administrateur), puis dans l'environnement. C'est ce qui permet de renseigner
+# la raison sociale sans redéployer le serveur.
+def _env(name: str, default: str = "", db: Optional[Session] = None) -> str:
+    try:
+        return app_settings.get(name, db=db, default=default)
+    except KeyError:
+        # Réglage hors liste blanche : il n'existe que dans l'environnement.
+        return (os.environ.get(name) or default).strip()
 
 
-def vat_rate() -> float:
+def vat_rate(db: Optional[Session] = None) -> float:
     """Taux de TVA à appliquer aux nouvelles factures, en pourcentage."""
-    raw = os.environ.get("INVOICE_VAT_RATE")
-    if raw is None or not raw.strip():
+    raw = _env("INVOICE_VAT_RATE", db=db)
+    if not raw:
         return DEFAULT_VAT_RATE
     try:
         value = float(raw)
@@ -82,25 +92,25 @@ def vat_rate() -> float:
     return value
 
 
-def prices_include_vat() -> bool:
-    raw = _env("INVOICE_PRICES_INCLUDE_VAT").lower()
+def prices_include_vat(db: Optional[Session] = None) -> bool:
+    raw = _env("INVOICE_PRICES_INCLUDE_VAT", db=db).lower()
     if not raw:
         return DEFAULT_PRICES_INCLUDE_VAT
     return raw in ("1", "true", "yes", "oui")
 
 
-def issuer() -> Dict[str, str]:
+def issuer(db: Optional[Session] = None) -> Dict[str, str]:
     """Coordonnées légales de l'entreprise, telles qu'elles figureront en tête."""
     return {
-        "name": _env("INVOICE_COMPANY_NAME"),
-        "legal_id": _env("INVOICE_COMPANY_LEGAL_ID"),      # ח.פ / ע.מ
-        "address": _env("INVOICE_COMPANY_ADDRESS"),
-        "city": _env("INVOICE_COMPANY_CITY"),
-        "country": _env("INVOICE_COMPANY_COUNTRY", "Israël"),
-        "email": _env("INVOICE_COMPANY_EMAIL"),
-        "phone": _env("INVOICE_COMPANY_PHONE"),
-        "vat_id": _env("INVOICE_COMPANY_VAT_ID"),          # n° assujetti TVA, si distinct
-        "footer": _env("INVOICE_FOOTER"),                  # mention libre (RIB, conditions…)
+        "name": _env("INVOICE_COMPANY_NAME", db=db),
+        "legal_id": _env("INVOICE_COMPANY_LEGAL_ID", db=db),      # ח.פ / ע.מ
+        "address": _env("INVOICE_COMPANY_ADDRESS", db=db),
+        "city": _env("INVOICE_COMPANY_CITY", db=db),
+        "country": _env("INVOICE_COMPANY_COUNTRY", "Israël", db=db),
+        "email": _env("INVOICE_COMPANY_EMAIL", db=db),
+        "phone": _env("INVOICE_COMPANY_PHONE", db=db),
+        "vat_id": _env("INVOICE_COMPANY_VAT_ID", db=db),          # n° assujetti TVA, si distinct
+        "footer": _env("INVOICE_FOOTER", db=db),                  # mention libre (RIB, conditions…)
     }
 
 
@@ -109,29 +119,41 @@ def issuer() -> Dict[str, str]:
 REQUIRED_ISSUER_FIELDS = ("name", "legal_id")
 
 
-def missing_issuer_fields() -> List[str]:
-    data = issuer()
+def missing_issuer_fields(db: Optional[Session] = None) -> List[str]:
+    data = issuer(db=db)
     return [field for field in REQUIRED_ISSUER_FIELDS if not data.get(field)]
 
 
-def invoicing_configured() -> bool:
-    return not missing_issuer_fields()
+def invoicing_configured(db: Optional[Session] = None) -> bool:
+    return not missing_issuer_fields(db=db)
 
 
-def configuration_help() -> Dict[str, Any]:
+def configuration_help(db: Optional[Session] = None) -> Dict[str, Any]:
     """Ce qu'il reste à renseigner — affiché tel quel côté admin."""
-    missing = missing_issuer_fields()
+    missing = missing_issuer_fields(db=db)
+    # Deux vocabulaires pour le même manque : le libellé que lit l'exploitant
+    # dans le CRM, et le nom de la variable d'environnement — qui reste une
+    # façon valable de renseigner le réglage, et la seule lisible dans les logs.
     labels = {
+        "name": "Raison sociale de l'entreprise",
+        "legal_id": "Numéro d'entreprise (ח.פ / ע.מ)",
+    }
+    env_names = {
         "name": "INVOICE_COMPANY_NAME — raison sociale de l'entreprise",
         "legal_id": "INVOICE_COMPANY_LEGAL_ID — numéro d'entreprise (ח.פ / ע.מ)",
     }
     return {
         "configured": not missing,
         "missing": missing,
-        "missing_env": [labels.get(field, field) for field in missing],
-        "vat_rate": vat_rate(),
-        "prices_include_vat": prices_include_vat(),
-        "issuer": issuer(),
+        "missing_labels": [labels.get(field, field) for field in missing],
+        "missing_env": [env_names.get(field, field) for field in missing],
+        "vat_rate": vat_rate(db=db),
+        "prices_include_vat": prices_include_vat(db=db),
+        "issuer": issuer(db=db),
+        # Renseignable directement depuis le CRM : l'administrateur n'a pas à
+        # toucher aux variables du serveur pour émettre ses factures.
+        "editable_in_admin": True,
+        "sources": app_settings.sources(db) if db is not None else {},
     }
 
 
@@ -286,9 +308,9 @@ def issue_invoice(
     les webhooks de paiement se répètent, une facture en double serait une erreur
     comptable.
     """
-    if not invoicing_configured():
+    if not invoicing_configured(db):
         raise InvoicingNotConfigured(
-            "Identité de l'entreprise incomplète : " + ", ".join(missing_issuer_fields())
+            "Identité de l'entreprise incomplète : " + ", ".join(missing_issuer_fields(db))
         )
 
     existing = (
@@ -303,8 +325,8 @@ def issue_invoice(
         if transaction.user_id else None
     )
     paid_at = transaction.completed_at or transaction.created_at or datetime.utcnow()
-    rate = vat_rate()
-    total, net, vat = split_vat(transaction.amount or 0, rate, inclusive=prices_include_vat())
+    rate = vat_rate(db)
+    total, net, vat = split_vat(transaction.amount or 0, rate, inclusive=prices_include_vat(db))
     service_start, service_end = _service_period(db, transaction)
     year = paid_at.year
 
@@ -327,7 +349,7 @@ def issue_invoice(
             amount_net=net,
             vat_rate=rate,
             vat_amount=vat,
-            issuer_snapshot=issuer(),
+            issuer_snapshot=issuer(db),
             issued_at=datetime.utcnow(),
             paid_at=paid_at,
             status="issued",
@@ -378,7 +400,7 @@ def cancel_invoice(db: Session, invoice: InvoiceDB, reason: str) -> InvoiceDB:
             amount_net=-invoice.amount_net,
             vat_rate=invoice.vat_rate,
             vat_amount=-invoice.vat_amount,
-            issuer_snapshot=issuer(),
+            issuer_snapshot=issuer(db),
             issued_at=datetime.utcnow(),
             paid_at=invoice.paid_at,
             status="issued",
@@ -407,9 +429,9 @@ def generate_missing_invoices(
     Sert au rattrapage : les paiements antérieurs à la mise en place de la
     facturation n'ont pas de facture, et la comptable les attend.
     """
-    if not invoicing_configured():
+    if not invoicing_configured(db):
         raise InvoicingNotConfigured(
-            "Identité de l'entreprise incomplète : " + ", ".join(missing_issuer_fields())
+            "Identité de l'entreprise incomplète : " + ", ".join(missing_issuer_fields(db))
         )
 
     query = db.query(TransactionDB).filter(TransactionDB.status == "completed")
@@ -445,5 +467,81 @@ def generate_missing_invoices(
         "factures_creees": len(created),
         "numeros": created,
         "deja_facturees": len([t for t in transactions if t.id in already]),
+        "sans_montant_ignores": skipped_no_amount,
+    }
+
+
+def invoices_for_user(db: Session, user_id: str) -> List[InvoiceDB]:
+    """Toutes les pièces d'un client, la plus récente d'abord.
+
+    Un paiement encaissé avant la création du compte a pu être facturé sans
+    `user_id` : on rattrape ces pièces par l'adresse e-mail, sinon la facture
+    resterait invisible depuis la fiche du client alors qu'elle existe bien.
+    """
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    conditions = [InvoiceDB.user_id == user_id]
+    if user is not None and user.email:
+        conditions.append(
+            (InvoiceDB.user_id.is_(None)) & (func.lower(InvoiceDB.customer_email) == user.email.lower())
+        )
+
+    from sqlalchemy import or_
+
+    return (
+        db.query(InvoiceDB)
+        .filter(or_(*conditions))
+        .order_by(InvoiceDB.issued_at.desc(), InvoiceDB.sequence.desc())
+        .all()
+    )
+
+
+def generate_missing_invoices_for_user(
+    db: Session,
+    user_id: str,
+    plan_names: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Émet les factures manquantes d'un seul client.
+
+    Appelée à l'ouverture de sa fiche dans le CRM : la facture doit être là sans
+    que personne n'ait à lancer un traitement de rattrapage global. Le paiement
+    encaissé est la seule condition — un accès offert par code promo (montant
+    nul) ne donne pas lieu à facture, faute de recette à déclarer.
+    """
+    if not invoicing_configured(db):
+        raise InvoicingNotConfigured(
+            "Identité de l'entreprise incomplète : " + ", ".join(missing_issuer_fields(db))
+        )
+
+    transactions = (
+        db.query(TransactionDB)
+        .filter(
+            TransactionDB.user_id == user_id,
+            TransactionDB.status == "completed",
+        )
+        .order_by(func.coalesce(TransactionDB.completed_at, TransactionDB.created_at).asc())
+        .all()
+    )
+
+    created: List[str] = []
+    skipped_no_amount = 0
+    for transaction in transactions:
+        if not transaction.amount:
+            skipped_no_amount += 1
+            continue
+        existing = (
+            db.query(InvoiceDB).filter(InvoiceDB.transaction_id == transaction.id).first()
+        )
+        if existing is not None:
+            # Une facture émise avant que le paiement soit rattaché au compte ne
+            # porte pas encore le nom du client : c'est le moment de le compléter.
+            _attach_customer_if_missing(db, existing, transaction)
+            continue
+        plan_name = (plan_names or {}).get(transaction.plan_id or "")
+        created.append(issue_invoice(db, transaction, plan_name=plan_name).number)
+
+    return {
+        "paiements_encaisses": len(transactions),
+        "factures_creees": len(created),
+        "numeros": created,
         "sans_montant_ignores": skipped_no_amount,
     }

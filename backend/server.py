@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -20,14 +20,21 @@ import json
 # Stripe integration removed
 # Support imports both when running from backend/ and from repo root
 try:
-    from database import engine, SessionLocal, Base, get_db, ensure_schema_updated
+    from database import (
+        engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url,
+    )
+    import text_repair
 except ImportError:
-    from backend.database import engine, SessionLocal, Base, get_db, ensure_schema_updated
+    from backend.database import (
+        engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url,
+    )
+    from backend import text_repair
 try:
     from models import (
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
         SubscriptionDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
+        StudentQuestion, StudentQuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
@@ -39,6 +46,7 @@ except ImportError:
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
         SubscriptionDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
+        StudentQuestion, StudentQuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
@@ -208,7 +216,9 @@ def init_sample_data(db: Session):
                     question = QuestionDB(
                         id=str(uuid.uuid4()),
                         text=q["text"],
-                        category=q["category"],
+                        # Les fichiers sources portent déjà du mojibake : réparer
+                        # ici évite qu'un réimport ne réintroduise « SÃ©curitÃ© ».
+                        category=text_repair.repair_mojibake(q["category"]),
                         options=q["options"],
                         explanation=q.get("explanation")
                     )
@@ -249,7 +259,7 @@ def load_questions_from_data_v3(db: Session):
                 question = QuestionDB(
                     id=str(uuid.uuid4()),
                     text=item['text'],
-                    category=item.get('category', 'general'),
+                    category=text_repair.repair_mojibake(item.get('category', 'general')),
                     options=item.get('options', []),
                     explanation=item.get('explanation', '')
                 )
@@ -378,7 +388,7 @@ async def startup():
                         name=item.get("nom") or "",
                         description=(item.get("nom") or ""),
                         image_url=item.get("image"),
-                        category=item.get("type") or "Autre",
+                        category=text_repair.repair_mojibake(item.get("type") or "Autre"),
                     )
                     db.add(sign)
                     imported_signs += 1
@@ -398,7 +408,27 @@ async def startup():
             logger.info(f"✅ Loaded {new_sign_count} traffic signs from JSON")
         else:
             logger.info(f"✅ Database already contains {sign_count} traffic signs")
-            
+
+        # Step 7: Repair mangled category names (double-encoded UTF-8)
+        # « SÃ©curitÃ© » au lieu de « Sécurité » : l'élève le voyait dans le
+        # filtre d'entraînement et dans ses statistiques. La réparation est
+        # idempotente, donc sans effet une fois la base saine.
+        logger.info("📝 Step 7: Repairing mangled category names...")
+        try:
+            report = text_repair.repair_question_categories(db)
+            if report["questions"] or report["panneaux"]:
+                logger.info(
+                    "✅ Repaired %s question(s) and %s sign(s): %s",
+                    report["questions"], report["panneaux"],
+                    ", ".join(f"{bad!r} → {good!r}" for bad, good in report["corrections"].items()),
+                )
+            else:
+                logger.info("✅ No mangled category names found")
+        except Exception as e:
+            # Un accent abîmé ne doit pas empêcher le serveur de démarrer.
+            logger.error(f"❌ Category repair failed: {e}", exc_info=True)
+            db.rollback()
+
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
         db.rollback()
@@ -419,12 +449,15 @@ async def startup():
             import psycopg2
             from psycopg2.extras import execute_batch
             
-            DATABASE_URL = os.getenv('DATABASE_URL')
-            if not DATABASE_URL or 'postgres' not in DATABASE_URL:
+            raw_url = os.getenv('DATABASE_URL')
+            if not raw_url or 'postgres' not in raw_url:
                 logger.info("   ℹ️  PostgreSQL not detected, skipping")
                 return
-            
-            conn = psycopg2.connect(DATABASE_URL)
+
+            # Même normalisation que pour le moteur principal : une URL de
+            # pooler (`?pgbouncer=true`) fait échouer psycopg2 sur
+            # « invalid dsn », et l'enrichissement serait perdu en silence.
+            conn = psycopg2.connect(normalize_database_url(raw_url))
             cursor = conn.cursor()
             
             # Add column FIRST if needed
@@ -509,7 +542,9 @@ async def startup():
     # ===== Admin Import Official =====
     def _map_official_question(raw: dict):
         text = raw.get("Question") or raw.get("question") or ""
-        category = raw.get("Sujet") or raw.get("Category") or "Autre"
+        category = text_repair.repair_mojibake(
+            raw.get("Sujet") or raw.get("Category") or "Autre"
+        )
         explanation = raw.get("Explication") or raw.get("explanation") or None
         # L’API officielle ne fournit pas d'options QCM
         options = []
@@ -590,7 +625,7 @@ async def startup():
             skipped = 0
             for q in data:
                 text = q.get("text")
-                category = q.get("category") or "Autre"
+                category = text_repair.repair_mojibake(q.get("category") or "Autre")
                 explanation = q.get("explanation")
                 options = q.get("options") or []
                 if not text:
@@ -798,6 +833,35 @@ async def get_question_stats(current_user: User = Depends(require_admin), db: Se
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/repair-categories")
+async def repair_categories(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Répare les noms de catégorie abîmés par un double encodage UTF-8.
+
+    La réparation tourne déjà au démarrage du serveur ; cette route permet de la
+    déclencher sans attendre un redéploiement, et de voir ce qu'elle a corrigé.
+    Elle est idempotente : la relancer sur une base saine ne change rien.
+    """
+    try:
+        report = text_repair.repair_question_categories(db)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Réparation impossible : {exc}")
+
+    total = report["questions"] + report["panneaux"]
+    return {
+        "questions_corrigees": report["questions"],
+        "panneaux_corriges": report["panneaux"],
+        "corrections": report["corrections"],
+        "message": (
+            f"{total} libellé(s) réparé(s)." if total
+            else "Aucun libellé abîmé : la base est saine."
+        ),
+    }
+
 
 @app.post("/api/admin/reset-admin-password")
 async def reset_admin_password(payload: dict, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(None)):
@@ -1066,7 +1130,7 @@ async def delete_sign(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/questions", response_model=List[Question])
+@app.get("/api/questions", response_model=List[StudentQuestion])
 async def get_questions(
     category:  Optional[List[str]] = None,
     q: Optional[str] = None,
@@ -1083,15 +1147,22 @@ async def get_questions(
             (QuestionDB. explanation.ilike(like_expr))
         )
     questions = query.all()
-    return [  # ✅ BIEN INDENTÉ (4 espaces)
-        Question(
+    # `StudentQuestion` ne porte pas `is_correct` : l'entraînement demande la
+    # correction au serveur (`/api/training/check`), il n'a donc aucun besoin de
+    # recevoir la bonne réponse avec la question.
+    return [
+        StudentQuestion(
             id=q.id,
             text=q.text,
             category=q.category,
-            options=[QuestionOption(**opt) for opt in q.options],
+            options=[
+                StudentQuestionOption(id=opt["id"], text=opt["text"])
+                for opt in (q.options or [])
+                if isinstance(opt, dict) and "id" in opt
+            ],
             explanation=q.explanation,
-            image_url=q.image_url,  # ✅ Ajout du champ image_url
-            created_at=q.created_at
+            image_url=q.image_url,
+            created_at=q.created_at,
         )
         for q in questions
     ]
@@ -1165,7 +1236,7 @@ async def get_signs(
                         name=item.get("nom") or "",
                         description=item.get("nom") or "",
                         image_url=item.get("image"),
-                        category=item.get("type") or "Autre",
+                        category=text_repair.repair_mojibake(item.get("type") or "Autre"),
                     )
                     for item in raw
                     if isinstance(item, dict)
@@ -1178,6 +1249,47 @@ async def get_signs(
 
 
 # ===== Exam Endpoints =====
+def _options_without_answers(options) -> List[Dict[str, Any]]:
+    """Les options d'une question, sans révéler laquelle est la bonne.
+
+    Tout est recopié sauf `is_correct` : ajouter demain un champ à une option
+    (une image, un libellé traduit) le fera suivre sans y penser, alors qu'une
+    liste blanche l'aurait silencieusement perdu.
+    """
+    if not isinstance(options, list):
+        return []
+    return [
+        {key: value for key, value in option.items() if key != "is_correct"}
+        for option in options
+        if isinstance(option, dict)
+    ]
+
+
+def _own_exam_or_404(db: Session, exam_id: str, current_user: User) -> ExamSessionDB:
+    """L'épreuve demandée, à condition qu'elle appartienne bien à l'élève.
+
+    Sans ce contrôle, un identifiant d'épreuve suffisait à lire, répondre à ou
+    clore l'examen de n'importe quel autre élève. On répond 404 et non 403 :
+    confirmer qu'une épreuve existe mais appartient à un autre renseignerait
+    encore l'appelant.
+
+    Les administrateurs ne sont pas filtrés : ils doivent pouvoir examiner une
+    épreuve pour répondre à une réclamation.
+    """
+    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
+    if not exam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+    if exam.user_id != current_user.id and not is_admin_email(current_user.email):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+    return exam
+
+
 @app.post("/api/exam/start")
 async def start_exam(
     db: Session = Depends(get_db),
@@ -1227,7 +1339,11 @@ async def start_exam(
     db.commit()
     db.refresh(exam)
     
-    # Return session with questions embedded for the client runner
+    # Return session with questions embedded for the client runner.
+    # Les options sont expurgées de `is_correct` : l'envoyer au navigateur
+    # revient à livrer le corrigé avec le sujet. La correction se fait côté
+    # serveur (`/finish`), et le détail des bonnes réponses n'est servi
+    # qu'après coup, par `/details`.
     return {
         "id": exam.id,
         "user_id": exam.user_id,
@@ -1239,7 +1355,7 @@ async def start_exam(
                 "question_id": q.id,
                 "text": q.text,
                 "category": q.category,
-                "options": q.options,
+                "options": _options_without_answers(q.options),
                 "image_url": q.image_url,
             } for q in selected
         ]
@@ -1250,16 +1366,10 @@ async def start_exam(
 async def get_exam(
     exam_id: str,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    
-    if not exam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
-        )
-    
+    exam = _own_exam_or_404(db, exam_id, current_user)
+
     return ExamSession(
         id=exam.id,
         user_id=exam.user_id,
@@ -1276,16 +1386,10 @@ async def submit_answer(
     exam_id: str,
     answer: SubmitAnswerRequest,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    
-    if not exam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
-        )
-    
+    exam = _own_exam_or_404(db, exam_id, current_user)
+
     # Update answer
     if exam.answers is None:
         exam.answers = {}
@@ -1299,16 +1403,10 @@ async def submit_answer(
 async def finish_exam(
     exam_id: str,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    
-    if not exam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
-        )
-    
+    exam = _own_exam_or_404(db, exam_id, current_user)
+
     # Calculate score
     correct_count = 0
     # Use stored question_ids count when available, fallback to 30
@@ -1355,11 +1453,9 @@ async def finish_exam(
 async def get_exam_details(
     exam_id: str,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    if not exam:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    exam = _own_exam_or_404(db, exam_id, current_user)
 
     # Build detailed question list based on stored question_ids
     detailed_questions = []
