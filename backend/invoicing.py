@@ -131,14 +131,22 @@ def invoicing_configured(db: Optional[Session] = None) -> bool:
 def configuration_help(db: Optional[Session] = None) -> Dict[str, Any]:
     """Ce qu'il reste à renseigner — affiché tel quel côté admin."""
     missing = missing_issuer_fields(db=db)
+    # Deux vocabulaires pour le même manque : le libellé que lit l'exploitant
+    # dans le CRM, et le nom de la variable d'environnement — qui reste une
+    # façon valable de renseigner le réglage, et la seule lisible dans les logs.
     labels = {
         "name": "Raison sociale de l'entreprise",
         "legal_id": "Numéro d'entreprise (ח.פ / ע.מ)",
     }
+    env_names = {
+        "name": "INVOICE_COMPANY_NAME — raison sociale de l'entreprise",
+        "legal_id": "INVOICE_COMPANY_LEGAL_ID — numéro d'entreprise (ח.פ / ע.מ)",
+    }
     return {
         "configured": not missing,
         "missing": missing,
-        "missing_env": [labels.get(field, field) for field in missing],
+        "missing_labels": [labels.get(field, field) for field in missing],
+        "missing_env": [env_names.get(field, field) for field in missing],
         "vat_rate": vat_rate(db=db),
         "prices_include_vat": prices_include_vat(db=db),
         "issuer": issuer(db=db),

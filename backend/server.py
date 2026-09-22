@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -28,6 +28,7 @@ try:
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
         SubscriptionDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
+        StudentQuestion, StudentQuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
@@ -39,6 +40,7 @@ except ImportError:
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
         SubscriptionDB,
         UserCreate, User, Question, QuestionCreate, QuestionOption,
+        StudentQuestion, StudentQuestionOption,
         TrafficSign, TrafficSignCreate,
         ExamSession, SubmitAnswerRequest, ExamResult,
         TrainingAnswerRequest, TrainingResponse,
@@ -1066,7 +1068,7 @@ async def delete_sign(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/questions", response_model=List[Question])
+@app.get("/api/questions", response_model=List[StudentQuestion])
 async def get_questions(
     category:  Optional[List[str]] = None,
     q: Optional[str] = None,
@@ -1083,15 +1085,22 @@ async def get_questions(
             (QuestionDB. explanation.ilike(like_expr))
         )
     questions = query.all()
-    return [  # ✅ BIEN INDENTÉ (4 espaces)
-        Question(
+    # `StudentQuestion` ne porte pas `is_correct` : l'entraînement demande la
+    # correction au serveur (`/api/training/check`), il n'a donc aucun besoin de
+    # recevoir la bonne réponse avec la question.
+    return [
+        StudentQuestion(
             id=q.id,
             text=q.text,
             category=q.category,
-            options=[QuestionOption(**opt) for opt in q.options],
+            options=[
+                StudentQuestionOption(id=opt["id"], text=opt["text"])
+                for opt in (q.options or [])
+                if isinstance(opt, dict) and "id" in opt
+            ],
             explanation=q.explanation,
-            image_url=q.image_url,  # ✅ Ajout du champ image_url
-            created_at=q.created_at
+            image_url=q.image_url,
+            created_at=q.created_at,
         )
         for q in questions
     ]
@@ -1178,6 +1187,47 @@ async def get_signs(
 
 
 # ===== Exam Endpoints =====
+def _options_without_answers(options) -> List[Dict[str, Any]]:
+    """Les options d'une question, sans révéler laquelle est la bonne.
+
+    Tout est recopié sauf `is_correct` : ajouter demain un champ à une option
+    (une image, un libellé traduit) le fera suivre sans y penser, alors qu'une
+    liste blanche l'aurait silencieusement perdu.
+    """
+    if not isinstance(options, list):
+        return []
+    return [
+        {key: value for key, value in option.items() if key != "is_correct"}
+        for option in options
+        if isinstance(option, dict)
+    ]
+
+
+def _own_exam_or_404(db: Session, exam_id: str, current_user: User) -> ExamSessionDB:
+    """L'épreuve demandée, à condition qu'elle appartienne bien à l'élève.
+
+    Sans ce contrôle, un identifiant d'épreuve suffisait à lire, répondre à ou
+    clore l'examen de n'importe quel autre élève. On répond 404 et non 403 :
+    confirmer qu'une épreuve existe mais appartient à un autre renseignerait
+    encore l'appelant.
+
+    Les administrateurs ne sont pas filtrés : ils doivent pouvoir examiner une
+    épreuve pour répondre à une réclamation.
+    """
+    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
+    if not exam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+    if exam.user_id != current_user.id and not is_admin_email(current_user.email):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam not found",
+        )
+    return exam
+
+
 @app.post("/api/exam/start")
 async def start_exam(
     db: Session = Depends(get_db),
@@ -1227,7 +1277,11 @@ async def start_exam(
     db.commit()
     db.refresh(exam)
     
-    # Return session with questions embedded for the client runner
+    # Return session with questions embedded for the client runner.
+    # Les options sont expurgées de `is_correct` : l'envoyer au navigateur
+    # revient à livrer le corrigé avec le sujet. La correction se fait côté
+    # serveur (`/finish`), et le détail des bonnes réponses n'est servi
+    # qu'après coup, par `/details`.
     return {
         "id": exam.id,
         "user_id": exam.user_id,
@@ -1239,7 +1293,7 @@ async def start_exam(
                 "question_id": q.id,
                 "text": q.text,
                 "category": q.category,
-                "options": q.options,
+                "options": _options_without_answers(q.options),
                 "image_url": q.image_url,
             } for q in selected
         ]
@@ -1250,16 +1304,10 @@ async def start_exam(
 async def get_exam(
     exam_id: str,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    
-    if not exam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
-        )
-    
+    exam = _own_exam_or_404(db, exam_id, current_user)
+
     return ExamSession(
         id=exam.id,
         user_id=exam.user_id,
@@ -1276,16 +1324,10 @@ async def submit_answer(
     exam_id: str,
     answer: SubmitAnswerRequest,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    
-    if not exam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
-        )
-    
+    exam = _own_exam_or_404(db, exam_id, current_user)
+
     # Update answer
     if exam.answers is None:
         exam.answers = {}
@@ -1299,16 +1341,10 @@ async def submit_answer(
 async def finish_exam(
     exam_id: str,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    
-    if not exam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
-        )
-    
+    exam = _own_exam_or_404(db, exam_id, current_user)
+
     # Calculate score
     correct_count = 0
     # Use stored question_ids count when available, fallback to 30
@@ -1355,11 +1391,9 @@ async def finish_exam(
 async def get_exam_details(
     exam_id: str,
     db: Session = Depends(get_db),
-    _sub: User = Depends(require_subscription),
+    current_user: User = Depends(require_subscription),
 ):
-    exam = db.query(ExamSessionDB).filter(ExamSessionDB.id == exam_id).first()
-    if not exam:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    exam = _own_exam_or_404(db, exam_id, current_user)
 
     # Build detailed question list based on stored question_ids
     detailed_questions = []

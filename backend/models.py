@@ -393,6 +393,28 @@ class Question(QuestionCreate):
     id: str
     created_at: Optional[datetime] = None  # ← Rends created_at optionnel aussi
 
+
+class StudentQuestionOption(BaseModel):
+    """Une option telle que l'élève la reçoit : sans la clé de correction.
+
+    `is_correct` est volontairement absent. Le servir au navigateur revient à
+    livrer le corrigé avec le sujet : la correction est faite par le serveur
+    (`/api/training/check`, `/api/exam/{id}/finish`).
+    """
+    id: str
+    text: str
+
+
+class StudentQuestion(BaseModel):
+    """Une question telle qu'elle est servie à l'élève pendant l'entraînement."""
+    id: str
+    text: str
+    category: str
+    options: List[StudentQuestionOption]
+    explanation: Optional[str] = None
+    image_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+
 class TrafficSignCreate(BaseModel):
     number: str
     name: str
