@@ -129,7 +129,22 @@ class SubscriptionDB(Base):
     canceled_at = Column(DateTime, nullable=True)
     
     transaction_id = Column(String, ForeignKey("transactions.id"), nullable=True)
-    
+
+    # --- Renouvellement automatique (prélèvement par token HYP) ---
+    # HYP ne sait prélever automatiquement qu'au mois ; les formules durent
+    # 14, 21 ou 30 jours. C'est donc le serveur qui prélève la carte à chaque
+    # échéance (`next_renewal`), à partir du token obtenu au premier paiement.
+    # Le token n'est pas un numéro de carte : il ne sert que sur notre terminal.
+    auto_renew = Column(Boolean, nullable=True, default=False)
+    hyp_token = Column(String, nullable=True)
+    hyp_token_expiry = Column(String, nullable=True)   # AAMM (« Tokef »)
+    card_last4 = Column(String, nullable=True)
+    hyp_user_id = Column(String, nullable=True)        # n° d'identité, si le terminal l'exige
+    renewal_failures = Column(Integer, nullable=True, default=0)
+    renewal_error = Column(Text, nullable=True)
+    # Verrou : empêche deux processus de prélever la même échéance.
+    renewal_locked_until = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

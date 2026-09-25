@@ -137,6 +137,9 @@ export default function Checkout() {
   }
 
   const total = promo ? promo.final_amount : plan.amount;
+  // Les formules se renouvellent automatiquement, sauf les prolongations et
+  // un accès entièrement offert (aucune carte n'est alors enregistrée).
+  const renewable = !plan.is_extension && total > 0;
   const endDate = new Date(Date.now() + (plan.duration_days || 30) * 86400000);
   const activeSub = subscription?.subscription && !subscription.subscription.expired
     ? subscription.subscription
@@ -188,7 +191,9 @@ export default function Checkout() {
               <div className="flex justify-between gap-4">
                 <dt className="shrink-0 text-muted-foreground">Facturation</dt>
                 <dd className="text-right text-slate-900 dark:text-slate-200">
-                  paiement unique, sans reconduction
+                  {renewable
+                    ? `renouvelé automatiquement : ${formatPrice(plan.amount, plan.currency)} tous les ${plan.duration_days} jours, résiliable à tout moment`
+                    : 'paiement unique, sans reconduction'}
                 </dd>
               </div>
             </dl>
@@ -254,6 +259,14 @@ export default function Checkout() {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Ouverture du paiement…</>
                 : `Payer ${formatPrice(total, plan.currency)}`}
             </Button>
+            {renewable && (
+              <p className="text-center text-xs text-slate-600 dark:text-slate-300">
+                En payant, tu acceptes que ton abonnement soit renouvelé automatiquement le{' '}
+                {formatDate(endDate)} puis tous les {plan.duration_days} jours, au prix de{' '}
+                {formatPrice(plan.amount, plan.currency)}, jusqu'à ce que tu le résilies depuis ton profil.
+                Tu peux résilier à tout moment, en un clic : aucun prélèvement ne suit.
+              </p>
+            )}
             <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               <Lock className="h-3.5 w-3.5" /> Tu vas être redirigé vers la page sécurisée de notre
               prestataire de paiement.
@@ -262,7 +275,8 @@ export default function Checkout() {
         </section>
 
         <p className="text-center text-xs text-muted-foreground">
-          Aucune donnée bancaire n'est stockée sur nos serveurs.{' '}
+          Aucun numéro de carte n'est stocké sur nos serveurs : le renouvellement utilise un jeton
+          sécurisé fourni par notre prestataire de paiement.{' '}
           <Link to="/politique-remboursement" className="underline hover:text-foreground">
             Politique de remboursement
           </Link>

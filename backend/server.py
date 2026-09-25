@@ -544,7 +544,8 @@ async def startup():
     asyncio.create_task(enrich_images_async())
     logger.info("📝 Step 5: Image enrichment scheduled in background")
     
-    # Step 6: Facturation — filet de sécurité périodique. Chaque paiement (et
+    # Step 6: Renouvellements automatiques et facturation, chaque heure. Les
+    # abonnements arrivés à échéance sont prélevés ; chaque paiement (et
     # chaque renouvellement) est facturé et envoyé au client dès l'encaissement ;
     # ce balayage rattrape ce qui aurait échoué (SMTP indisponible, identité de
     # l'entreprise renseignée après coup).
@@ -557,8 +558,17 @@ async def startup():
                     import invoicing
                 except ImportError:  # pragma: no cover
                     from backend import invoicing
+                try:
+                    import renewals
+                except ImportError:  # pragma: no cover
+                    from backend import renewals
                 session = SessionLocal()
                 try:
+                    # D'abord les prélèvements arrivés à échéance : leurs
+                    # factures partent dans la foulée.
+                    renewed = renewals.run_due_renewals(session)
+                    if renewed:
+                        logger.info("🔁 Renouvellements automatiques : %s", renewed)
                     plans = _load_plan_names()
                     result = invoicing.run_billing_sweep(session, plan_names=plans)
                     if result.get("factures_creees") or result.get("envoyees") or result.get("echecs"):

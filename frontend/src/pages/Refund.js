@@ -56,7 +56,8 @@ function Refund() {
         <div>
           <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">4. Abonnements et résiliation</h2>
           <ul className="list-disc pl-6 mt-2 space-y-1">
-            <li>Tu peux demander la résiliation de ton abonnement à tout moment.</li>
+            <li>Ton abonnement est renouvelé automatiquement à la fin de chaque période (14, 21 ou 30 jours selon ta formule), au prix de ta formule, jusqu’à ce que tu le résilies.</li>
+            <li>Tu peux résilier à tout moment depuis ton profil (« Résilier mon abonnement ») : aucun prélèvement n’a lieu ensuite.</li>
             <li>La résiliation empêche les futurs prélèvements, mais n’implique pas automatiquement le remboursement des périodes déjà facturées.</li>
             <li>Sauf mention contraire, les montants déjà payés pour une période en cours restent dus et ne sont pas remboursés (tu conserves l’accès jusqu’à la fin de la période).</li>
           </ul>

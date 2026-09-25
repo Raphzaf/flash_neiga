@@ -81,6 +81,7 @@ export default function Profile() {
 
     const [confirmCancel, setConfirmCancel] = useState(false);
     const [cancelling, setCancelling] = useState(false);
+    const [resuming, setResuming] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -161,6 +162,20 @@ export default function Profile() {
             toast.error(err.response?.data?.detail || 'Le changement a échoué.');
         } finally {
             setChangingEmail(false);
+        }
+    };
+
+    const doResume = async () => {
+        setResuming(true);
+        try {
+            const res = await axios.post('/api/profile/subscription/resume');
+            toast.success(res.data.message || 'Abonnement réactivé.');
+            await load();
+            refreshSubscription();
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'La réactivation a échoué.');
+        } finally {
+            setResuming(false);
         }
     };
 
@@ -276,9 +291,23 @@ export default function Profile() {
                                         <div className="grid grid-cols-2 gap-3 text-sm">
                                             <div><span className="text-slate-500 dark:text-slate-400">Début : </span>{fmtDate(sub.start_date)}</div>
                                             <div><span className="text-slate-500 dark:text-slate-400">Fin : </span>{fmtDate(sub.end_date)}</div>
+                                            {sub.auto_renew && sub.next_renewal && (
+                                                <div className="col-span-2 text-slate-700 dark:text-slate-200">
+                                                    Renouvellement automatique le {fmtDate(sub.next_renewal)} :{' '}
+                                                    {fmtPrice(sub.amount, sub.currency)}
+                                                    {sub.card_last4 ? ` sur ta carte •••• ${sub.card_last4}` : ''}.
+                                                    Tu peux résilier à tout moment.
+                                                </div>
+                                            )}
+                                            {sub.auto_renew && sub.renewal_error && (
+                                                <div className="col-span-2 text-amber-700 dark:text-amber-300">
+                                                    Le dernier prélèvement n'a pas abouti. Nous réessaierons automatiquement ;
+                                                    si ta carte a changé, reprends une formule.
+                                                </div>
+                                            )}
                                             {sub.canceled_at && (
                                                 <div className="col-span-2 text-slate-500 dark:text-slate-400">
-                                                    Résilié le {fmtDate(sub.canceled_at)} — ton accès reste ouvert jusqu'au {fmtDate(sub.end_date)}.
+                                                    Résilié le {fmtDate(sub.canceled_at)} — plus aucun prélèvement ; ton accès reste ouvert jusqu'au {fmtDate(sub.end_date)}.
                                                 </div>
                                             )}
                                         </div>
@@ -302,6 +331,12 @@ export default function Profile() {
                                             data-testid="profile-cancel-subscription"
                                         >
                                             Résilier mon abonnement
+                                        </Button>
+                                    )}
+                                    {sub?.can_resume && (
+                                        <Button variant="outline" onClick={doResume} disabled={resuming}>
+                                            {resuming && <Loader2 className="h-4 w-4 animate-spin" />}
+                                            Réactiver le renouvellement
                                         </Button>
                                     )}
                                 </div>

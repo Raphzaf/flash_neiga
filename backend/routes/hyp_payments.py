@@ -382,6 +382,164 @@ def create_hyp_payment_url(
     return payment_url
 
 
+# ===== Carte enregistrée (token) et prélèvements automatiques =====
+# Documentation : https://developers.hyp.co.il/pay/common-use-cases/tokenization
+# et https://developers.hyp.co.il/pay/advanced-features/recurring-payments
+# (« recurring payments that you control »). Exige HYP_PASSP, et un terminal
+# autorisé à la tokenisation (sinon HYP répond CCode=901).
+
+class HypRequestError(Exception):
+    """HYP n'a pas pu être joint, ou sa réponse est illisible.
+
+    Pour un prélèvement, cela signifie que l'on NE SAIT PAS s'il a eu lieu :
+    l'appelant ne doit surtout pas retenter à l'aveugle.
+    """
+
+
+def is_renewable_plan(plan_id: Optional[str]) -> bool:
+    """Formule qui se renouvelle automatiquement (toutes sauf les prolongations)."""
+    plan = get_plan(plan_id or "")
+    return bool(plan) and not plan.get("is_extension") and float(plan.get("amount") or 0) > 0
+
+
+def hyp_get_token(hyp_transaction_id: str) -> Dict[str, str]:
+    """Token de la carte utilisée pour un paiement HYP : {Token, Tokef, CCode}."""
+    params = {
+        "action": "getToken",
+        "Masof": HYP_TERMINAL_ID,
+        "PassP": HYP_PASSP,
+        "TransId": hyp_transaction_id,
+    }
+    try:
+        resp = requests.get(HYP_API_URL, params=params, timeout=20)
+        resp.raise_for_status()
+    except Exception as exc:
+        raise HypRequestError(f"getToken injoignable : {exc}") from exc
+    return dict(parse_qsl(resp.text.strip()))
+
+
+def hyp_charge_token(
+    token: str,
+    expiry: str,
+    amount: float,
+    currency: str,
+    reference: str,
+    info: str,
+    client_name: str = "",
+    user_id: Optional[str] = None,
+    email: Optional[str] = None,
+) -> Dict[str, str]:
+    """Prélève une carte enregistrée (action=soft). Renvoie la réponse de HYP.
+
+    `reference` (notre identifiant de transaction) est renvoyé par HYP dans
+    Fild1 : c'est ce qui permet de rapprocher un prélèvement de notre base.
+    Lève HypRequestError si la réponse n'arrive pas : issue inconnue.
+    """
+    amount_value = float(amount)
+    params = {
+        "action": "soft",
+        "Masof": HYP_TERMINAL_ID,
+        "PassP": HYP_PASSP,
+        "Token": "True",
+        "CC": token,
+        "Tmonth": expiry[2:4],
+        "Tyear": expiry[0:2],
+        "Amount": str(int(amount_value)) if amount_value.is_integer() else f"{amount_value:.2f}",
+        "Coin": str(_hyp_coin(currency)),
+        "Tash": "1",
+        "UserId": user_id or "000000000",
+        "ClientName": client_name or "Client",
+        "Info": info,
+        "Fild1": reference,
+        "UTF8": "True",
+        "UTF8out": "True",
+        "MoreData": "True",
+    }
+    if email:
+        params["email"] = email
+    try:
+        resp = requests.get(HYP_API_URL, params=params, timeout=45)
+        resp.raise_for_status()
+    except Exception as exc:
+        raise HypRequestError(f"prélèvement sans réponse : {exc}") from exc
+    result = dict(parse_qsl(resp.text.strip()))
+    if "CCode" not in result:
+        raise HypRequestError(f"réponse HYP illisible : {resp.text[:200]}")
+    return result
+
+
+def _expiry_from_callback(data: Dict[str, Any]) -> Optional[str]:
+    """AAMM à partir de Tmonth/Tyear renvoyés par HYP (MoreData=True)."""
+    month = str(data.get("Tmonth") or "").strip()
+    year = str(data.get("Tyear") or "").strip()
+    if not (month.isdigit() and year.isdigit()):
+        return None
+    return f"{int(year) % 100:02d}{int(month):02d}"
+
+
+def setup_auto_renew(db: Session, transaction: TransactionDB, subscription: Optional[SubscriptionDB]) -> None:
+    """Active le renouvellement automatique d'un abonnement qui vient d'être payé.
+
+    Seulement si l'élève y a consenti : la transaction porte `auto_renew`
+    depuis que le tunnel de paiement l'annonce. Les paiements antérieurs ne
+    sont jamais prélevés automatiquement. Ne committe pas.
+    """
+    consent = isinstance(transaction.event_data, dict) and transaction.event_data.get("auto_renew")
+    if not (consent and subscription is not None and subscription.transaction_id == transaction.id):
+        return
+    if not is_renewable_plan(subscription.plan_id):
+        return
+    data = transaction.callback_data if isinstance(transaction.callback_data, dict) else {}
+
+    # Un seul abonnement prélevé à la fois : en passant du Standard au
+    # Premium, l'ancien n'est plus renouvelé (l'élève garde ses jours payés).
+    others = db.query(SubscriptionDB).filter(
+        SubscriptionDB.user_id == subscription.user_id,
+        SubscriptionDB.id != subscription.id,
+        SubscriptionDB.auto_renew.is_(True),
+    ).all()
+    for other in others:
+        other.auto_renew = False
+        other.next_renewal = None
+
+    subscription.auto_renew = True
+    subscription.next_renewal = subscription.end_date
+    subscription.renewal_failures = 0
+    subscription.renewal_error = None
+    subscription.card_last4 = (str(data.get("L4digit") or "").strip() or None)
+    subscription.hyp_token_expiry = _expiry_from_callback(data)
+    user_id = str(data.get("UserId") or "").strip()
+    subscription.hyp_user_id = user_id if user_id.isdigit() and set(user_id) != {"0"} else None
+
+
+def fetch_card_token(db: Session, subscription: SubscriptionDB, hyp_transaction_id: Optional[str]) -> bool:
+    """Récupère et enregistre le token de la carte. Committe. Ne lève jamais."""
+    if subscription.hyp_token or not hyp_transaction_id:
+        return bool(subscription.hyp_token)
+    if not HYP_PASSP:
+        subscription.renewal_error = "HYP_PASSP non configuré : carte non enregistrée"
+        db.commit()
+        logger.error("Token HYP non récupéré pour %s : HYP_PASSP manquant", subscription.id)
+        return False
+    try:
+        result = hyp_get_token(hyp_transaction_id)
+    except HypRequestError as exc:
+        logger.warning("Token HYP non récupéré pour %s : %s", subscription.id, exc)
+        return False
+    if result.get("CCode") != "0" or not result.get("Token"):
+        subscription.renewal_error = f"getToken refusé par HYP (CCode={result.get('CCode')})"
+        db.commit()
+        logger.error("getToken refusé pour l'abonnement %s : %s", subscription.id, result)
+        return False
+    subscription.hyp_token = result["Token"]
+    subscription.hyp_token_expiry = result.get("Tokef") or subscription.hyp_token_expiry
+    subscription.card_last4 = subscription.card_last4 or result["Token"][-4:]
+    subscription.renewal_error = None
+    db.commit()
+    logger.info("Carte enregistrée pour le renouvellement de l'abonnement %s", subscription.id)
+    return True
+
+
 def verify_hyp_callback(data: Dict[str, Any]) -> bool:
     """
     Verify a HYP callback/redirect using the official APISign VERIFY endpoint.
@@ -644,6 +802,10 @@ async def create_payment(
     # avec un code promo) : c'est ce qui permet de retrouver l'élève si un
     # paiement doit être rapproché manuellement d'un compte.
     event_data: Dict[str, Any] = {"user_email": user_email}
+    # Le tunnel de paiement annonce le renouvellement automatique : c'est ce
+    # consentement, tracé sur la transaction, qui autorisera les prélèvements.
+    if is_renewable_plan(request.plan_id):
+        event_data["auto_renew"] = True
     if applied_promo:
         event_data.update({
             "promo_code": applied_promo.code,
@@ -698,12 +860,15 @@ async def create_payment(
 
     # Create HYP payment URL
     try:
+        info = plan.get("name", "Flash Neiga")
+        if event_data.get("auto_renew"):
+            info += f" — renouvelé automatiquement tous les {plan.get('duration_days', 30)} jours, résiliable à tout moment"
         payment_url = create_hyp_payment_url(
             transaction_id=transaction.id,
             amount=amount,
             currency=plan["currency"],
             user_email=user_email,
-            info=plan.get("name", "Flash Neiga"),
+            info=info,
         )
 
         # Update transaction with payment URL. Le code promo n'est PAS consommé
@@ -877,7 +1042,8 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
                 )
 
         # Create or extend subscription
-        provision_subscription(db, transaction)
+        subscription = provision_subscription(db, transaction)
+        setup_auto_renew(db, transaction, subscription)
 
         # Paiement encaissé sans compte rattaché : l'abonnement ne peut pas être
         # créé. On le trace explicitement (alerte dans les logs + drapeau visible
@@ -897,6 +1063,8 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
             transaction.event_data = event_data
 
         db.commit()
+        if subscription is not None and subscription.auto_renew:
+            fetch_card_token(db, subscription, hyp_transaction_id)
         issue_invoice_safely(db, transaction)
         logger.info(f"Transaction {transaction_id} completed successfully")
 
@@ -1184,7 +1352,10 @@ async def claim_payment(request: ClaimAccessRequest, db: Session = Depends(get_d
     transaction.event_data = event_data
 
     subscription = provision_subscription(db, transaction)
+    setup_auto_renew(db, transaction, subscription)
     db.commit()
+    if subscription is not None and subscription.auto_renew:
+        fetch_card_token(db, subscription, transaction.hyp_transaction_id)
 
     # Le paiement n'avait pas de compte à l'encaissement : sa facture n'a donc
     # pas pu porter de client. Maintenant qu'il est rattaché, on l'émet.

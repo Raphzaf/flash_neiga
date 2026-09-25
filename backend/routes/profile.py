@@ -11,6 +11,7 @@ Tout ce qu'un élève gère lui-même sur son compte :
 - GET   /api/profile/invoices              → ses factures (une par paiement)
 - GET   /api/profile/invoices/{id}.pdf     → télécharger une facture
 - POST  /api/profile/subscription/cancel   → résilier (ne pas renouveler) l'abonnement
+- POST  /api/profile/subscription/resume   → annuler la résiliation
 
 Souscrire, changer de formule ou renouveler passe par le tunnel d'abonnement
 (/subscribe → /checkout → paiement) : c'est l'élève qui décide, jamais un
@@ -101,6 +102,15 @@ def _subscription_payload(sub: Optional[SubscriptionDB]) -> Optional[Dict[str, A
         "start_date": sub.start_date,
         "end_date": sub.end_date,
         "canceled_at": sub.canceled_at,
+        # Renouvellement automatique : prochaine échéance et carte prélevée.
+        "auto_renew": bool(sub.auto_renew) and sub.status == "active",
+        "next_renewal": sub.next_renewal if (sub.auto_renew and sub.status == "active") else None,
+        "card_last4": sub.card_last4,
+        "renewal_error": sub.renewal_error if sub.auto_renew else None,
+        "can_resume": bool(
+            sub.status == "cancelled" and sub.hyp_token and is_active
+            and (plan and not plan.get("is_extension"))
+        ),
         "days_left": (
             max(0, (sub.end_date - now).days) if (is_active and sub.end_date) else None
         ),
@@ -324,10 +334,47 @@ async def cancel_subscription(
 
     sub.status = "cancelled"
     sub.canceled_at = datetime.utcnow()
+    # Plus aucun prélèvement : c'est tout le sens de la résiliation.
+    sub.auto_renew = False
+    sub.next_renewal = None
     db.commit()
     db.refresh(sub)
     return {
         "status": "cancelled",
         "message": "Ton abonnement ne sera pas renouvelé. Tu gardes l'accès jusqu'à sa date de fin.",
         "end_date": sub.end_date,
+    }
+
+
+@router.post("/subscription/resume")
+async def resume_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Annule une résiliation : l'abonnement se renouvelle de nouveau.
+
+    Possible tant que la période payée n'est pas terminée et que la carte est
+    enregistrée ; sinon l'élève reprend simplement une formule.
+    """
+    sub = current_subscription(db, current_user.id)
+    if not sub or sub.status != "cancelled":
+        raise HTTPException(status_code=404, detail="Aucun abonnement résilié à réactiver.")
+    plan = PLANS.get(sub.plan_id or "", {})
+    if not sub.hyp_token or not plan or plan.get("is_extension"):
+        raise HTTPException(
+            status_code=409,
+            detail="Cet abonnement ne peut pas être réactivé : reprends une formule pour continuer.",
+        )
+    sub.status = "active"
+    sub.canceled_at = None
+    sub.auto_renew = True
+    sub.next_renewal = sub.end_date
+    sub.renewal_failures = 0
+    sub.renewal_error = None
+    db.commit()
+    db.refresh(sub)
+    return {
+        "status": "active",
+        "message": "Ton abonnement est de nouveau renouvelé automatiquement.",
+        "next_renewal": sub.next_renewal,
     }
