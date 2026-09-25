@@ -98,14 +98,14 @@ try:
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
         find_user_by_email, validate_password, is_admin_email,
-        current_subscription, VALID_SUBSCRIPTION_STATUSES, validate_phone,
+        current_subscription, VALID_SUBSCRIPTION_STATUSES, validate_phone, plan_includes_chat,
     )
 except ImportError:
     from backend.auth import (
         get_current_user, get_current_user_optional, require_admin, require_subscription,
         hash_password, verify_password, create_access_token, normalize_email,
         find_user_by_email, validate_password, is_admin_email,
-        current_subscription, VALID_SUBSCRIPTION_STATUSES, validate_phone,
+        current_subscription, VALID_SUBSCRIPTION_STATUSES, validate_phone, plan_includes_chat,
     )
 try:
     from migrations.auto_migrate import run_hyp_migration
@@ -825,6 +825,8 @@ async def get_my_subscription(
         # contenu sans abonnement, le front ne doit donc pas les renvoyer vers
         # le tunnel d'achat.
         "has_access": active or is_admin,
+        # Chat « prof 24h/24 » : réservé aux formules Premium.
+        "premium": is_admin or bool(active and plan_includes_chat(subscription.plan_id)),
         "is_admin": is_admin,
         "active": active,
         "subscription": None,

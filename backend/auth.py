@@ -260,6 +260,54 @@ async def require_subscription(
     return current_user
 
 
+# Formules sans le chat « prof 24h/24 ». Le chat est l'argument de vente du
+# Premium : ouvert à tous, personne n'avait de raison de payer la différence,
+# et chaque élève Standard consommait de l'IA payante. Les anciennes formules
+# (code_, video_) vendaient un « coaching » : elles gardent le chat.
+PLAN_TYPES_WITHOUT_CHAT = ("basic",)
+
+
+def plan_includes_chat(plan_id: Optional[str]) -> bool:
+    return (plan_id or "").split("_", 1)[0] not in PLAN_TYPES_WITHOUT_CHAT
+
+
+def has_premium_chat(db: Session, user_id: str) -> bool:
+    """L'abonnement en cours de l'élève inclut-il le chat avec le prof ?"""
+    sub = current_subscription(db, user_id)
+    return sub is not None and plan_includes_chat(sub.plan_id)
+
+
+PREMIUM_REQUIRED_DETAIL = {
+    "code": "premium_required",
+    "message": (
+        "Le chat avec ton prof 24h/24 fait partie de la formule Premium. "
+        "Passe au Premium pour poser toutes tes questions, sans limite."
+    ),
+}
+
+
+async def require_premium(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Réserve une fonctionnalité aux formules Premium.
+
+    Répond 403 (et non 402) : l'élève a bien un abonnement et garde l'accès au
+    reste du contenu ; le front affiche une invitation à passer au Premium au
+    lieu de le renvoyer vers le choix d'une formule.
+    """
+    if is_admin_email(current_user.email):
+        return current_user
+    if not has_active_subscription(db, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Un abonnement actif est nécessaire pour accéder à ce contenu.",
+        )
+    if not has_premium_chat(db, current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=PREMIUM_REQUIRED_DETAIL)
+    return current_user
+
+
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Autorise uniquement les comptes administrateurs.
 

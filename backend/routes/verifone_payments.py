@@ -127,42 +127,13 @@ async def create_verifone_checkout(req: CheckoutRequest, db: Session = Depends(g
 
 
 @router.post("/webhook")
-async def verifone_webhook(request: Request, db: Session = Depends(get_db)):
-    """Minimal webhook handler storing event payload into TransactionDB.
+async def verifone_webhook(request: Request):
+    """Désactivé : Verifone n'est plus le prestataire de paiement (c'est HYP).
 
-    Implement proper signature verification per your Verifone IPN setup.
+    Ce point d'entrée enregistrait n'importe quelle requête comme un paiement,
+    sans aucune vérification de signature : des « paiements » inventés
+    faussaient le chiffre d'affaires, et le balayage de facturation aurait pu
+    leur émettre de vraies factures numérotées. Rien n'est plus enregistré.
     """
-    raw = await request.body()
-    try:
-        payload = json.loads(raw.decode("utf-8")) if raw else {}
-    except Exception:
-        payload = {"raw": raw.decode("utf-8") if raw else ""}
-
-    try:
-        # Extract minimal identifiers if present
-        order_id = payload.get("order_id") or payload.get("sale_id")
-        status = payload.get("order_status") or payload.get("status") or "received"
-        amount = None
-        currency = None
-        try:
-            amount = float(payload.get("amount")) if payload.get("amount") else None
-        except Exception:
-            amount = None
-        currency = payload.get("currency")
-
-        tx = TransactionDB(
-            paddle_transaction_id=order_id,  # Reuse column as generic external ID
-            amount=amount,
-            currency=currency,
-            status=status,
-            event_type="verifone.webhook",
-            event_data=payload,
-        )
-        db.add(tx)
-        db.commit()
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Error processing Verifone webhook: {e}", exc_info=True)
-        db.rollback()
-        # Return 200 to avoid repeated retries if desired
-        return {"status": "error", "message": str(e)}
+    logger.warning("Webhook Verifone reçu alors qu'il est désactivé — ignoré.")
+    raise HTTPException(status_code=410, detail="Verifone n'est plus utilisé : webhook désactivé.")

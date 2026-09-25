@@ -24,7 +24,7 @@ from database import Base, get_db  # noqa: E402
 from models import (  # noqa: E402
     UserDB, QuestionDB, ExamSessionDB, UserMistakeDB, AILessonDB, User,
 )
-from auth import get_current_user, get_current_user_optional, require_subscription  # noqa: E402
+from auth import get_current_user, get_current_user_optional, require_subscription, require_premium  # noqa: E402
 import routes.ai_coach as ai_coach  # noqa: E402
 import routes.trap_questions as trap_questions  # noqa: E402
 
@@ -88,6 +88,7 @@ def db(monkeypatch):
     # L'élève de test n'a pas d'abonnement en base : sans cet override, toutes
     # les routes IA répondraient 402 avant d'atteindre le code testé.
     app.dependency_overrides[require_subscription] = override_current_user
+    app.dependency_overrides[require_premium] = override_current_user
 
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)

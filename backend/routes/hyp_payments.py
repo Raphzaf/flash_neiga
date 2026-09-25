@@ -246,7 +246,8 @@ def issue_invoice_safely(db: Session, transaction: TransactionDB) -> None:
     except ImportError:  # pragma: no cover - import depuis la racine du dépôt
         from backend import invoicing
 
-    if transaction is None or transaction.status != "completed" or not transaction.amount:
+    if (transaction is None or transaction.status != "completed"
+            or not transaction.amount or not transaction.plan_id):
         return
     try:
         # La session est indispensable : l'identité de l'entreprise est saisie
