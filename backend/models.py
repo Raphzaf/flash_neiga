@@ -195,6 +195,13 @@ class InvoiceDB(Base):
     cancelled_at = Column(DateTime, nullable=True)
     cancellation_reason = Column(Text, nullable=True)
 
+    # --- Remise au client ---
+    # La loi exige que le client reçoive sa facture : elle lui est envoyée par
+    # e-mail dès l'émission (et à chaque renouvellement). `emailed_at` garde la
+    # preuve de l'envoi ; `email_error` la raison d'un échec, retenté plus tard.
+    emailed_at = Column(DateTime, nullable=True, index=True)
+    email_error = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

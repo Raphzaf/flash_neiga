@@ -249,17 +249,23 @@ def issue_invoice_safely(db: Session, transaction: TransactionDB) -> None:
     if transaction is None or transaction.status != "completed" or not transaction.amount:
         return
     try:
-        if not invoicing.invoicing_configured():
+        # La session est indispensable : l'identité de l'entreprise est saisie
+        # dans le CRM et conservée en base. Sans elle, seul un cache de 30 s
+        # était consulté, et la plupart des paiements repartaient sans facture.
+        if not invoicing.invoicing_configured(db):
             logger.info(
                 "Facture non émise pour %s : identité de l'entreprise incomplète (%s). "
-                "Renseigne INVOICE_COMPANY_NAME et INVOICE_COMPANY_LEGAL_ID, puis lance "
-                "/api/admin/invoices/generate pour rattraper.",
-                transaction.id, ", ".join(invoicing.missing_issuer_fields()),
+                "Renseigne-la dans le CRM ; le balayage périodique rattrapera la facture.",
+                transaction.id, ", ".join(invoicing.missing_issuer_fields(db)),
             )
             return
         plan_name = (HYP_PLANS.get(transaction.plan_id or "") or {}).get("name")
         invoice = invoicing.issue_invoice(db, transaction, plan_name=plan_name)
         logger.info("Facture %s émise pour le paiement %s", invoice.number, transaction.id)
+        # Remise au client : la facture part par e-mail dès l'émission. Un
+        # échec est consigné sur la facture et retenté par le balayage
+        # périodique — il n'affecte jamais le paiement.
+        invoicing.send_invoice_email(db, invoice)
     except Exception as exc:
         logger.error("Facture non émise pour le paiement %s : %s — à rattraper via "
                      "/api/admin/invoices/generate", transaction.id, exc, exc_info=True)
@@ -814,7 +820,17 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
     # Idempotence : HYP peut renvoyer la même notification plusieurs fois (et une
     # notification authentique pourrait être rejouée). Sans ce garde-fou, chaque
     # rejeu ouvrirait un abonnement supplémentaire.
+    #
+    # Seule exception : un NOUVEAU prélèvement sur une commande déjà payée —
+    # c'est le renouvellement de l'abonnement (הוראת קבע). Il a son propre
+    # identifiant HYP, et donne lieu à son propre paiement et sa propre facture.
     if transaction.status == "completed":
+        if is_renewal_charge(db, transaction, data):
+            return process_renewal(db, transaction, data)
+        incoming_id = data.get("Id") or data.get("id")
+        if incoming_id and not transaction.hyp_transaction_id:
+            transaction.hyp_transaction_id = incoming_id
+            db.commit()
         logger.info(f"Transaction {transaction_id} déjà traitée — notification ignorée")
         return {"status": "success", "message": "Payment already processed"}
 
@@ -898,6 +914,123 @@ async def process_hyp_callback(data: Dict[str, Any], db: Session):
         logger.warning(f"Transaction {transaction_id} failed with CCode={ccode}")
         
         return {"status": "failed", "message": "Payment failed"}
+
+
+# ===== Renouvellements =====
+# Un renouvellement se reconnaît à un prélèvement réussi, signé par HYP, qui
+# porte sur une commande déjà encaissée mais avec un identifiant HYP nouveau.
+# Délai minimal entre le paiement initial et un renouvellement : en deçà, un
+# identifiant différent est un doublon de notification, pas un nouveau mois.
+RENEWAL_MIN_INTERVAL = timedelta(days=3)
+
+
+def is_renewal_charge(db: Session, transaction: TransactionDB, data: Dict[str, Any]) -> bool:
+    ccode = data.get("CCode") if data.get("CCode") is not None else data.get("ccode")
+    if str(ccode) != "0":
+        return False
+    incoming_id = str(data.get("Id") or data.get("id") or "").strip()
+    if not incoming_id or incoming_id == (transaction.hyp_transaction_id or ""):
+        return False
+    paid_at = transaction.completed_at or transaction.created_at
+    if paid_at and datetime.utcnow() - paid_at < RENEWAL_MIN_INTERVAL:
+        return False
+    # Ce prélèvement a-t-il déjà été enregistré (notification répétée) ?
+    already = (
+        db.query(TransactionDB)
+        .filter(TransactionDB.hyp_transaction_id == incoming_id)
+        .first()
+    )
+    return already is None
+
+
+def provision_renewal(db: Session, renewal: TransactionDB) -> Optional[SubscriptionDB]:
+    """Prolonge l'abonnement en cours d'une période, à partir de sa date de fin.
+
+    Contrairement à un nouvel achat, un renouvellement ne fait pas perdre les
+    jours restants. Un abonnement résilié mais tout de même prélevé est
+    réactivé : l'élève a payé la période, il y a droit.
+    """
+    if not (renewal.user_id and renewal.plan_id):
+        return None
+    plan = get_plan(renewal.plan_id) or {}
+    plan_type = plan.get("type")
+    candidates = (
+        db.query(SubscriptionDB)
+        .filter(
+            SubscriptionDB.user_id == renewal.user_id,
+            SubscriptionDB.status.in_(("active", "cancelled")),
+        )
+        .order_by(SubscriptionDB.end_date.desc())
+        .all()
+    )
+    current = next(
+        (s for s in candidates if s.plan_id and plan_type and s.plan_id.startswith(f"{plan_type}_")),
+        None,
+    )
+    if current is None:
+        return provision_subscription(db, renewal)
+
+    now = datetime.utcnow()
+    base = current.end_date if current.end_date and current.end_date > now else now
+    _, end_date = calculate_subscription_dates(renewal.plan_id, base)
+    current.end_date = end_date
+    current.status = "active"
+    current.canceled_at = None
+    # La facture du renouvellement porte la période payée, pas toute la durée
+    # de l'abonnement depuis son ouverture.
+    renewal.event_data = {
+        **(renewal.event_data or {}),
+        "period_start": base.isoformat(),
+        "period_end": end_date.isoformat(),
+    }
+    current.updated_at = now
+    db.add(current)
+    logger.info("Abonnement %s renouvelé jusqu'au %s", current.id, end_date)
+    return current
+
+
+def process_renewal(db: Session, original: TransactionDB, data: Dict[str, Any]) -> Dict[str, str]:
+    """Enregistre un prélèvement de renouvellement : paiement, accès, facture."""
+    hyp_id = str(data.get("Id") or data.get("id")).strip()
+    try:
+        amount = float(str(data.get("Amount") or data.get("amount") or "").replace(",", "."))
+    except ValueError:
+        amount = 0.0
+    if amount <= 0:
+        amount = float(original.amount or 0)
+
+    event_data: Dict[str, Any] = {"renewal_of": original.id}
+    email = transaction_email(original)
+    if email:
+        event_data["user_email"] = email
+    hk_id = data.get("HKId") or data.get("hkid")
+    if hk_id:
+        event_data["hk_id"] = hk_id
+
+    renewal = TransactionDB(
+        user_id=original.user_id,
+        plan_id=original.plan_id,
+        amount=amount,
+        currency=original.currency or "ILS",
+        status="completed",
+        event_type="payment.renewal",
+        event_data=event_data,
+        callback_data=data,
+        hyp_transaction_id=hyp_id,
+        completed_at=datetime.utcnow(),
+    )
+    db.add(renewal)
+    db.flush()
+    subscription = provision_renewal(db, renewal)
+    if subscription is not None and subscription.transaction_id is None:
+        subscription.transaction_id = renewal.id
+    db.commit()
+
+    # Chaque mois payé donne sa facture, envoyée au client.
+    issue_invoice_safely(db, renewal)
+    logger.info("Renouvellement %s enregistré (commande d'origine %s, %s %s)",
+                renewal.id, original.id, amount, renewal.currency)
+    return {"status": "success", "message": "Renewal recorded"}
 
 
 @router.get("/result")

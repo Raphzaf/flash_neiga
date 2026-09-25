@@ -33,6 +33,19 @@ services:
         value: "https://app.flash-neiga.com/payment/failure"
       - key: HYP_CALLBACK_URL
         value: "https://flash-neiga-backend.onrender.com/api/payments/hyp/callback"
+      # Envoi des factures aux clients (à renseigner dans le tableau de bord Render)
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_BCC
+        sync: false
       - key: ALLOWED_ORIGINS
         value: "https://app.flash-neiga.com,https://appflashneiga.netlify.app"
       # ===== Coach IA — Google AI / Gemini =====

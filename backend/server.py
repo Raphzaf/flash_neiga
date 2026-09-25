@@ -277,6 +277,16 @@ def load_questions_from_data_v3(db: Session):
     return imported
 
 
+def _load_plan_names():
+    """Intitulés des formules, pour les factures émises en arrière-plan."""
+    plans_file = Path(__file__).parent.parent / "hyp_plans.json"
+    try:
+        with open(plans_file, "r", encoding="utf-8") as f:
+            return {pid: (p or {}).get("name") or pid for pid, p in json.load(f).items()}
+    except Exception:
+        return {}
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize database, create admin, and load questions on first startup"""
@@ -534,6 +544,36 @@ async def startup():
     asyncio.create_task(enrich_images_async())
     logger.info("📝 Step 5: Image enrichment scheduled in background")
     
+    # Step 6: Facturation — filet de sécurité périodique. Chaque paiement (et
+    # chaque renouvellement) est facturé et envoyé au client dès l'encaissement ;
+    # ce balayage rattrape ce qui aurait échoué (SMTP indisponible, identité de
+    # l'entreprise renseignée après coup).
+    async def billing_sweep_loop():
+        interval = int(os.environ.get("BILLING_SWEEP_INTERVAL_SECONDS", "3600") or 3600)
+        await asyncio.sleep(60)  # laisser le démarrage se terminer
+        while True:
+            def sweep():
+                try:
+                    import invoicing
+                except ImportError:  # pragma: no cover
+                    from backend import invoicing
+                session = SessionLocal()
+                try:
+                    plans = _load_plan_names()
+                    result = invoicing.run_billing_sweep(session, plan_names=plans)
+                    if result.get("factures_creees") or result.get("envoyees") or result.get("echecs"):
+                        logger.info("🧾 Balayage de facturation : %s", result)
+                except Exception as exc:
+                    logger.error("Balayage de facturation en échec : %s", exc, exc_info=True)
+                finally:
+                    session.close()
+            await asyncio.to_thread(sweep)
+            await asyncio.sleep(max(interval, 300))
+
+    if os.environ.get("BILLING_SWEEP_DISABLED", "").lower() not in ("1", "true", "yes"):
+        asyncio.create_task(billing_sweep_loop())
+        logger.info("📝 Step 6: Billing sweep scheduled (factures manquantes + envoi)")
+
     logger.info("=" * 70)
     logger.info("🚀 Application startup complete!")
     logger.info("=" * 70)

@@ -12,13 +12,27 @@ import {
 } from '../components/ui/dialog';
 import {
     ArrowLeft, User as UserIcon, Mail, CalendarDays, CreditCard, Save, LogOut,
-    ArrowUpRight, Loader2, Lock, Receipt, Eye, EyeOff,
+    ArrowUpRight, Loader2, Lock, Receipt, Eye, EyeOff, FileText, Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('fr-FR') : '—');
 const fmtPrice = (amount, currency = 'ILS') =>
     amount == null ? '—' : `${Number(amount).toLocaleString('fr-FR')} ${currency === 'ILS' ? '₪' : currency}`;
+
+// La facture est servie par une route protégée : un simple lien n'emporterait
+// pas le jeton. On la récupère via axios, puis on l'enregistre depuis un blob.
+const downloadInvoice = async (invoice) => {
+    const { data } = await axios.get(invoice.pdf_url, { responseType: 'blob' });
+    const blobUrl = URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `${invoice.number}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+};
 
 /** Champ mot de passe avec bascule d'affichage, réutilisé dans les deux formulaires. */
 function PasswordInput({ id, value, onChange, placeholder, autoComplete }) {
@@ -51,6 +65,8 @@ export default function Profile() {
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
     const [payments, setPayments] = useState([]);
+    const [invoices, setInvoices] = useState([]);
+    const [downloadingId, setDownloadingId] = useState(null);
 
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
@@ -69,15 +85,17 @@ export default function Profile() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [profileRes, paymentsRes] = await Promise.all([
+            const [profileRes, paymentsRes, invoicesRes] = await Promise.all([
                 axios.get('/api/profile'),
                 axios.get('/api/profile/payments').catch(() => ({ data: { items: [] } })),
+                axios.get('/api/profile/invoices').catch(() => ({ data: { items: [] } })),
             ]);
             setProfile(profileRes.data);
             setFirstName(profileRes.data.first_name || '');
             setLastName(profileRes.data.last_name || '');
             setPhone(profileRes.data.phone || '');
             setPayments(paymentsRes.data.items || []);
+            setInvoices(invoicesRes.data.items || []);
         } catch (e) {
             toast.error('Impossible de charger ton profil.');
         } finally {
@@ -410,6 +428,60 @@ export default function Profile() {
                                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">
                                                     {fmtPrice(p.amount, p.currency)}
                                                 </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* ===== Factures ===== */}
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                                    <FileText className="h-5 w-5 text-primary" /> Mes factures
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {invoices.length === 0 ? (
+                                    <p className="text-slate-600 dark:text-slate-300">
+                                        Aucune facture pour le moment. Chaque paiement, renouvellement compris, te sera facturé et envoyé par e-mail.
+                                    </p>
+                                ) : (
+                                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                                        {invoices.map((inv) => (
+                                            <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0">
+                                                <div>
+                                                    <div className="text-sm font-medium text-slate-900 dark:text-white">
+                                                        {inv.document_type === 'avoir' ? 'Avoir' : 'Facture'} {inv.number}
+                                                        {inv.status === 'cancelled' && (
+                                                            <Badge variant="outline" className="ml-2">annulée</Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                        {fmtDate(inv.issued_at)} · {inv.plan_name} · {fmtPrice(inv.amount_total, inv.currency)}
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={downloadingId === inv.id}
+                                                    onClick={async () => {
+                                                        setDownloadingId(inv.id);
+                                                        try {
+                                                            await downloadInvoice(inv);
+                                                        } catch {
+                                                            toast.error('Téléchargement impossible, réessaie dans un instant.');
+                                                        } finally {
+                                                            setDownloadingId(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {downloadingId === inv.id
+                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                        : <Download className="h-4 w-4" />}
+                                                    <span className="ml-1">PDF</span>
+                                                </Button>
                                             </li>
                                         ))}
                                     </ul>

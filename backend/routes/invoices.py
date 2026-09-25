@@ -17,6 +17,7 @@ en deux clics.
   GET    /api/admin/invoices/{invoice_id}.jpg  → la facture en image (JPG)
   GET    /api/admin/invoices/{invoice_id}.png  → la facture en image (PNG)
   POST   /api/admin/invoices/{invoice_id}/cancel → annuler par un avoir
+  POST   /api/admin/invoices/{invoice_id}/send   → (re)envoyer la facture au client
 
 Toutes les routes sont réservées aux administrateurs (`require_admin`).
 """
@@ -42,6 +43,7 @@ try:
     import invoicing
     import invoice_pdf
     import invoice_formats
+    import mailer
 except ImportError:  # pragma: no cover - import depuis la racine du dépôt
     from backend.database import get_db
     from backend.models import InvoiceDB, TransactionDB, User
@@ -50,6 +52,7 @@ except ImportError:  # pragma: no cover - import depuis la racine du dépôt
     from backend import invoicing
     from backend import invoice_pdf
     from backend import invoice_formats
+    from backend import mailer
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +170,8 @@ def _payload(invoice: InvoiceDB) -> Dict[str, Any]:
         "cancellation_reason": invoice.cancellation_reason,
         "cancels_invoice_id": invoice.cancels_invoice_id,
         "transaction_id": invoice.transaction_id,
+        "emailed_at": invoice.emailed_at,
+        "email_error": invoice.email_error,
     }
 
 
@@ -206,7 +211,11 @@ def invoice_config(db: Session = Depends(get_db)):
     aucune facture n'est émise : un PDF sans mentions légales n'aurait aucune
     valeur pour la comptable.
     """
-    return invoicing.configuration_help(db)
+    help_ = invoicing.configuration_help(db)
+    # Envoi des factures aux clients : sans SMTP, elles sont émises mais
+    # restent seulement téléchargeables depuis le profil de l'élève.
+    help_["email_delivery"] = mailer.status()
+    return help_
 
 
 # Correspondance entre les champs du formulaire et les clés de réglage.
@@ -272,9 +281,12 @@ def generate_invoices(payload: GenerateRequest, db: Session = Depends(get_db)):
     fois, pour les paiements antérieurs à la mise en place de la facturation.
     """
     try:
-        return invoicing.generate_missing_invoices(
+        result = invoicing.generate_missing_invoices(
             db, since=payload.since, until=payload.until, plan_names=_plan_names(),
         )
+        # Les factures rattrapées partent aussi chez les clients.
+        result["envoi"] = invoicing.send_pending_invoice_emails(db)
+        return result
     except invoicing.InvoicingNotConfigured as exc:
         raise HTTPException(
             status_code=409,
@@ -509,4 +521,24 @@ def cancel_invoice(invoice_id: str, payload: CancelRequest, db: Session = Depend
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    # L'avoir est remis au client comme la facture qu'il annule.
+    invoicing.send_invoice_email(db, credit_note)
     return {"facture_annulee": _payload(invoice), "avoir": _payload(credit_note)}
+
+
+@router.post("/{invoice_id}/send")
+def send_invoice(invoice_id: str, db: Session = Depends(get_db)):
+    """(Re)envoie la facture au client par e-mail, PDF joint."""
+    invoice = _get_or_404(db, invoice_id)
+    if not mailer.configured():
+        raise HTTPException(
+            status_code=409,
+            detail="Envoi impossible : aucun serveur d'e-mail configuré (SMTP_HOST, SMTP_USER, SMTP_PASSWORD, SMTP_FROM).",
+        )
+    if not invoice.customer_email:
+        raise HTTPException(status_code=400, detail="Aucune adresse e-mail connue pour ce client.")
+    if not invoicing.send_invoice_email(db, invoice, force=True):
+        db.refresh(invoice)
+        raise HTTPException(status_code=502, detail=f"Envoi échoué : {invoice.email_error or 'erreur inconnue'}")
+    db.refresh(invoice)
+    return _payload(invoice)

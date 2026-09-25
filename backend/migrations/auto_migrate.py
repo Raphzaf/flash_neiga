@@ -118,6 +118,26 @@ def run_hyp_migration():
                 conn.commit()
                 logger.info("   ✅ Subscriptions indexes created")
         
+        # === INVOICES TABLE ===
+        # Suivi de la remise des factures au client (envoi par e-mail).
+        if 'invoices' in inspector.get_table_names():
+            existing_cols = {col['name'] for col in inspector.get_columns('invoices')}
+            required_cols = {
+                'emailed_at': 'TIMESTAMP',
+                'email_error': 'TEXT',
+            }
+            with engine.connect() as conn:
+                for col_name, col_type in required_cols.items():
+                    if col_name not in existing_cols:
+                        logger.info(f"   ➕ Adding invoices.{col_name} ({col_type})")
+                        if is_postgresql:
+                            conn.execute(text(f"ALTER TABLE invoices ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+                        else:
+                            conn.execute(text(f"ALTER TABLE invoices ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_emailed_at ON invoices(emailed_at)"))
+                conn.commit()
+
         logger.info("✅ HYP migration completed successfully!")
         return True
         

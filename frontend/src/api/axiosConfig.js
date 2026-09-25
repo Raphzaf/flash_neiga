@@ -1,4 +1,5 @@
 import axios from 'axios';
+import storage from '../lib/storage';
 
 // Determine backend URL based on environment, with robust fallbacks
 const getBackendURL = () => {
@@ -35,7 +36,7 @@ if (process.env.NODE_ENV === 'development') {
 // Add request interceptor to automatically include Authorization token
 axios.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = storage.get('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       if (process.env.NODE_ENV === 'development') {
@@ -70,7 +71,7 @@ axios.interceptors.response.use(
 
     if (error.response?.status === 401 && !handledLocally) {
       console.warn('🚫 Unauthorized (401) - Clearing token');
-      localStorage.removeItem('token');
+      storage.remove('token');
       delete axios.defaults.headers.common['Authorization'];
 
       // Retour à la connexion, en expliquant pourquoi.

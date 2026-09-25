@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { rememberEmail } from '../lib/funnel';
+import storage from '../lib/storage';
 
 const AuthContext = createContext(null);
 
@@ -38,7 +39,7 @@ export const AuthProvider = ({ children }) => {
     // 🎯 Initialisation au montage UNIQUEMENT
     useEffect(() => {
         const initAuth = async () => {
-            const storedToken = localStorage.getItem('token');
+            const storedToken = storage.get('token');
 
             if (storedToken) {
                 setToken(storedToken);
@@ -52,7 +53,7 @@ export const AuthProvider = ({ children }) => {
                 } catch (error) {
                     console.error("❌ Failed to load user:", error.response?.status);
                     // Token invalide, nettoyer
-                    localStorage.removeItem('token');
+                    storage.remove('token');
                     setToken(null);
                     delete axios.defaults.headers.common['Authorization'];
                 }
@@ -69,7 +70,7 @@ export const AuthProvider = ({ children }) => {
     // inscription, ou rattachement d'un paiement à un compte).
     const loginWithToken = async (newToken) => {
         setSessionExpired(false);
-        localStorage.setItem('token', newToken);
+        storage.set('token', newToken);
         axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
         setToken(newToken);
 
@@ -112,7 +113,7 @@ export const AuthProvider = ({ children }) => {
     // invalide : les gardes de routes s'en servent pour expliquer à l'élève
     // pourquoi on lui redemande ses identifiants.
     const logout = ({ expired = false } = {}) => {
-        localStorage.removeItem('token');
+        storage.remove('token');
         delete axios.defaults.headers.common['Authorization'];
         setToken(null);
         setUser(null);
