@@ -214,6 +214,8 @@ def _invoice_payload(invoice) -> Dict[str, Any]:
         "service_start": invoice.service_start,
         "service_end": invoice.service_end,
         "cancellation_reason": invoice.cancellation_reason,
+        "emailed_at": invoice.emailed_at,
+        "email_error": invoice.email_error,
         "downloads": {
             "pdf": f"{base}.pdf",
             "html": f"{base}.html",

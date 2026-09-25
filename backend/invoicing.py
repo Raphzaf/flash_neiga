@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import func
@@ -230,6 +230,14 @@ def _payment_email(transaction: TransactionDB) -> Optional[str]:
 def _service_period(db: Session, transaction: TransactionDB) -> Tuple[Optional[datetime], Optional[datetime]]:
     """Période couverte par l'abonnement payé — attendue par la comptable pour
     rattacher la recette au bon exercice."""
+    # Un renouvellement indique lui-même la période qu'il paie.
+    data = transaction.event_data if isinstance(transaction.event_data, dict) else {}
+    if data.get("period_start") and data.get("period_end"):
+        try:
+            return (datetime.fromisoformat(data["period_start"]),
+                    datetime.fromisoformat(data["period_end"]))
+        except (TypeError, ValueError):
+            pass
     subscription = (
         db.query(SubscriptionDB)
         .filter(SubscriptionDB.transaction_id == transaction.id)
@@ -545,3 +553,165 @@ def generate_missing_invoices_for_user(
         "numeros": created,
         "sans_montant_ignores": skipped_no_amount,
     }
+
+
+# ===== Remise de la facture au client =====
+# Une facture n'est « remise » que lorsque le client l'a reçue. Elle lui est
+# envoyée par e-mail, PDF joint, dès l'émission — donc à chaque paiement, y
+# compris chaque renouvellement d'abonnement. L'envoi est tracé sur la facture
+# (`emailed_at`), et un envoi raté est retenté par le balayage périodique.
+
+# Au-delà, on cesse de retenter : une adresse invalide ne doit pas être
+# relancée indéfiniment. La facture reste téléchargeable depuis le profil.
+EMAIL_RETRY_WINDOW_DAYS = 45
+
+
+def _invoice_email_content(invoice: InvoiceDB) -> Tuple[str, str, str]:
+    """Objet, texte brut et HTML de l'e-mail qui accompagne la facture."""
+    snapshot = invoice.issuer_snapshot or {}
+    company = snapshot.get("name") or "Flash Neiga"
+    kind = "Avoir" if invoice.document_type == DOCUMENT_CREDIT_NOTE else "Facture"
+    greeting = f"Bonjour {invoice.customer_name}," if invoice.customer_name else "Bonjour,"
+    amount = f"{abs(invoice.amount_total or 0):.2f} {invoice.currency}".replace(".", ",")
+    plan = invoice.plan_name or invoice.plan_id or "Abonnement Flash Neiga"
+    period = ""
+    if invoice.service_start and invoice.service_end:
+        period = (f"Période couverte : du {invoice.service_start:%d/%m/%Y} "
+                  f"au {invoice.service_end:%d/%m/%Y}")
+    app_url = (os.environ.get("FRONTEND_PUBLIC_URL") or "https://app.flash-neiga.com").rstrip("/")
+
+    subject = f"{kind} {invoice.number} — {company}"
+    if invoice.document_type == DOCUMENT_CREDIT_NOTE:
+        intro = f"Tu trouveras ci-joint l'avoir {invoice.number}, qui annule une facture précédente."
+    else:
+        intro = f"Merci pour ton paiement. Tu trouveras ci-joint ta facture {invoice.number}."
+
+    lines = [
+        greeting, "", intro, "",
+        f"Formule : {plan}",
+        f"Montant : {amount}",
+    ]
+    if period:
+        lines.append(period)
+    lines += [
+        "",
+        f"Toutes tes factures restent disponibles dans ton espace : {app_url}/profile",
+        "",
+        f"— {company}",
+    ]
+    text = "\n".join(lines)
+
+    def esc(value: str) -> str:
+        return (value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+    html = (
+        "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#0f172a;line-height:1.5\">"
+        f"<p>{esc(greeting)}</p><p>{esc(intro)}</p>"
+        "<table style=\"border-collapse:collapse;margin:12px 0\">"
+        f"<tr><td style=\"padding:4px 16px 4px 0;color:#64748b\">Formule</td><td>{esc(plan)}</td></tr>"
+        f"<tr><td style=\"padding:4px 16px 4px 0;color:#64748b\">Montant</td><td><b>{esc(amount)}</b></td></tr>"
+        + (f"<tr><td style=\"padding:4px 16px 4px 0;color:#64748b\">Période</td><td>{esc(period.split(' : ', 1)[1])}</td></tr>" if period else "")
+        + "</table>"
+        f"<p>Toutes tes factures restent disponibles dans <a href=\"{app_url}/profile\">ton espace</a>.</p>"
+        f"<p style=\"color:#64748b\">— {esc(company)}</p></div>"
+    )
+    return subject, text, html
+
+
+def send_invoice_email(db: Session, invoice: InvoiceDB, force: bool = False) -> bool:
+    """Envoie la facture (PDF joint) au client. Renvoie True si elle est partie.
+
+    Ne lève jamais : un échec d'envoi est consigné sur la facture et sera
+    retenté ; il ne doit pas faire échouer l'encaissement qui l'a déclenché.
+    `force` renvoie une facture déjà envoyée (demande du client, du CRM).
+    """
+    try:
+        import mailer
+        import invoice_pdf
+    except ImportError:  # pragma: no cover - import depuis la racine du dépôt
+        from backend import mailer, invoice_pdf
+
+    if invoice.emailed_at and not force:
+        return True
+    email = (invoice.customer_email or "").strip()
+    if not email:
+        _record_email_result(db, invoice, error="Aucune adresse e-mail connue pour ce client")
+        return False
+    if not mailer.configured():
+        # Pas une erreur de la facture : l'envoi partira quand le SMTP sera
+        # renseigné. On ne consigne rien pour ne pas masquer une vraie panne.
+        logger.warning("Facture %s non envoyée : SMTP non configuré (SMTP_HOST).", invoice.number)
+        return False
+
+    try:
+        pdf = invoice_pdf.render_invoice_pdf(invoice)
+        subject, text, html = _invoice_email_content(invoice)
+        mailer.send(
+            to=mailer.display_name(invoice.customer_name, email),
+            subject=subject, text=text, html=html,
+            attachments=[(f"{invoice.number}.pdf", pdf, "application/pdf")],
+        )
+    except Exception as exc:
+        logger.error("Envoi de la facture %s à %s impossible : %s", invoice.number, email, exc)
+        _record_email_result(db, invoice, error=str(exc)[:500])
+        return False
+
+    _record_email_result(db, invoice, error=None)
+    logger.info("Facture %s envoyée à %s", invoice.number, email)
+    return True
+
+
+def _record_email_result(db: Session, invoice: InvoiceDB, error: Optional[str]) -> None:
+    """Trace l'envoi sur la facture. Ne touche à aucune donnée comptable."""
+    try:
+        if error is None:
+            invoice.emailed_at = datetime.utcnow()
+            invoice.email_error = None
+        else:
+            invoice.email_error = error
+        db.commit()
+    except Exception as exc:  # pragma: no cover - base indisponible
+        db.rollback()
+        logger.warning("Suivi d'envoi non enregistré pour %s : %s", invoice.number, exc)
+
+
+def send_pending_invoice_emails(db: Session, limit: int = 50) -> Dict[str, int]:
+    """Envoie les factures récentes que le client n'a pas encore reçues."""
+    try:
+        import mailer
+    except ImportError:  # pragma: no cover
+        from backend import mailer
+
+    if not mailer.configured():
+        return {"envoyees": 0, "echecs": 0, "smtp_configure": 0}
+
+    since = datetime.utcnow() - timedelta(days=EMAIL_RETRY_WINDOW_DAYS)
+    pending = (
+        db.query(InvoiceDB)
+        .filter(
+            InvoiceDB.emailed_at.is_(None),
+            InvoiceDB.customer_email.isnot(None),
+            InvoiceDB.issued_at >= since,
+        )
+        .order_by(InvoiceDB.issued_at.asc())
+        .limit(limit)
+        .all()
+    )
+    sent = sum(1 for invoice in pending if send_invoice_email(db, invoice))
+    return {"envoyees": sent, "echecs": len(pending) - sent, "smtp_configure": 1}
+
+
+def run_billing_sweep(db: Session, plan_names: Optional[Dict[str, str]] = None, days: int = 45) -> Dict[str, Any]:
+    """Filet de sécurité périodique : facture puis envoie ce qui manque.
+
+    Un paiement encaissé pendant que l'identité de l'entreprise n'était pas
+    renseignée, ou un envoi tombé sur un SMTP indisponible, sont rattrapés ici
+    sans intervention.
+    """
+    result: Dict[str, Any] = {}
+    if invoicing_configured(db):
+        since = datetime.utcnow() - timedelta(days=days)
+        generated = generate_missing_invoices(db, since=since, plan_names=plan_names)
+        result["factures_creees"] = generated["factures_creees"]
+    result.update(send_pending_invoice_emails(db))
+    return result

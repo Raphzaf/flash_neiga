@@ -8,6 +8,8 @@ Tout ce qu'un élève gère lui-même sur son compte :
 - POST  /api/profile/password              → changer son mot de passe
 - POST  /api/profile/email                 → changer son email de connexion
 - GET   /api/profile/payments              → historique de ses paiements
+- GET   /api/profile/invoices              → ses factures (une par paiement)
+- GET   /api/profile/invoices/{id}.pdf     → télécharger une facture
 - POST  /api/profile/subscription/cancel   → résilier (ne pas renouveler) l'abonnement
 
 Souscrire, changer de formule ou renouveler passe par le tunnel d'abonnement
@@ -22,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from pydantic import BaseModel, EmailStr
@@ -33,6 +36,8 @@ try:
         get_current_user, current_subscription, hash_password, verify_password,
         validate_password, normalize_email, find_user_by_email, validate_phone,
     )
+    import invoicing
+    import invoice_pdf
 except ImportError:  # pragma: no cover
     from backend.database import get_db
     from backend.models import UserDB, SubscriptionDB, TransactionDB, User, ProfileUpdate
@@ -40,6 +45,7 @@ except ImportError:  # pragma: no cover
         get_current_user, current_subscription, hash_password, verify_password,
         validate_password, normalize_email, find_user_by_email, validate_phone,
     )
+    from backend import invoicing, invoice_pdf
 
 
 class PasswordChange(BaseModel):
@@ -237,6 +243,74 @@ async def list_my_payments(
         ],
         "count": len(transactions),
     }
+
+
+def _my_invoice_or_404(db: Session, user_id: str, invoice_id: str):
+    for invoice in invoicing.invoices_for_user(db, user_id):
+        if invoice.id == invoice_id:
+            return invoice
+    # Même réponse qu'une facture inexistante : on ne révèle pas celles des autres.
+    raise HTTPException(status_code=404, detail="Facture introuvable")
+
+
+@router.get("/invoices")
+async def list_my_invoices(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Les factures de l'élève, la plus récente d'abord.
+
+    Chacune lui est aussi envoyée par e-mail à l'émission ; cet écran lui permet
+    de les retrouver à tout moment. Un paiement encore sans facture (émission
+    manquée) est facturé à cette occasion.
+    """
+    if invoicing.invoicing_configured(db):
+        try:
+            names = {pid: (p or {}).get("name") or pid for pid, p in PLANS.items()}
+            invoicing.generate_missing_invoices_for_user(db, current_user.id, plan_names=names)
+        except Exception as exc:  # la liste doit s'afficher quoi qu'il arrive
+            db.rollback()
+            logger.warning("Factures manquantes non émises pour %s : %s", current_user.id, exc)
+
+    invoices = invoicing.invoices_for_user(db, current_user.id)
+    return {
+        "items": [
+            {
+                "id": inv.id,
+                "number": inv.number,
+                "document_type": inv.document_type,
+                "status": inv.status,
+                "plan_name": inv.plan_name or inv.plan_id,
+                "amount_total": inv.amount_total,
+                "currency": inv.currency,
+                "issued_at": inv.issued_at,
+                "service_start": inv.service_start,
+                "service_end": inv.service_end,
+                "emailed_at": inv.emailed_at,
+                "pdf_url": f"/api/profile/invoices/{inv.id}.pdf",
+            }
+            for inv in invoices
+        ],
+        "count": len(invoices),
+    }
+
+
+@router.get("/invoices/{invoice_id}.pdf")
+async def download_my_invoice(
+    invoice_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invoice = _my_invoice_or_404(db, current_user.id, invoice_id)
+    try:
+        pdf = invoice_pdf.render_invoice_pdf(invoice)
+    except invoice_pdf.PdfUnavailable:
+        raise HTTPException(status_code=503, detail="PDF momentanément indisponible.")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{invoice.number}.pdf"'},
+    )
 
 
 @router.post("/subscription/cancel")

@@ -15,7 +15,7 @@ import {
 import {
     Search, RefreshCw, Users, CreditCard, TrendingUp, Clock, ArrowLeft,
     Trash2, Save, KeyRound, ShieldAlert, Ticket, Plus, Power, UserPlus,
-    AlertTriangle, FileText, Download, Image as ImageIcon, Building2, ExternalLink,
+    AlertTriangle, FileText, Download, Image as ImageIcon, Building2, ExternalLink, Mail,
 } from 'lucide-react';
 
 const money = (v, currency = 'ILS') =>
@@ -327,6 +327,22 @@ export default function AdminCRM() {
         loadPlans();
         loadInvoiceConfig();
     }, [fetchStats, loadUsers, loadPlans, loadInvoiceConfig]);
+
+    // (Re)envoie la facture au client par e-mail, puis met à jour la ligne.
+    const sendInvoiceToClient = async (inv) => {
+        try {
+            const { data } = await axios.post(`/api/admin/invoices/${inv.id}/send`);
+            setDetail((prev) => prev && ({
+                ...prev,
+                invoices: (prev.invoices || []).map((i) => (i.id === inv.id
+                    ? { ...i, emailed_at: data.emailed_at, email_error: data.email_error }
+                    : i)),
+            }));
+            toast.success(`Facture ${inv.number} envoyée à ${data.customer_email}`);
+        } catch (error) {
+            handleError(error, "Envoi de la facture impossible");
+        }
+    };
 
     const openUser = async (userId) => {
         setDetailLoading(true);
@@ -1140,7 +1156,18 @@ export default function AdminCRM() {
                                                         onClick={() => openInvoiceFile(inv.downloads.html, `${inv.number}.html`)}>
                                                         <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Ouvrir / imprimer
                                                     </Button>
+                                                    <Button size="sm" variant="outline"
+                                                        onClick={() => sendInvoiceToClient(inv)}>
+                                                        <Mail className="h-3.5 w-3.5 mr-1.5" />
+                                                        {inv.emailed_at ? 'Renvoyer au client' : 'Envoyer au client'}
+                                                    </Button>
                                                 </div>
+                                                {/* La facture doit être remise au client : on montre si elle l'a été. */}
+                                                <p className={`text-xs mt-2 ${inv.emailed_at ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                                    {inv.emailed_at
+                                                        ? `Envoyée au client le ${date(inv.emailed_at)}`
+                                                        : `Pas encore envoyée au client${inv.email_error ? ` — ${inv.email_error}` : ''}`}
+                                                </p>
                                             </li>
                                         ))}
                                     </ul>
