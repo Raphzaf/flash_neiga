@@ -8,32 +8,13 @@
  * valeurs.
  */
 
+import storage from './storage';
+
 const PLAN_KEY = 'flashneiga.selectedPlan';
 const EMAIL_KEY = 'flashneiga.lastEmail';
 
-const safeStorage = {
-  get(key) {
-    try {
-      return window.localStorage.getItem(key);
-    } catch {
-      return null;   // navigation privée / stockage bloqué
-    }
-  },
-  set(key, value) {
-    try {
-      window.localStorage.setItem(key, value);
-    } catch {
-      /* non bloquant : le parcours fonctionne sans mémoire */
-    }
-  },
-  remove(key) {
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      /* idem */
-    }
-  },
-};
+// Stockage tolérant : navigation privée ou cookies bloqués ne cassent rien.
+const safeStorage = storage;
 
 export const rememberPlan = (planId) => planId && safeStorage.set(PLAN_KEY, planId);
 export const readRememberedPlan = () => safeStorage.get(PLAN_KEY);

@@ -20,8 +20,12 @@ export default function Exam() {
     const navigationBlockedRef = useRef(false);
 
     // 🔒 PROTECTION 1: Bloquer la navigation arrière (bouton retour)
+    // Dépend d'un booléen et non de la session : la session change à chaque
+    // réponse, et chaque changement empilait une entrée d'historique de plus.
+    // Safari sur iPhone limite ces empilements et finit par lever une erreur.
+    const examInProgress = !loading && !isFinished && !!examSession;
     useEffect(() => {
-        if (! loading && !isFinished && examSession) {
+        if (examInProgress) {
             // Ajouter une entrée dans l'historique pour intercepter le retour arrière
             window.history.pushState(null, '', window.location.href);
             
@@ -39,7 +43,7 @@ export default function Exam() {
                 window.removeEventListener('popstate', handlePopState);
             };
         }
-    }, [loading, isFinished, examSession]);
+    }, [examInProgress]);
 
     // 🔒 PROTECTION 2: Bloquer fermeture/rechargement de page
     useEffect(() => {
