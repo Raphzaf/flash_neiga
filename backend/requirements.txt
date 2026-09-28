@@ -6,7 +6,7 @@ pyjwt>=2.10.1
 bcrypt==4.1.3
 passlib>=1.7.4
 python-jose>=3.3.0
-sqlalchemy>=2.0.0
+sqlalchemy>=2.0.0,<2.2  # 2.2 non testée ; le pilote psycopg2 est fixé dans database.py
 requests>=2.31.0
 pandas>=2.2.0
 numpy>=1.26.0
