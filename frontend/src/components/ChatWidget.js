@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from './ui/button';
+import { useAuth } from '../context/AuthContext';
+import PremiumUpsell from './PremiumUpsell';
 import { MessageCircle, Send, X, Loader2, GraduationCap } from 'lucide-react';
 
 const WELCOME = {
@@ -16,6 +18,7 @@ const WELCOME = {
  */
 export default function ChatWidget() {
     const location = useLocation();
+    const { isPremium } = useAuth();
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState([WELCOME]);
     const [input, setInput] = useState('');
@@ -44,7 +47,9 @@ export default function ChatWidget() {
             const res = await axios.post('/api/ai-coach/chat', { messages: payload });
             setMessages((prev) => [...prev, { role: 'assistant', content: res.data.reply }]);
         } catch (e) {
-            const detail = e.response?.data?.detail || "Le prof est momentanément indisponible, réessaie dans un instant.";
+            // Le refus « Premium » arrive sous forme d'objet {code, message}.
+            const raw = e.response?.data?.detail;
+            const detail = (typeof raw === 'string' ? raw : raw?.message) || "Le prof est momentanément indisponible, réessaie dans un instant.";
             setMessages((prev) => [...prev, { role: 'assistant', content: detail, error: true }]);
         } finally {
             setLoading(false);
@@ -86,6 +91,11 @@ export default function ChatWidget() {
                         </button>
                     </div>
 
+                    {!isPremium ? (
+                        <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-950">
+                            <PremiumUpsell />
+                        </div>
+                    ) : (<>
                     {/* Messages */}
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 dark:bg-slate-950">
                         {messages.map((m, i) => (
@@ -126,6 +136,7 @@ export default function ChatWidget() {
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
+                    </>)}
                 </div>
             )}
         </>

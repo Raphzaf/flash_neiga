@@ -30,7 +30,7 @@ try:
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
         AIAnswerCacheDB,
     )
-    from auth import get_current_user, require_admin, require_subscription
+    from auth import get_current_user, require_admin, require_subscription, require_premium
     from ai_client import (
         call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics,
         interactive_budget,
@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover
         QuestionDB, CourseDB, ExamSessionDB, AILessonDB, SeriesReportDB, User,
         AIAnswerCacheDB,
     )
-    from backend.auth import get_current_user, require_admin, require_subscription
+    from backend.auth import get_current_user, require_admin, require_subscription, require_premium
     from backend.ai_client import (
         call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics,
         interactive_budget,
@@ -616,7 +616,9 @@ def cache_invalidate(payload: dict, db: Session = Depends(get_db)):
     return {"question_id": question_id, "removed": removed}
 
 
-@router.post("/chat", dependencies=[Depends(require_subscription)])
+# Le chat libre est l'offre Premium ; les leçons sur les erreurs restent
+# incluses dans la formule Standard.
+@router.post("/chat", dependencies=[Depends(require_premium)])
 def chat(
     payload: dict,
     current_user: User = Depends(get_current_user),

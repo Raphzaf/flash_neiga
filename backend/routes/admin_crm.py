@@ -40,6 +40,7 @@ try:
     from routes.hyp_payments import provision_subscription, transaction_email
     import promo as promo_lib
     import invoicing
+    import renewals
 except ImportError:  # pragma: no cover - import depuis la racine du repo
     from backend.database import get_db
     from backend.models import (
@@ -52,6 +53,7 @@ except ImportError:  # pragma: no cover - import depuis la racine du repo
     from backend.routes.hyp_payments import provision_subscription, transaction_email
     from backend import promo as promo_lib
     from backend import invoicing
+    from backend import renewals
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +152,11 @@ def _sub_payload(sub: Optional[SubscriptionDB]) -> Optional[Dict[str, Any]]:
         "end_date": sub.end_date,
         "canceled_at": sub.canceled_at,
         "created_at": sub.created_at,
+        "auto_renew": bool(sub.auto_renew),
+        "next_renewal": sub.next_renewal,
+        "card_last4": sub.card_last4,
+        "renewal_failures": sub.renewal_failures or 0,
+        "renewal_error": sub.renewal_error,
         "days_left": (
             max(0, (sub.end_date - datetime.utcnow()).days) if sub.end_date else None
         ),
@@ -461,6 +468,11 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
         "phone": user.phone,
         "created_at": user.created_at,
         "subscriptions": [_sub_payload(s) for s in subs],
+        # Prélèvements automatiques restés sans réponse de HYP : à vérifier.
+        "pending_renewals": [
+            {"id": t.id, "amount": t.amount, "currency": t.currency, "created_at": t.created_at}
+            for t in renewals.pending_attempts(db, user_id)
+        ],
         "current_subscription": _sub_payload(next((s for s in subs if _is_active(s)), subs[0] if subs else None)),
         "transactions": [
             {
@@ -753,6 +765,29 @@ def _validate_promo_payload(discount_type: str, discount_value: float) -> None:
         raise HTTPException(status_code=400, detail="Le pourcentage doit être compris entre 1 et 100")
     if discount_type == "amount" and discount_value <= 0:
         raise HTTPException(status_code=400, detail="Le montant de la remise doit être positif")
+
+
+class ResolveRenewalRequest(BaseModel):
+    charged: bool
+    hyp_transaction_id: Optional[str] = None
+
+
+@router.post("/renewals/{transaction_id}/resolve")
+def resolve_renewal(transaction_id: str, payload: ResolveRenewalRequest, db: Session = Depends(get_db)):
+    """Tranche un prélèvement automatique resté sans réponse de HYP.
+
+    À faire après avoir vérifié dans l'espace HYP si la carte a été débitée :
+    tant que ce n'est pas tranché, l'abonnement n'est plus prélevé (pour ne
+    jamais débiter deux fois la même échéance).
+    """
+    attempt = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Prélèvement introuvable")
+    try:
+        subscription = renewals.resolve_attempt(db, attempt, payload.charged, payload.hyp_transaction_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"status": attempt.status, "subscription": _sub_payload(subscription)}
 
 
 @router.get("/promo-codes")

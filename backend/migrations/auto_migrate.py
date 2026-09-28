@@ -80,6 +80,14 @@ def run_hyp_migration():
                     'next_renewal': 'TIMESTAMP',
                     'canceled_at': 'TIMESTAMP',
                     'transaction_id': 'VARCHAR',
+                    'auto_renew': 'BOOLEAN DEFAULT FALSE',
+                    'hyp_token': 'VARCHAR',
+                    'hyp_token_expiry': 'VARCHAR',
+                    'card_last4': 'VARCHAR',
+                    'hyp_user_id': 'VARCHAR',
+                    'renewal_failures': 'INTEGER DEFAULT 0',
+                    'renewal_error': 'TEXT',
+                    'renewal_locked_until': 'TIMESTAMP',
                     'created_at': 'TIMESTAMP DEFAULT NOW()',
                     'updated_at': 'TIMESTAMP DEFAULT NOW()'
                 }
@@ -95,6 +103,14 @@ def run_hyp_migration():
                     'next_renewal': 'TIMESTAMP',
                     'canceled_at': 'TIMESTAMP',
                     'transaction_id': 'VARCHAR',
+                    'auto_renew': 'BOOLEAN DEFAULT 0',
+                    'hyp_token': 'VARCHAR',
+                    'hyp_token_expiry': 'VARCHAR',
+                    'card_last4': 'VARCHAR',
+                    'hyp_user_id': 'VARCHAR',
+                    'renewal_failures': 'INTEGER DEFAULT 0',
+                    'renewal_error': 'TEXT',
+                    'renewal_locked_until': 'TIMESTAMP',
                     'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
                     'updated_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
                 }
@@ -115,6 +131,7 @@ def run_hyp_migration():
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscriptions_plan_id ON subscriptions(plan_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscriptions_transaction_id ON subscriptions(transaction_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscriptions_next_renewal ON subscriptions(next_renewal)"))
                 conn.commit()
                 logger.info("   ✅ Subscriptions indexes created")
         

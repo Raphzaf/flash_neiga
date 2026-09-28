@@ -136,6 +136,8 @@ export const AuthProvider = ({ children }) => {
             subscriptionLoading,
             // `has_access` inclut les administrateurs, non soumis au paywall.
             hasAccess: !!subscription?.has_access,
+            // Chat « prof 24h/24 » : réservé aux formules Premium.
+            isPremium: !!subscription?.premium,
             sessionExpired,
             refreshSubscription: loadSubscription,
         }}>

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { Button } from './ui/button';
+import { useAuth } from '../context/AuthContext';
+import PremiumUpsell from './PremiumUpsell';
 import { MessageCircle, Send, Loader2, GraduationCap } from 'lucide-react';
 
 /**
@@ -14,6 +16,7 @@ import { MessageCircle, Send, Loader2, GraduationCap } from 'lucide-react';
  *  - placeholder (string)
  */
 export default function InlineChat({ context, title = '💬 Poser une question sur ce sujet', placeholder = 'Ta question au prof…' }) {
+    const { isPremium } = useAuth();
     const [openChat, setOpenChat] = useState(false);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -38,7 +41,9 @@ export default function InlineChat({ context, title = '💬 Poser une question s
             });
             setMessages((prev) => [...prev, { role: 'assistant', content: res.data.reply }]);
         } catch (e) {
-            const detail = e.response?.data?.detail || 'Le prof est momentanément indisponible, réessaie dans un instant.';
+            // Le refus « Premium » arrive sous forme d'objet {code, message}.
+            const raw = e.response?.data?.detail;
+            const detail = (typeof raw === 'string' ? raw : raw?.message) || 'Le prof est momentanément indisponible, réessaie dans un instant.';
             setMessages((prev) => [...prev, { role: 'assistant', content: detail, error: true }]);
         } finally {
             setLoading(false);
@@ -57,6 +62,14 @@ export default function InlineChat({ context, title = '💬 Poser une question s
             <Button variant="outline" onClick={() => setOpenChat(true)} className="gap-2 w-full justify-center">
                 <MessageCircle className="h-4 w-4" /> {title}
             </Button>
+        );
+    }
+
+    if (!isPremium) {
+        return (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/60 dark:bg-slate-900">
+                <PremiumUpsell compact />
+            </div>
         );
     }
 

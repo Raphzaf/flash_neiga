@@ -29,7 +29,7 @@ from server import app  # noqa: E402
 from database import Base, get_db  # noqa: E402
 from models import AIAnswerCacheDB, QuestionDB, UserDB, User  # noqa: E402
 from auth import (  # noqa: E402
-    get_current_user, get_current_user_optional, require_admin, require_subscription,
+    get_current_user, get_current_user_optional, require_admin, require_subscription, require_premium,
 )
 import routes.ai_coach as ai_coach  # noqa: E402
 
@@ -79,6 +79,7 @@ def db(monkeypatch):
     app.dependency_overrides[get_current_user] = override_current_user
     app.dependency_overrides[get_current_user_optional] = override_current_user
     app.dependency_overrides[require_subscription] = override_current_user
+    app.dependency_overrides[require_premium] = override_current_user
     app.dependency_overrides[require_admin] = override_current_user
     _current["user"] = ELEVE_A
 

@@ -22,7 +22,8 @@ services:
       - key: HYP_API_KEY
         sync: false  # Must be set manually in Render dashboard
       - key: HYP_PASSP
-        sync: false  # Terminal API password (PassP); set manually in Render dashboard
+        sync: false  # Mot de passe API du terminal (PassP). INDISPENSABLE au renouvellement automatique
+                     # (getToken + prélèvement soft) ; le terminal doit aussi avoir la tokenisation activée par HYP.
       - key: HYP_API_URL
         value: "https://icom.yaad.net/p/"
       - key: HYP_REQUIRE_SIGNATURE

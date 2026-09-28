@@ -328,6 +328,17 @@ export default function AdminCRM() {
         loadInvoiceConfig();
     }, [fetchStats, loadUsers, loadPlans, loadInvoiceConfig]);
 
+    // Tranche un prélèvement automatique resté sans réponse de HYP.
+    const resolveRenewal = async (transactionId, charged) => {
+        try {
+            await axios.post(`/api/admin/crm/renewals/${transactionId}/resolve`, { charged });
+            toast.success(charged ? 'Prélèvement confirmé : accès prolongé et facture émise.' : 'Prélèvement abandonné.');
+            if (detail?.id) await openUser(detail.id);
+        } catch (error) {
+            handleError(error, 'Impossible d\'enregistrer le résultat');
+        }
+    };
+
     // (Re)envoie la facture au client par e-mail, puis met à jour la ligne.
     const sendInvoiceToClient = async (inv) => {
         try {
@@ -1040,13 +1051,47 @@ export default function AdminCRM() {
                                                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                                                     {date(s.start_date)} → {date(s.end_date)}
                                                 </div>
+                                                <div className="text-xs mt-1 text-slate-600 dark:text-slate-300">
+                                                    {s.auto_renew
+                                                        ? `Renouvellement automatique le ${date(s.next_renewal)}${s.card_last4 ? ` (carte •••• ${s.card_last4})` : ''}`
+                                                        : 'Pas de renouvellement automatique'}
+                                                </div>
+                                                {s.renewal_error && (
+                                                    <div className="text-xs mt-1 text-amber-600 dark:text-amber-400">
+                                                        {s.renewal_failures ? `Échecs de prélèvement : ${s.renewal_failures}/3 — ` : ''}{s.renewal_error}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {(detail.pending_renewals?.length || 0) > 0 && (
+                                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-500/40 dark:bg-amber-500/10 space-y-2">
+                                        <p className="font-medium text-amber-900 dark:text-amber-200">
+                                            Prélèvement à vérifier dans HYP
+                                        </p>
+                                        <p className="text-xs text-amber-800 dark:text-amber-300">
+                                            HYP n'a pas répondu lors du renouvellement : on ne sait pas si la carte a été
+                                            débitée. Par sécurité, plus aucun prélèvement n'est tenté pour cet élève tant
+                                            que ce n'est pas tranché. Vérifie dans ton espace HYP, puis indique le résultat.
+                                        </p>
+                                        {detail.pending_renewals.map((r) => (
+                                            <div key={r.id} className="flex flex-wrap items-center gap-2">
+                                                <span className="text-xs">{date(r.created_at)} — {money(r.amount, r.currency)}</span>
+                                                <Button size="sm" variant="outline" onClick={() => resolveRenewal(r.id, true)}>
+                                                    La carte a été débitée
+                                                </Button>
+                                                <Button size="sm" variant="outline" onClick={() => resolveRenewal(r.id, false)}>
+                                                    Pas de débit
+                                                </Button>
                                             </div>
                                         ))}
                                     </div>
                                 )}
                                 <p className="text-xs text-slate-500 dark:text-slate-400">
                                     L'abonnement appartient à l'élève : il le souscrit, le change et le
-                                    renouvelle depuis son espace. Le CRM l'affiche, sans le modifier.
+                                    résilie depuis son espace. Il est renouvelé automatiquement à chaque
+                                    échéance tant qu'il n'est pas résilié. Le CRM l'affiche, sans le modifier.
                                 </p>
                             </section>
 

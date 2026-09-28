@@ -442,7 +442,12 @@ def generate_missing_invoices(
             "Identité de l'entreprise incomplète : " + ", ".join(missing_issuer_fields(db))
         )
 
-    query = db.query(TransactionDB).filter(TransactionDB.status == "completed")
+    # Seules les ventes du catalogue sont facturées : une transaction sans
+    # formule ne vient pas du tunnel d'achat (ancien webhook non signé, essai…).
+    query = db.query(TransactionDB).filter(
+        TransactionDB.status == "completed",
+        TransactionDB.plan_id.isnot(None),
+    )
     paid_on = func.coalesce(TransactionDB.completed_at, TransactionDB.created_at)
     if since is not None:
         query = query.filter(paid_on >= since)
@@ -525,6 +530,7 @@ def generate_missing_invoices_for_user(
         .filter(
             TransactionDB.user_id == user_id,
             TransactionDB.status == "completed",
+            TransactionDB.plan_id.isnot(None),
         )
         .order_by(func.coalesce(TransactionDB.completed_at, TransactionDB.created_at).asc())
         .all()
