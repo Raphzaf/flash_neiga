@@ -17,11 +17,14 @@ _UNSUPPORTED_QUERY_PARAMS = {"pgbouncer", "connection_limit", "pool_timeout", "s
 def normalize_database_url(url: str) -> str:
     """Rend une URL PostgreSQL utilisable par psycopg2.
 
-    Deux corrections, toutes deux dues à la façon dont les hébergeurs écrivent
-    l'URL plutôt qu'à un choix de notre part :
+    Trois corrections :
 
     * `postgres://` → `postgresql://` (Render fournit la première forme,
       SQLAlchemy attend la seconde) ;
+    * pilote explicite : `postgresql+psycopg2://`. Depuis SQLAlchemy 2.1, une
+      URL `postgresql://` sans pilote désigne psycopg 3, que le projet
+      n'installe pas : le serveur plantait au démarrage (« No module named
+      'psycopg' ») dès que Render réinstallait les dépendances ;
     * suppression des paramètres propres à d'autres pilotes (`pgbouncer=true`
       en tête), que psycopg2 rejette.
     """
@@ -30,6 +33,10 @@ def normalize_database_url(url: str) -> str:
 
     if not url.startswith("postgresql"):
         return url
+
+    # Un pilote déjà choisi (postgresql+psycopg2://, +asyncpg…) est respecté.
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
     parts = urlsplit(url)
     if not parts.query:
@@ -46,6 +53,19 @@ def normalize_database_url(url: str) -> str:
         )
 
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
+
+
+def libpq_url(url: str) -> str:
+    """URL pour une connexion psycopg2 directe (psycopg2.connect).
+
+    libpq ne connaît pas la mention de pilote propre à SQLAlchemy
+    (`postgresql+psycopg2://`) : on la retire.
+    """
+    url = normalize_database_url(url)
+    scheme, sep, rest = url.partition("://")
+    if sep and scheme.startswith("postgresql+"):
+        return "postgresql://" + rest
+    return url
 
 
 # Support both PostgreSQL (production) and SQLite (local development)

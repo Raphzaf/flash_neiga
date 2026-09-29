@@ -21,12 +21,12 @@ import json
 # Support imports both when running from backend/ and from repo root
 try:
     from database import (
-        engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url,
+        engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url, libpq_url,
     )
     import text_repair
 except ImportError:
     from backend.database import (
-        engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url,
+        engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url, libpq_url,
     )
     from backend import text_repair
 try:
@@ -467,7 +467,7 @@ async def startup():
             # Même normalisation que pour le moteur principal : une URL de
             # pooler (`?pgbouncer=true`) fait échouer psycopg2 sur
             # « invalid dsn », et l'enrichissement serait perdu en silence.
-            conn = psycopg2.connect(normalize_database_url(raw_url))
+            conn = psycopg2.connect(libpq_url(raw_url))
             cursor = conn.cursor()
             
             # Add column FIRST if needed
