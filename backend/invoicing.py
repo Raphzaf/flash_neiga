@@ -99,11 +99,23 @@ def prices_include_vat(db: Optional[Session] = None) -> bool:
     return raw in ("1", "true", "yes", "oui")
 
 
+# Numéro d'agrément de l'auto-école : il figure sur toutes les factures, y
+# compris celles émises avant qu'il ne soit ajouté (leur instantané ne le
+# contient pas, d'où ce repli). Modifiable depuis le CRM.
+DEFAULT_APPROVAL_NUMBER = "332507516"
+
+
+def approval_number(issuer_data: Optional[Dict[str, Any]]) -> str:
+    """Numéro d'agrément à imprimer sur une facture."""
+    return ((issuer_data or {}).get("approval_number") or DEFAULT_APPROVAL_NUMBER).strip()
+
+
 def issuer(db: Optional[Session] = None) -> Dict[str, str]:
     """Coordonnées légales de l'entreprise, telles qu'elles figureront en tête."""
     return {
         "name": _env("INVOICE_COMPANY_NAME", db=db),
         "legal_id": _env("INVOICE_COMPANY_LEGAL_ID", db=db),      # ח.פ / ע.מ
+        "approval_number": _env("INVOICE_COMPANY_APPROVAL_NUMBER", DEFAULT_APPROVAL_NUMBER, db=db),
         "address": _env("INVOICE_COMPANY_ADDRESS", db=db),
         "city": _env("INVOICE_COMPANY_CITY", db=db),
         "country": _env("INVOICE_COMPANY_COUNTRY", "Israël", db=db),

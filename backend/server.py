@@ -24,11 +24,13 @@ try:
         engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url, libpq_url,
     )
     import text_repair
+    import course_seed
 except ImportError:
     from backend.database import (
         engine, SessionLocal, Base, get_db, ensure_schema_updated, normalize_database_url, libpq_url,
     )
     from backend import text_repair
+    from backend import course_seed
 try:
     from models import (
         UserDB, QuestionDB, TrafficSignDB, ExamSessionDB, TransactionDB, CourseDB,
@@ -437,6 +439,16 @@ async def startup():
         except Exception as e:
             # Un accent abîmé ne doit pas empêcher le serveur de démarrer.
             logger.error(f"❌ Category repair failed: {e}", exc_info=True)
+            db.rollback()
+
+        # Step 8: Load the bundled courses (once — later CMS edits stay untouched)
+        logger.info("📝 Step 8: Checking bundled courses...")
+        try:
+            created = course_seed.seed_bundled_courses(db)
+            logger.info(f"✅ Bundled courses: {created} added")
+        except Exception as e:
+            # Un cours manquant ne doit pas empêcher le serveur de démarrer.
+            logger.error(f"❌ Course seeding failed: {e}", exc_info=True)
             db.rollback()
 
     except Exception as e:

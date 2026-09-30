@@ -11,6 +11,7 @@ Ce que l'exploitant demande, et donc ce qui est vérifié ici :
    c'est cette saisie — pas une variable du serveur — qui débloque l'émission.
 5. Une facturation non configurée n'empêche jamais la fiche de s'ouvrir.
 """
+import html
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -339,6 +340,27 @@ def test_all_formats_show_the_same_amounts(db, invoice_id):
     html_body = client.get(f"/api/admin/invoices/{invoice_id}.html").text
     for value in (view["amount_total"], view["amount_net"], view["amount_vat"]):
         assert value in html_body
+
+
+def test_approval_number_on_every_invoice(db, invoice_id):
+    """Le numéro d'agrément figure sur la facture, y compris sur une facture
+    émise avant son ajout (instantané sans ce champ)."""
+    import invoice_formats
+    from models import InvoiceDB as Model
+
+    html_body = client.get(f"/api/admin/invoices/{invoice_id}.html").text
+    assert "Numéro d'agrément : 332507516" in html.unescape(html_body)
+
+    invoice = db.query(Model).filter(Model.id == invoice_id).first()
+    snapshot = dict(invoice.issuer_snapshot)
+    snapshot.pop("approval_number", None)
+    invoice.issuer_snapshot = snapshot
+    db.commit()
+    view = invoice_formats.invoice_view(invoice)
+    assert "Numéro d'agrément : 332507516" in view["issuer_lines"]
+
+    pdf = client.get(f"/api/admin/invoices/{invoice_id}.pdf")
+    assert pdf.status_code == 200, pdf.text
 
 
 def test_cancelled_invoice_is_marked_in_every_format(db, invoice_id):

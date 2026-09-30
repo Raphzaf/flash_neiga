@@ -94,6 +94,7 @@ class IssuerConfig(BaseModel):
     """
     company_name: Optional[str] = None
     company_legal_id: Optional[str] = None
+    company_approval_number: Optional[str] = None
     company_address: Optional[str] = None
     company_city: Optional[str] = None
     company_country: Optional[str] = None
@@ -222,6 +223,7 @@ def invoice_config(db: Session = Depends(get_db)):
 _CONFIG_KEYS = {
     "company_name": "INVOICE_COMPANY_NAME",
     "company_legal_id": "INVOICE_COMPANY_LEGAL_ID",
+    "company_approval_number": "INVOICE_COMPANY_APPROVAL_NUMBER",
     "company_address": "INVOICE_COMPANY_ADDRESS",
     "company_city": "INVOICE_COMPANY_CITY",
     "company_country": "INVOICE_COMPANY_COUNTRY",
