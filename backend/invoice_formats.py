@@ -26,6 +26,11 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import invoicing
+except ImportError:  # pragma: no cover - import depuis la racine du dépôt
+    from backend import invoicing
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,6 +83,7 @@ def invoice_view(invoice) -> Dict[str, Any]:
     issuer_lines: List[str] = []
     if issuer.get("legal_id"):
         issuer_lines.append(f"N° d'entreprise : {issuer['legal_id']}")
+    issuer_lines.append(f"Numéro d'agrément : {invoicing.approval_number(issuer)}")
     if issuer.get("vat_id"):
         issuer_lines.append(f"N° TVA : {issuer['vat_id']}")
     for key in ("address", "city", "country", "email", "phone"):

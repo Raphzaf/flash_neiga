@@ -143,7 +143,7 @@ export default function Courses() {
                             )}
 
                             {selectedCourse.content && (
-                                <div className="prose dark:prose-invert max-w-none">
+                                <div className="course-content">
                                     <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedCourse.content) }} />
                                 </div>
                             )}

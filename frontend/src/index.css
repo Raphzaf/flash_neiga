@@ -219,3 +219,43 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-primary/20 hover:bg-primary/40 rounded-full transition-colors;
 } 
+
+/* Contenu HTML des cours (saisi dans le CMS ou importé d'un document Word). */
+.course-content {
+    @apply text-slate-700 dark:text-slate-200 leading-relaxed space-y-3;
+}
+.course-content h1,
+.course-content h2,
+.course-content h3 {
+    @apply text-lg font-bold text-slate-900 dark:text-white pt-4;
+}
+.course-content h4,
+.course-content h5,
+.course-content h6 {
+    @apply font-semibold text-slate-900 dark:text-white pt-2;
+}
+.course-content ul {
+    @apply list-disc pl-6 space-y-1;
+}
+.course-content ol {
+    @apply list-decimal pl-6 space-y-1;
+}
+.course-content a {
+    @apply text-blue-600 dark:text-blue-400 underline;
+}
+.course-content img {
+    @apply max-w-full h-auto mx-auto rounded-lg;
+}
+.course-content table {
+    @apply w-full text-sm border-collapse;
+}
+.course-content th,
+.course-content td {
+    @apply border border-slate-300 dark:border-slate-600 px-2 py-1 text-left align-top;
+}
+.course-content th {
+    @apply bg-slate-100 dark:bg-slate-700 font-semibold;
+}
+.course-content blockquote {
+    @apply border-l-4 border-slate-300 dark:border-slate-600 pl-4 italic;
+}

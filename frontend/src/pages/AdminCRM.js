@@ -25,7 +25,7 @@ const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR', { day: '2-digit
 
 // Formulaire d'identité de l'entreprise, tel qu'attendu par PUT /invoices/config.
 const EMPTY_ISSUER = {
-    company_name: '', company_legal_id: '', company_address: '', company_city: '',
+    company_name: '', company_legal_id: '', company_approval_number: '', company_address: '', company_city: '',
     company_country: '', company_email: '', company_phone: '', company_vat_id: '',
     footer: '',
 };
@@ -268,6 +268,7 @@ export default function AdminCRM() {
             setIssuerForm({
                 company_name: issuer.name || '',
                 company_legal_id: issuer.legal_id || '',
+                company_approval_number: issuer.approval_number || '',
                 company_address: issuer.address || '',
                 company_city: issuer.city || '',
                 company_country: issuer.country || '',
@@ -922,6 +923,7 @@ export default function AdminCRM() {
                                     {[
                                         ['company_name', "Raison sociale *", 'Flash Neiga Ltd'],
                                         ['company_legal_id', "N° d'entreprise (ח.פ / ע.מ) *", '515123456'],
+                                        ['company_approval_number', "Numéro d'agrément", '332507516'],
                                         ['company_vat_id', 'N° TVA (si distinct)', ''],
                                         ['company_email', 'E-mail', 'contact@flash-neiga.com'],
                                         ['company_phone', 'Téléphone', '+972 ...'],
