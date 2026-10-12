@@ -17,11 +17,6 @@ import os
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
-try:
-    import invoicing
-except ImportError:  # pragma: no cover - import depuis la racine du dépôt
-    from backend import invoicing
-
 logger = logging.getLogger(__name__)
 
 # Polices Unicode courantes sur les images Linux. Sans elles, reportlab se
@@ -97,6 +92,18 @@ def _label(invoice) -> str:
     return "AVOIR" if invoice.document_type == "avoir" else "FACTURE"
 
 
+# Coordonnées imprimées en tête de chaque facture et avoir, telles que
+# demandées par l'auto-école.
+ISSUER_HEADER = (
+    ("Moniteur", "Bryan Tartour"),
+    ("Numéro de Licence", "16056"),
+    ("Téléphone", "0537080667"),
+    ("Ossek mourché", "332507516"),
+    ("", "Ussishkin 37 Netanya"),
+    ("", "Flashneiga@gmail.com"),
+)
+
+
 def _description(invoice) -> str:
     """Intitulé de la prestation, période de service comprise."""
     lines = [invoice.plan_name or invoice.plan_id or "Abonnement Flash Neiga"]
@@ -152,18 +159,8 @@ def render_invoice_pdf(invoice) -> bytes:
     story: List[Any] = []
 
     # --- En-tête : émetteur à gauche, document à droite ---
-    issuer_lines = [f"<b>{issuer.get('name') or ''}</b>"]
-    if issuer.get("legal_id"):
-        issuer_lines.append(f"N° d'entreprise : {issuer['legal_id']}")
-    issuer_lines.append(f"Numéro d'agrément : {invoicing.approval_number(issuer)}")
-    if issuer.get("vat_id"):
-        issuer_lines.append(f"N° TVA : {issuer['vat_id']}")
-    for key in ("address", "city", "country"):
-        if issuer.get(key):
-            issuer_lines.append(str(issuer[key]))
-    for key in ("email", "phone"):
-        if issuer.get(key):
-            issuer_lines.append(str(issuer[key]))
+    issuer_lines = [f"<b>{label}</b> : {value}" if label else value
+                    for label, value in ISSUER_HEADER]
 
     doc_lines = [
         f"Date d'émission : {_date(invoice.issued_at)}",
