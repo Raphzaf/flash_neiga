@@ -259,3 +259,29 @@
 .course-content blockquote {
     @apply border-l-4 border-slate-300 dark:border-slate-600 pl-4 italic;
 }
+
+/* Lecteur de cours : texte confortable sur mobile, tableaux défilants. */
+.course-reader {
+    @apply text-base sm:text-[1.05rem] leading-7 sm:leading-8 space-y-4;
+}
+.course-reader h1,
+.course-reader h2,
+.course-reader h3 {
+    @apply text-xl font-semibold text-slate-800 dark:text-white pt-6;
+}
+.course-reader table {
+    @apply block overflow-x-auto max-w-full;
+}
+.course-reader blockquote {
+    @apply border-teal-300 dark:border-teal-700 bg-teal-50/60 dark:bg-teal-900/20 not-italic rounded-r-xl py-3 pr-4;
+}
+.course-reader a {
+    @apply text-teal-700 dark:text-teal-300;
+}
+
+.scrollbar-none {
+    scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+}
