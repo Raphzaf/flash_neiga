@@ -15,6 +15,7 @@ Resend, OVH, Mailgun…) :
     SMTP_FROM       "Flash Neiga <factures@flash-neiga.com>"
     SMTP_REPLY_TO   (facultatif) adresse de réponse
     SMTP_BCC        (facultatif) copie cachée, par ex. la comptable
+    SMTP_COPY_TO    copie cachée systématique au bureau (défaut flashneiga@gmail.com)
 
 Sans SMTP_HOST, rien n'est envoyé : la facture reste émise, téléchargeable
 depuis le profil de l'élève, et l'envoi sera retenté dès que le serveur SMTP
@@ -41,6 +42,25 @@ def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
 
+# Chaque e-mail envoyé au client part aussi, en copie cachée, au bureau :
+# l'équipe garde trace de ce qui a été remis, sans rien avoir à faire.
+OFFICE_COPY_DEFAULT = "flashneiga@gmail.com"
+
+
+def copy_recipients() -> list:
+    """Destinataires en copie cachée : le bureau, puis SMTP_BCC, sans doublon."""
+    office = os.environ.get("SMTP_COPY_TO")
+    raw = [OFFICE_COPY_DEFAULT if office is None else office, _env("SMTP_BCC")]
+    seen, result = set(), []
+    for chunk in raw:
+        for address in (chunk or "").split(","):
+            address = address.strip()
+            if address and address.lower() not in seen:
+                seen.add(address.lower())
+                result.append(address)
+    return result
+
+
 def configured() -> bool:
     return bool(_env("SMTP_HOST"))
 
@@ -58,6 +78,7 @@ def status() -> dict:
         "port": int(_env("SMTP_PORT", "587") or 587),
         "sender": sender() or None,
         "bcc": _env("SMTP_BCC") or None,
+        "copy_to": copy_recipients(),
     }
 
 
@@ -101,10 +122,8 @@ def send(
         maintype, _, subtype = (mime or "application/octet-stream").partition("/")
         msg.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
 
-    recipients = [to]
-    bcc = _env("SMTP_BCC")
-    if bcc:
-        recipients += [a.strip() for a in bcc.split(",") if a.strip()]
+    to_address = parseaddr(to)[1].lower()
+    recipients = [to] + [a for a in copy_recipients() if a.lower() != to_address]
 
     context = ssl.create_default_context()
     if port == 465:

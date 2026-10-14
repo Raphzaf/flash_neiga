@@ -530,7 +530,7 @@ def cancel_invoice(invoice_id: str, payload: CancelRequest, db: Session = Depend
 
 @router.post("/{invoice_id}/send")
 def send_invoice(invoice_id: str, db: Session = Depends(get_db)):
-    """(Re)envoie la facture au client par e-mail, PDF joint."""
+    """(Re)envoie la facture au client par e-mail, PDF joint — copie au bureau."""
     invoice = _get_or_404(db, invoice_id)
     if not mailer.configured():
         raise HTTPException(
@@ -543,4 +543,4 @@ def send_invoice(invoice_id: str, db: Session = Depends(get_db)):
         db.refresh(invoice)
         raise HTTPException(status_code=502, detail=f"Envoi échoué : {invoice.email_error or 'erreur inconnue'}")
     db.refresh(invoice)
-    return _payload(invoice)
+    return {**_payload(invoice), "copy_to": mailer.copy_recipients()}

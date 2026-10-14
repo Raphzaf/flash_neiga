@@ -15,7 +15,7 @@ import {
 import {
     Search, RefreshCw, Users, CreditCard, TrendingUp, Clock, ArrowLeft,
     Trash2, Save, KeyRound, ShieldAlert, Ticket, Plus, Power, UserPlus,
-    AlertTriangle, FileText, Download, Image as ImageIcon, Building2, ExternalLink, Mail,
+    AlertTriangle, FileText, Download, Building2, Mail, Eye, FileArchive,
 } from 'lucide-react';
 
 const money = (v, currency = 'ILS') =>
@@ -50,6 +50,37 @@ const openInvoiceFile = async (url, filename, { download = false } = {}) => {
     // L'onglet a besoin du blob le temps de l'afficher : on ne libère qu'après.
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 };
+
+const fileError = (error, fallback) => {
+    toast.error(error?.response?.status === 404 ? 'Aucune facture sur cette période.' : fallback);
+};
+
+// Trois gestes, pas plus : voir, télécharger, envoyer.
+function InvoiceActions({ inv, onSend }) {
+    const [sending, setSending] = useState(false);
+    const send = async () => {
+        setSending(true);
+        try { await onSend(inv); } finally { setSending(false); }
+    };
+    return (
+        <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline"
+                onClick={() => openInvoiceFile(inv.downloads.pdf, `${inv.number}.pdf`)
+                    .catch((e) => fileError(e, 'Facture illisible'))}>
+                <Eye className="h-3.5 w-3.5 mr-1.5" /> Voir
+            </Button>
+            <Button size="sm" variant="outline"
+                onClick={() => openInvoiceFile(inv.downloads.pdf, `${inv.number}.pdf`, { download: true })
+                    .catch((e) => fileError(e, 'Téléchargement impossible'))}>
+                <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
+            </Button>
+            <Button size="sm" onClick={send} disabled={sending}>
+                <Mail className="h-3.5 w-3.5 mr-1.5" />
+                {sending ? 'Envoi…' : inv.emailed_at ? 'Renvoyer au client' : 'Envoyer au client'}
+            </Button>
+        </div>
+    );
+}
 
 /**
  * Pourquoi cet élève n'a-t-il pas d'abonnement ?
@@ -260,6 +291,43 @@ export default function AdminCRM() {
         }
     }, [attachTx, attachForm, fetchTransactions, fetchStats, handleError]);
 
+    // Toutes les factures, filtrables par mois (vide = tout).
+    const [invoiceMonth, setInvoiceMonth] = useState('');
+    const [allInvoices, setAllInvoices] = useState([]);
+    const [allInvoicesTotal, setAllInvoicesTotal] = useState(0);
+    const [zipLoading, setZipLoading] = useState(false);
+
+    const loadAllInvoices = useCallback(async () => {
+        try {
+            const { data } = await axios.get('/api/admin/invoices', {
+                params: { limit: 500, ...(invoiceMonth ? { month: invoiceMonth } : {}) },
+            });
+            // Les plus récentes d'abord : c'est ce qu'on cherche presque toujours.
+            setAllInvoices([...data.items].reverse());
+            setAllInvoicesTotal(data.total);
+        } catch (error) {
+            handleError(error, 'Factures indisponibles');
+        }
+    }, [invoiceMonth, handleError]);
+
+    useEffect(() => { loadAllInvoices(); }, [loadAllInvoices]);
+
+    // Un clic : toutes les factures (PDF) de la période dans un seul ZIP.
+    const downloadAllInvoices = async () => {
+        setZipLoading(true);
+        const label = invoiceMonth || 'toutes';
+        try {
+            await openInvoiceFile(
+                `/api/admin/invoices/export.zip${invoiceMonth ? `?month=${invoiceMonth}` : ''}`,
+                `factures-${label}.zip`, { download: true },
+            );
+        } catch (error) {
+            fileError(error, 'Téléchargement impossible');
+        } finally {
+            setZipLoading(false);
+        }
+    };
+
     const loadInvoiceConfig = useCallback(async () => {
         try {
             const { data } = await axios.get('/api/admin/invoices/config');
@@ -350,7 +418,11 @@ export default function AdminCRM() {
                     ? { ...i, emailed_at: data.emailed_at, email_error: data.email_error }
                     : i)),
             }));
-            toast.success(`Facture ${inv.number} envoyée à ${data.customer_email}`);
+            setAllInvoices((list) => list.map((i) => (i.id === inv.id
+                ? { ...i, emailed_at: data.emailed_at, email_error: data.email_error }
+                : i)));
+            const copies = (data.copy_to || []).join(', ');
+            toast.success(`Facture ${inv.number} envoyée à ${data.customer_email}${copies ? ` (copie : ${copies})` : ''}`);
         } catch (error) {
             handleError(error, "Envoi de la facture impossible");
         }
@@ -891,6 +963,59 @@ export default function AdminCRM() {
                 {/* ===== Facturation ===== */}
                 <TabsContent value="billing">
                     <div className="space-y-6">
+                        {/* Toutes les factures : un clic pour tout récupérer. */}
+                        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="text-slate-900 dark:text-white flex items-center gap-2">
+                                    <FileText className="h-5 w-5" /> Toutes les factures
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex flex-wrap items-end gap-2">
+                                    <div>
+                                        <label className="text-sm text-slate-600 dark:text-slate-300" htmlFor="invoice-month">
+                                            Mois (vide = tout)
+                                        </label>
+                                        <Input id="invoice-month" type="month" className="mt-1 w-44"
+                                            value={invoiceMonth} onChange={(e) => setInvoiceMonth(e.target.value)} />
+                                    </div>
+                                    <Button onClick={downloadAllInvoices} disabled={zipLoading || allInvoicesTotal === 0}>
+                                        <FileArchive className="h-4 w-4 mr-2" />
+                                        {zipLoading
+                                            ? 'Préparation…'
+                                            : `Tout télécharger en PDF (${allInvoicesTotal})`}
+                                    </Button>
+                                </div>
+
+                                {allInvoices.length === 0 ? (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Aucune facture {invoiceMonth ? 'sur ce mois' : 'pour le moment'}.
+                                    </p>
+                                ) : (
+                                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                                        {allInvoices.map((inv) => (
+                                            <li key={inv.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
+                                                            {inv.number}
+                                                        </span>
+                                                        {inv.document_type === 'avoir' && <Badge variant="secondary">Avoir</Badge>}
+                                                        {inv.status === 'cancelled' && <Badge variant="destructive">Annulée</Badge>}
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                                        {inv.customer_name || inv.customer_email || '—'} · {date(inv.issued_at)} · {money(inv.amount_total, inv.currency)}
+                                                        {inv.emailed_at ? ' · envoyée' : ''}
+                                                    </p>
+                                                </div>
+                                                <InvoiceActions inv={inv} onSend={sendInvoiceToClient} />
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </CardContent>
+                        </Card>
+
                         <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                             <CardHeader>
                                 <CardTitle className="text-slate-900 dark:text-white flex items-center gap-2">
@@ -969,8 +1094,8 @@ export default function AdminCRM() {
                                 </div>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">
                                     Une fois renseignée, la facture de chaque client est émise
-                                    automatiquement : elle apparaît dans sa fiche, en PDF, JPG, PNG ou
-                                    page imprimable.
+                                    automatiquement : elle apparaît dans sa fiche et dans la liste
+                                    ci-dessus, prête à être vue, téléchargée ou envoyée.
                                 </p>
                             </CardContent>
                         </Card>
@@ -1185,34 +1310,13 @@ export default function AdminCRM() {
                                                     </div>
                                                 </div>
 
-                                                {/* Une facture, quatre formes : chacun prend celle qui l'arrange. */}
-                                                <div className="flex flex-wrap gap-2 mt-3">
-                                                    <Button size="sm" variant="outline"
-                                                        onClick={() => openInvoiceFile(inv.downloads.pdf, `${inv.number}.pdf`)}>
-                                                        <Download className="h-3.5 w-3.5 mr-1.5" /> PDF
-                                                    </Button>
-                                                    <Button size="sm" variant="outline"
-                                                        onClick={() => openInvoiceFile(inv.downloads.jpg, `${inv.number}.jpg`, { download: true })}>
-                                                        <ImageIcon className="h-3.5 w-3.5 mr-1.5" /> JPG
-                                                    </Button>
-                                                    <Button size="sm" variant="outline"
-                                                        onClick={() => openInvoiceFile(inv.downloads.png, `${inv.number}.png`, { download: true })}>
-                                                        <ImageIcon className="h-3.5 w-3.5 mr-1.5" /> PNG
-                                                    </Button>
-                                                    <Button size="sm" variant="outline"
-                                                        onClick={() => openInvoiceFile(inv.downloads.html, `${inv.number}.html`)}>
-                                                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Ouvrir / imprimer
-                                                    </Button>
-                                                    <Button size="sm" variant="outline"
-                                                        onClick={() => sendInvoiceToClient(inv)}>
-                                                        <Mail className="h-3.5 w-3.5 mr-1.5" />
-                                                        {inv.emailed_at ? 'Renvoyer au client' : 'Envoyer au client'}
-                                                    </Button>
+                                                <div className="mt-3">
+                                                    <InvoiceActions inv={inv} onSend={sendInvoiceToClient} />
                                                 </div>
                                                 {/* La facture doit être remise au client : on montre si elle l'a été. */}
                                                 <p className={`text-xs mt-2 ${inv.emailed_at ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                                                     {inv.emailed_at
-                                                        ? `Envoyée au client le ${date(inv.emailed_at)}`
+                                                        ? `Envoyée au client (copie flashneiga@gmail.com) le ${date(inv.emailed_at)}`
                                                         : `Pas encore envoyée au client${inv.email_error ? ` — ${inv.email_error}` : ''}`}
                                                 </p>
                                             </li>
