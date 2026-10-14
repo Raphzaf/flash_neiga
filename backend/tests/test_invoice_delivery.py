@@ -306,3 +306,11 @@ def test_email_content_is_in_french_with_amount_and_period(db):
     assert "Bonjour Sarah Cohen" in text
     assert "99,00 ILS" in text
     assert "Période couverte" in text
+
+
+def test_office_always_gets_a_copy(monkeypatch):
+    monkeypatch.delenv("SMTP_COPY_TO", raising=False)
+    monkeypatch.setenv("SMTP_BCC", "compta@example.com, FlashNeiga@gmail.com")
+    assert mailer.copy_recipients() == ["flashneiga@gmail.com", "compta@example.com"]
+    monkeypatch.setenv("SMTP_COPY_TO", "")
+    assert mailer.copy_recipients() == ["compta@example.com", "FlashNeiga@gmail.com"]
