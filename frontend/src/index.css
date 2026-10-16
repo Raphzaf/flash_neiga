@@ -285,3 +285,81 @@
 .scrollbar-none::-webkit-scrollbar {
     display: none;
 }
+
+/* Cours complet, lu d'un seul tenant (CourseBook) : rythme de livre. */
+.course-book {
+    @apply text-slate-700 dark:text-slate-200 leading-[1.8];
+    counter-reset: partie;
+    overflow-wrap: break-word;
+}
+.course-book > * + * {
+    margin-top: 1em;
+}
+.course-book h2,
+.course-book h3 {
+    scroll-margin-top: 6rem;
+}
+.course-book h2 {
+    counter-increment: partie;
+    @apply text-[1.6em] sm:text-[1.75em] leading-tight font-semibold text-slate-900 dark:text-white;
+    margin-top: 3.5rem;
+    padding-top: 2.5rem;
+    border-top: 1px solid theme('colors.sky.100');
+}
+.dark .course-book h2 {
+    border-top-color: theme('colors.slate.800');
+}
+.course-book h2::before {
+    content: "Partie " counter(partie);
+    @apply block mb-2 text-xs font-sans font-semibold uppercase tracking-[0.12em] text-teal-600 dark:text-teal-400;
+}
+.course-book > h2:first-child {
+    margin-top: 2rem;
+}
+.course-book h3 {
+    @apply text-[1.2em] leading-snug font-semibold text-slate-800 dark:text-white;
+    margin-top: 2.25rem;
+}
+.course-book h2 + *,
+.course-book h3 + * {
+    margin-top: 0.75em;
+}
+.course-book h2 + h3 {
+    margin-top: 1.75rem;
+}
+.course-book strong {
+    @apply font-semibold text-slate-900 dark:text-white;
+}
+.course-book ul {
+    @apply list-disc pl-6 space-y-2;
+}
+.course-book ol {
+    @apply list-decimal pl-6 space-y-2;
+}
+.course-book li::marker {
+    @apply text-teal-500;
+}
+.course-book a {
+    @apply text-teal-700 dark:text-teal-300 underline;
+}
+.course-book blockquote {
+    @apply border-l-4 border-teal-300 dark:border-teal-700 bg-teal-50/60 dark:bg-teal-900/20 rounded-r-xl py-3 px-4;
+}
+.course-book img {
+    @apply w-auto max-w-full h-auto mx-auto rounded-2xl bg-white border border-sky-100 dark:border-slate-700 shadow-sm cursor-zoom-in;
+}
+.course-book > p:has(> img) {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.course-book table {
+    @apply block overflow-x-auto max-w-full w-max text-[0.9em] border-collapse rounded-xl border border-sky-100 dark:border-slate-700;
+    -webkit-overflow-scrolling: touch;
+}
+.course-book th,
+.course-book td {
+    @apply border border-sky-100 dark:border-slate-700 px-3 py-2 min-w-[7rem] text-left align-top;
+}
+.course-book th {
+    @apply bg-sky-50 dark:bg-slate-800 font-semibold text-slate-800 dark:text-white;
+}

@@ -2,10 +2,13 @@
 Cours fournis avec le site, chargés en base une seule fois.
 
 Le support « Code de la route » (converti depuis Word par
-scripts/docx_to_courses.py) vit dans data/courses_code_de_la_route.json. Au
-démarrage, ses chapitres sont ajoutés à la table des cours, puis un marqueur
-est posé dans app_settings : un cours que l'administrateur supprime ou modifie
-ensuite dans le CMS n'est donc jamais recréé ni écrasé.
+scripts/docx_to_courses.py) vit dans data/courses_code_de_la_route.json, en un
+seul cours complet. Au démarrage, il est ajouté à la table des cours, puis un
+marqueur est posé dans app_settings : un cours que l'administrateur supprime ou
+modifie ensuite dans le CMS n'est donc jamais recréé ni écrasé.
+
+Un fichier marqué « remplace tout » efface d'abord tous les cours existants —
+c'est ainsi que les 11 chapitres d'origine ont laissé place au cours unique.
 """
 from __future__ import annotations
 
@@ -26,9 +29,10 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-# (fichier, marqueur) — changer le marqueur recharge le fichier une fois de plus.
+# (fichier, marqueur, remplace tout) — changer le marqueur recharge le fichier
+# une fois de plus.
 BUNDLED_COURSES = (
-    ("courses_code_de_la_route.json", "SEED_COURSES_CODE_DE_LA_ROUTE_V1"),
+    ("courses_code_de_la_route.json", "SEED_COURSES_CODE_DE_LA_ROUTE_V2", True),
 )
 
 _FIELDS = ("title", "description", "content", "order", "video_url", "pdf_url", "image_url", "category")
@@ -37,7 +41,7 @@ _FIELDS = ("title", "description", "content", "order", "video_url", "pdf_url", "
 def seed_bundled_courses(db: Session, data_dir: Path = DATA_DIR) -> int:
     """Ajoute les cours fournis qui n'ont pas encore été chargés. Renvoie le nombre créé."""
     created = 0
-    for filename, marker in BUNDLED_COURSES:
+    for filename, marker, replace_all in BUNDLED_COURSES:
         if db.query(AppSettingDB).filter(AppSettingDB.key == marker).first():
             continue
         path = data_dir / filename
@@ -46,6 +50,9 @@ def seed_bundled_courses(db: Session, data_dir: Path = DATA_DIR) -> int:
             continue
 
         courses: List[dict] = json.loads(path.read_text(encoding="utf-8"))
+        if replace_all:
+            removed = db.query(CourseDB).delete(synchronize_session=False)
+            logger.info("Cours existants supprimés avant « %s » : %s", filename, removed)
         existing = {title for (title,) in db.query(CourseDB.title).all()}
         for item in courses:
             if item["title"] in existing:
