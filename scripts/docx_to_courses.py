@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Convertit un support de cours Word (.docx) en cours Flash Neiga.
+Convertit le support de cours Word (.docx) en un seul cours Flash Neiga.
 
     python scripts/docx_to_courses.py chemin/vers/code_de_la_route.docx
 
 Produit :
-  * data/courses_code_de_la_route.json — les chapitres (titre, résumé, HTML),
-    chargés en base au démarrage du serveur (voir backend/course_seed.py) ;
+  * data/courses_code_de_la_route.json — le cours complet (titre, résumé, HTML),
+    chargé en base au démarrage du serveur (voir backend/course_seed.py) ;
   * frontend/public/course-media/*.jpg — les illustrations, redimensionnées et
     servies par le front à l'adresse /course-media/<fichier>.
 
-Le document n'utilise pas de styles de titre : un paragraphe écrit tout en
-majuscules est traité comme un intertitre, et CHAPTERS liste ceux qui ouvrent
-un nouveau cours.
+Le document est publié d'un seul tenant, de A à Z. Il n'utilise pas de styles
+de titre : un paragraphe écrit tout en majuscules est traité comme un
+intertitre, et CHAPTERS liste ceux qui ouvrent une grande partie — ils
+deviennent des titres <h2 id="…"> qui forment le sommaire du lecteur.
 """
 from __future__ import annotations
 
@@ -39,30 +40,26 @@ A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 MC = "{http://schemas.openxmlformats.org/markup-compatibility/2006}"
 
-# (intertitre qui ouvre le chapitre, titre du cours, résumé affiché sur la carte)
+COURSE_TITLE = "Code de la route"
+COURSE_DESCRIPTION = (
+    "Le cours complet, de A à Z : documents officiels, signalisation, priorités, "
+    "règles de circulation, usagers vulnérables, dépassement, éclairage, conduite "
+    "par mauvais temps, éco-conduite, véhicule et prise de conscience des risques."
+)
+
+# (intertitre qui ouvre une grande partie, titre affiché dans le cours)
 CHAPTERS = [
-    ("LE CODE DE LA ROUTE", "Le code de la route et les documents officiels",
-     "Carte grise, permis, assurance, nouveau conducteur : ce que tout conducteur doit savoir et avoir sur lui."),
-    ("SIGNALISATIONS VERTICALE ET HORIZONTALE", "La signalisation",
-     "Panneaux de danger, d'interdiction, d'obligation, de priorité, feux et marquage au sol."),
-    ("2. LES RÉGIMES DE PRIORITÉ", "Les régimes de priorité",
-     "Priorité à droite, stop, cédez-le-passage, ronds-points et carrefours à feux."),
-    ("RÈGLES DE CIRCULATION", "Les règles de circulation",
-     "Avertir, changer de direction, circuler sur autoroute, limitations de vitesse et distances de sécurité."),
-    ("LE CODE DE LA RUE", "Le code de la rue et les usagers vulnérables",
-     "Zones 30, zones de rencontre, piétons, cyclistes, trottinettes, deux-roues et poids lourds."),
-    ("CROISEMENT ET DÉPASSEMENT", "Croisement et dépassement",
-     "Croiser sur une chaussée étroite, dépasser en sécurité, et se laisser dépasser."),
-    ("VISIBILITÉ ET ÉCLAIRAGE", "Visibilité et éclairage",
-     "Quels feux utiliser, quand, et comment ne pas éblouir les autres usagers."),
-    ("RISQUES ET COMPORTEMENTS", "Conduire la nuit et par mauvais temps",
-     "Nuit, brouillard, pluie, aquaplanage, neige, verglas et vent."),
-    ("ÉCO-CONDUITE", "L'éco-conduite",
-     "Conduire en consommant moins, en ville, sur route et en montagne."),
-    ("LE VÉHICULE ET LA SÉCURITÉ", "Le véhicule et la sécurité",
-     "Poste de conduite, tableau de bord, ceintures, airbags, chargement, pneus et freinage."),
-    ("PRISE DE CONSCIENCE DES RISQUES", "Prise de conscience des risques",
-     "Percevoir, analyser, agir : vitesse, fatigue, vigilance et pression des pairs."),
+    ("LE CODE DE LA ROUTE", "Le code de la route et les documents officiels"),
+    ("SIGNALISATIONS VERTICALE ET HORIZONTALE", "La signalisation"),
+    ("2. LES RÉGIMES DE PRIORITÉ", "Les régimes de priorité"),
+    ("RÈGLES DE CIRCULATION", "Les règles de circulation"),
+    ("LE CODE DE LA RUE", "Le code de la rue et les usagers vulnérables"),
+    ("CROISEMENT ET DÉPASSEMENT", "Croisement et dépassement"),
+    ("VISIBILITÉ ET ÉCLAIRAGE", "Visibilité et éclairage"),
+    ("RISQUES ET COMPORTEMENTS", "Conduire la nuit et par mauvais temps"),
+    ("ÉCO-CONDUITE", "L'éco-conduite"),
+    ("LE VÉHICULE ET LA SÉCURITÉ", "Le véhicule et la sécurité"),
+    ("PRISE DE CONSCIENCE DES RISQUES", "Prise de conscience des risques"),
 ]
 
 
@@ -106,6 +103,7 @@ class Converter:
         rels = ET.fromstring(self.zip.read("word/_rels/document.xml.rels"))
         self.rels = {r.get("Id"): r.get("Target") for r in rels}
         self.images: dict[str, str] = {}  # cible du .docx → URL publiée
+        self.sizes: dict[str, tuple[int, int]] = {}  # URL publiée → (largeur, hauteur)
 
     # --- Images -----------------------------------------------------------
     def image_url(self, rel_id: str) -> str | None:
@@ -130,6 +128,7 @@ class Converter:
             OUT_MEDIA.mkdir(parents=True, exist_ok=True)
             image.save(OUT_MEDIA / name, "JPEG", quality=82, optimize=True, progressive=True)
             self.images[target] = f"{MEDIA_URL}/{name}"
+            self.sizes[self.images[target]] = image.size
         return self.images[target]
 
     def _blips(self, element) -> list[str]:
@@ -181,46 +180,44 @@ class Converter:
         return _norm("".join(t.text or "" for t in paragraph.iter(W + "t")))
 
     # --- Document ---------------------------------------------------------
-    def convert(self) -> list[dict]:
+    def convert(self) -> dict:
         body = ET.fromstring(self.zip.read("word/document.xml")).find(W + "body")
-        chapters: list[dict] = []
-        current: dict | None = None
+        parts: list[str] = []
+        images: list[str] = []
+        self.chapters_found: list[str] = []
         in_list = False
-        starts = {_norm(title): (course_title, summary) for title, course_title, summary in CHAPTERS}
+        starts = {_norm(heading): title for heading, title in CHAPTERS}
 
         def close_list():
             nonlocal in_list
-            if in_list and current is not None:
-                current["html"].append("</ul>")
+            if in_list:
+                parts.append("</ul>")
             in_list = False
 
         for element in body:
             tag = element.tag.replace(W, "")
             if tag == "tbl":
                 close_list()
-                if current is not None:
-                    current["html"].append(self.table_html(element))
+                parts.append(self.table_html(element))
                 continue
             if tag != "p":
                 continue
 
             text = self.paragraph_text(element)
-            images = [self.image_url(r) for r in self._blips(element)]
-            images = [u for u in images if u]
+            urls = [u for u in (self.image_url(r) for r in self._blips(element)) if u]
 
             if text in starts:
                 close_list()
-                course_title, summary = starts[text]
-                current = {"title": course_title, "description": summary, "html": [], "images": []}
-                chapters.append(current)
-                continue
-            if current is None:
+                self.chapters_found.append(text)
+                number = len(self.chapters_found)
+                parts.append(f'<h2 id="partie-{number}">{html.escape(starts[text])}</h2>')
                 continue
 
-            for url in images:
+            for url in urls:
                 close_list()
-                current["images"].append(url)
-                current["html"].append(f'<p><img src="{url}" alt=""></p>')
+                images.append(url)
+                width, height = self.sizes[url]
+                parts.append(f'<p><img src="{url}" alt="" width="{width}" height="{height}"></p>')
 
             if not text:
                 continue
@@ -228,32 +225,29 @@ class Converter:
             if _is_heading(text) and not is_item:
                 close_list()
                 if len(text) > MAX_HEADING_LENGTH:
-                    current["html"].append(f"<p><strong>{html.escape(_heading_text(text))}</strong></p>")
+                    parts.append(f"<p><strong>{html.escape(_heading_text(text))}</strong></p>")
                 else:
-                    current["html"].append(f"<h3>{html.escape(_heading_text(text))}</h3>")
+                    parts.append(f"<h3>{html.escape(_heading_text(text))}</h3>")
                 continue
             content = self.runs_html(element)
             if is_item:
                 if not in_list:
-                    current["html"].append("<ul>")
+                    parts.append("<ul>")
                     in_list = True
-                current["html"].append(f"<li>{content}</li>")
+                parts.append(f"<li>{content}</li>")
             else:
                 close_list()
-                current["html"].append(f"<p>{content}</p>")
+                parts.append(f"<p>{content}</p>")
         close_list()
 
-        courses = []
-        for position, chapter in enumerate(chapters, start=1):
-            courses.append({
-                "title": chapter["title"],
-                "description": chapter["description"],
-                "content": "\n".join(chapter["html"]),
-                "order": position * 10,
-                "image_url": chapter["images"][0] if chapter["images"] else None,
-                "category": "Code de la route",
-            })
-        return courses
+        return {
+            "title": COURSE_TITLE,
+            "description": COURSE_DESCRIPTION,
+            "content": "\n".join(parts),
+            "order": 10,
+            "image_url": images[0] if images else None,
+            "category": None,
+        }
 
     def table_html(self, table) -> str:
         rows = []
@@ -276,12 +270,12 @@ def main() -> int:
     for old in OUT_MEDIA.glob(f"{MEDIA_PREFIX}*.jpg"):
         old.unlink()
     converter = Converter(Path(sys.argv[1]))
-    courses = converter.convert()
-    if len(courses) != len(CHAPTERS):
-        print(f"⚠️  {len(courses)} chapitres trouvés sur {len(CHAPTERS)} attendus", file=sys.stderr)
+    course = converter.convert()
+    if len(converter.chapters_found) != len(CHAPTERS):
+        print(f"⚠️  {len(converter.chapters_found)} parties trouvées sur {len(CHAPTERS)} attendues", file=sys.stderr)
         return 2
-    OUT_JSON.write_text(json.dumps(courses, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"{len(courses)} cours → {OUT_JSON.relative_to(ROOT)}")
+    OUT_JSON.write_text(json.dumps([course], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"1 cours ({len(CHAPTERS)} parties) → {OUT_JSON.relative_to(ROOT)}")
     print(f"{len(converter.images)} images → {OUT_MEDIA.relative_to(ROOT)}/")
     return 0
 

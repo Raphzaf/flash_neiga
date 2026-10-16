@@ -39,6 +39,21 @@ def _bundled():
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_whole_document_is_a_single_course():
+    courses = _bundled()
+    assert len(courses) == 1
+    assert courses[0]["content"].count("<h2 ") == 11
+
+
+def test_existing_courses_are_replaced(db):
+    db.add(CourseDB(title="Ancien chapitre 1", content="<p>a</p>"))
+    db.add(CourseDB(title="Ancien chapitre 2", content="<p>b</p>"))
+    db.commit()
+    course_seed.seed_bundled_courses(db)
+    titles = [c.title for c in db.query(CourseDB)]
+    assert titles == [c["title"] for c in _bundled()]
+
+
 def test_bundled_courses_are_loaded(db):
     courses = _bundled()
     assert course_seed.seed_bundled_courses(db) == len(courses)
@@ -61,13 +76,13 @@ def test_deleted_course_is_not_recreated(db):
     assert db.query(CourseDB).filter(CourseDB.title == first.title).count() == 0
 
 
-def test_existing_course_with_same_title_is_kept(db):
-    title = _bundled()[0]["title"]
-    db.add(CourseDB(title=title, content="<p>Version de l'auto-école</p>"))
+def test_course_edited_after_seeding_is_kept(db):
+    course_seed.seed_bundled_courses(db)
+    course = db.query(CourseDB).first()
+    course.content = "<p>Version de l'auto-école</p>"
     db.commit()
     course_seed.seed_bundled_courses(db)
-    same = db.query(CourseDB).filter(CourseDB.title == title).all()
-    assert len(same) == 1 and same[0].content == "<p>Version de l'auto-école</p>"
+    assert db.query(CourseDB).one().content == "<p>Version de l'auto-école</p>"
 
 
 def test_every_course_image_is_shipped():

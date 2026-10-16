@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { sanitizeHtml, sanitizeVideoUrl } from '../lib/sanitize';
 import InlineChat from '../components/InlineChat';
+import CourseBook from '../components/CourseBook';
 
 // Cours déjà ouverts sur cet appareil : simple repère visuel pour l'élève.
 const READ_KEY = 'flash_neiga_courses_read';
@@ -125,6 +126,11 @@ export default function Courses() {
                 </div>
             </div>
         );
+    }
+
+    // Un cours unique (le support complet) se lit directement, de A à Z.
+    if (courses.length === 1) {
+        return <CourseBook course={courses[0]} />;
     }
 
     return (
