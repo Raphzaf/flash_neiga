@@ -365,7 +365,7 @@ export default function Courses() {
                                 {selectedCourse.content && (
                                     <div
                                         className="course-content course-reader"
-                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedCourse.content) }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedCourse.content, { keepFormatting: true }) }}
                                     />
                                 )}
 

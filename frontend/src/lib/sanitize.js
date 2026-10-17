@@ -3,15 +3,19 @@ import DOMPurify from 'dompurify';
 /**
  * Sanitizes HTML content to prevent XSS attacks
  * @param {string} html - The HTML string to sanitize
+ * @param {{ keepFormatting?: boolean }} [options] - keepFormatting garde la
+ *   mise en forme d'un document (attribut style : couleurs, tailles, retraits),
+ *   réservé aux cours, dont le contenu vient de l'équipe et non des élèves.
  * @returns {string} - Sanitized HTML string
  */
-export function sanitizeHtml(html) {
+export function sanitizeHtml(html, { keepFormatting = false } = {}) {
     if (!html) return '';
     
     // Configure DOMPurify to allow common safe HTML elements
     const config = {
-        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'img', 'div', 'span', 'blockquote', 'code', 'pre', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-        ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel', 'width', 'height'],
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'sup', 'sub', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'img', 'div', 'span', 'blockquote', 'code', 'pre', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+        ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel', 'width', 'height', 'start',
+            ...(keepFormatting ? ['style'] : [])],
         ALLOW_DATA_ATTR: false,
     };
     
