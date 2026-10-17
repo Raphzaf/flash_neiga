@@ -41,14 +41,17 @@ function writeStorage(key, value) {
 
 /** Prépare le HTML du cours : identifiants des titres, sommaire, images différées. */
 function prepareContent(rawHtml) {
-    const doc = new DOMParser().parseFromString(sanitizeHtml(rawHtml), 'text/html');
+    const doc = new DOMParser().parseFromString(sanitizeHtml(rawHtml, { keepFormatting: true }), 'text/html');
     const headings = [...doc.body.querySelectorAll('h2, h3')];
     // Sans grande partie (cours saisi à la main dans le CMS), les h3 en tiennent lieu.
     const topTag = headings.some((h) => h.tagName === 'H2') ? 'H2' : 'H3';
     const toc = [];
     headings.forEach((heading, index) => {
         if (!heading.id) heading.id = `section-${index + 1}`;
-        const entry = { id: heading.id, title: heading.textContent.trim(), children: [] };
+        // Le titre garde la casse du document ; son libellé adouci (title) sert au sommaire.
+        const label = heading.getAttribute('title') || heading.textContent.trim();
+        heading.removeAttribute('title');
+        const entry = { id: heading.id, title: label, children: [] };
         if (heading.tagName === topTag) {
             toc.push(entry);
         } else if (toc.length) {
