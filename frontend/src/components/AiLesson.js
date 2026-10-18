@@ -28,11 +28,17 @@ export default function AiLesson({ questionId, selectedOptionId, label, prefetch
     const [lesson, setLesson] = useState(() => getCachedLesson(questionId, selectedOptionId));
     // Évite un setState après démontage (l'élève enchaîne souvent les questions).
     const mounted = useRef(true);
+    // Arrête l'attente de la vraie leçon si l'élève quitte la page entre-temps.
+    const waitAbort = useRef(null);
 
-    useEffect(() => () => { mounted.current = false; }, []);
+    useEffect(() => () => {
+        mounted.current = false;
+        waitAbort.current?.abort();
+    }, []);
 
     useEffect(() => {
         // La leçon change avec la question : on repart de ce que l'on sait déjà.
+        waitAbort.current?.abort();
         const known = getCachedLesson(questionId, selectedOptionId);
         setLesson(known);
         if (known || !prefetch || !questionId || !selectedOptionId) return;
@@ -52,16 +58,25 @@ export default function AiLesson({ questionId, selectedOptionId, label, prefetch
             const data = await fetchLesson(questionId, selectedOptionId);
             if (!mounted.current) return;
             setLesson(data);
+            // La correction officielle s'affiche tout de suite, même si l'on
+            // continue d'attendre la vraie leçon juste en dessous.
+            setLoading(false);
 
             // Repli : le prof n'a pas répondu dans le temps imparti, mais le
             // serveur produit la vraie leçon en arrière-plan. On va la chercher
             // dès qu'elle est prête et on remplace le texte sous les yeux de
             // l'élève, sans qu'il ait à refermer et rouvrir.
             if (data?.degraded && data?.retry_after_s) {
+                waitAbort.current?.abort();
+                const controller = new AbortController();
+                waitAbort.current = controller;
                 const better = await awaitBackgroundLesson(
-                    questionId, selectedOptionId, data.retry_after_s * 1000,
+                    questionId, selectedOptionId, data.retry_after_s * 1000, controller.signal,
                 );
-                if (better && mounted.current) setLesson(better);
+                if (!mounted.current || controller.signal.aborted) return;
+                // Toujours pas prête : on cesse d'annoncer « quelques secondes »
+                // et on invite l'élève à rouvrir la leçon plus tard.
+                setLesson(better || { ...data, retry_after_s: undefined });
             }
         } catch (e) {
             const msg = e.response?.data?.detail || "Le prof est momentanément indisponible, réessaie dans un instant.";
