@@ -104,14 +104,25 @@ export function fetchLesson(questionId, selectedOptionId) {
  * Attend que la leçon produite en arrière-plan soit disponible, puis la renvoie.
  *
  * Après un repli, le serveur a mis la vraie leçon en file : elle arrive en base
- * quelques secondes plus tard. On repasse par `peek` (lecture gratuite) plutôt
- * que de redemander une génération. Renvoie null si elle n'est pas prête —
- * ce n'est pas une erreur, l'élève garde la correction officielle sous les yeux.
+ * quelques secondes plus tard — parfois jusqu'à une trentaine de secondes quand
+ * le modèle est lent. On repasse donc par `peek` (lecture gratuite) à plusieurs
+ * reprises plutôt qu'une seule fois, sans jamais redemander de génération.
+ * Renvoie null si elle n'est toujours pas prête au bout de `maxWaitMs` — ce
+ * n'est pas une erreur, l'élève garde la correction officielle sous les yeux.
  */
-export async function awaitBackgroundLesson(questionId, selectedOptionId, delayMs, signal) {
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-    if (signal?.aborted) return null;
-    return prefetchLesson(questionId, selectedOptionId);
+export async function awaitBackgroundLesson(
+    questionId, selectedOptionId, delayMs, signal, { intervalMs = 5000, maxWaitMs = 45000 } = {},
+) {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const start = Date.now();
+    await sleep(delayMs);
+    while (!signal?.aborted) {
+        const lesson = await prefetchLesson(questionId, selectedOptionId);
+        if (lesson) return lesson;
+        if (Date.now() - start + intervalMs > maxWaitMs) break;
+        await sleep(intervalMs);
+    }
+    return null;
 }
 
 /** Oublie une leçon (utile après correction d'une question). */
