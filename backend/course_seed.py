@@ -32,7 +32,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 # (fichier, marqueur, remplace tout) — changer le marqueur recharge le fichier
 # une fois de plus.
 BUNDLED_COURSES = (
-    ("courses_code_de_la_route.json", "SEED_COURSES_CODE_DE_LA_ROUTE_V2", True),
+    ("courses_code_de_la_route.json", "SEED_COURSES_CODE_DE_LA_ROUTE_V3", True),
 )
 
 _FIELDS = ("title", "description", "content", "order", "video_url", "pdf_url", "image_url", "category")

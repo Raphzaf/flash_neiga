@@ -15,6 +15,8 @@ tombe jamais en panne.
 """
 import json
 import logging
+import os
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -32,8 +34,8 @@ try:
     )
     from auth import get_current_user, require_admin, require_subscription, require_premium
     from ai_client import (
-        call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics,
-        interactive_budget,
+        call_structured, call_chat, ai_configured, AICoachUnavailable, AITransientError,
+        diagnostics, interactive_budget,
     )
     import ai_cache
 except ImportError:  # pragma: no cover
@@ -44,8 +46,8 @@ except ImportError:  # pragma: no cover
     )
     from backend.auth import get_current_user, require_admin, require_subscription, require_premium
     from backend.ai_client import (
-        call_structured, call_chat, ai_configured, AICoachUnavailable, diagnostics,
-        interactive_budget,
+        call_structured, call_chat, ai_configured, AICoachUnavailable, AITransientError,
+        diagnostics, interactive_budget,
     )
     from backend import ai_cache
 
@@ -63,6 +65,43 @@ PROF_SYSTEM_PROMPT = (
     "toujours exactes par rapport au code de la route israélien. Si la "
     "question fournit une explication officielle, appuie-toi dessus en "
     "priorité. Ne mentionne jamais que tu es une IA."
+)
+
+# Explication d'une erreur : courte, juste, propre à la question. Le site
+# prépare l'examen théorique ISRAÉLIEN, en français : c'est ce code-là qui fait
+# foi (les règles françaises diffèrent parfois, et tromperaient l'élève).
+LESSON_SYSTEM_PROMPT = (
+    "Tu es un enseignant expert du code de la route israélien, qui prépare en "
+    "français des élèves francophones à l'examen théorique en Israël. Ton rôle "
+    "est d'expliquer l'erreur d'un candidat de manière courte, précise et "
+    "pédagogique. Tu tutoies l'élève.\n\n"
+    "À partir de l'énoncé, des choix de réponses, de la réponse choisie et de la "
+    "bonne réponse officielle, rédige une explication personnalisée de 4 à 5 "
+    "lignes environ (50 à 90 mots, jamais plus de 110).\n\n"
+    "Commence directement par l'explication. Identifie la bonne réponse, "
+    "explique la règle applicable, puis montre pourquoi la réponse choisie ne "
+    "convient pas lorsque c'est pertinent. Termine par la règle à retenir.\n\n"
+    "Utilise un français naturel, simple et rigoureux, compréhensible par un "
+    "débutant, avec les termes exacts du code de la route. Un seul paragraphe : "
+    "pas de titre, pas de liste, pas de Markdown, pas de guillemets autour de "
+    "toute la réponse. Évite les introductions, les répétitions et le hors-sujet.\n\n"
+    "La bonne réponse officielle fait foi : ne la modifie jamais et ne la "
+    "conteste pas. Si une explication officielle est fournie, appuie-toi dessus "
+    "en priorité. N'invente aucune règle, aucun chiffre, aucune sanction, aucune "
+    "exception et aucune référence juridique ; ne présente pas une supposition "
+    "comme une certitude, et ne confonds pas une règle générale avec ses "
+    "exceptions. Si la question s'accompagne d'une image que tu ne vois pas, ne "
+    "la décris pas : appuie-toi sur l'énoncé et la correction.\n\n"
+    "Si les informations fournies ne permettent pas de justifier correctement la "
+    "bonne réponse (énoncé ambigu ou incompréhensible, correction incohérente "
+    "avec l'énoncé, ou bonne réponse officielle qui contredit une règle que tu "
+    "connais), ne la justifie pas par un raisonnement forcé : mets "
+    "donnees_suffisantes à false et écris dans explication, en "
+    "une ou deux phrases, ce qui empêche de l'expliquer — sans fabriquer "
+    "d'explication.\n\n"
+    "Retourne uniquement le JSON demandé : l'explication destinée à l'élève, "
+    "sans commentaire sur ton rôle, sans préambule et sans texte technique. Ne "
+    "mentionne jamais que tu es une IA."
 )
 
 CHAT_SYSTEM_PROMPT = (
@@ -85,8 +124,11 @@ MAX_CHAT_HISTORY = 20  # nombre de messages récents conservés par tour
 # Budget d'attente d'un élève sur une leçon. Court volontairement : la leçon a
 # un repli immédiat (la correction officielle), donc mieux vaut la servir vite
 # et finir le travail en arrière-plan que faire patienter devant un écran vide.
-LESSON_INTERACTIVE_TIMEOUT = 6.0
-LESSON_INTERACTIVE_DEADLINE = 9.0
+# Une explication courte sort en quelques secondes. 10 s par appel (le minimum
+# accepté par l'API Gemini) et 14 s au total laissent une relance rapide, tout
+# en rendant la main bien avant la coupure du proxy (26 s).
+LESSON_INTERACTIVE_TIMEOUT = 10.0
+LESSON_INTERACTIVE_DEADLINE = 14.0
 
 # Budget de la production en arrière-plan : large, puisque plus personne
 # n'attend, mais borné quand même — à l'arrêt du serveur (redéploiement), Python
@@ -95,6 +137,14 @@ LESSON_BACKGROUND_TIMEOUT = 20.0
 LESSON_BACKGROUND_DEADLINE = 30.0
 
 LESSON_MAX_TOKENS = 1200
+
+
+def lesson_model() -> Optional[str]:
+    """Modèle dédié aux explications d'erreur (variable AI_LESSON_MODEL), sinon
+    celui du fournisseur. Une explication de 80 mots n'a pas besoin d'un modèle
+    à raisonnement long : un modèle rapide du même fournisseur répond dans le
+    temps qu'un élève accepte d'attendre."""
+    return (os.environ.get("AI_LESSON_MODEL") or "").strip() or None
 # Volontairement inchangé (2048) : une réponse coupée en plein milieu serait
 # mémorisée puis resservie à tous les élèves suivants. Le gain de vitesse vient
 # du cache, pas d'un plafond serré.
@@ -102,16 +152,25 @@ CHAT_MAX_TOKENS = 2048
 SERIES_REPORT_MAX_TOKENS = 4000
 
 # ===== Schémas structured outputs =====
+# Format 2 : une seule explication courte. Les leçons du format 1 (explication,
+# règle, erreurs à éviter) étaient trop longues ; elles ne sont plus resservies.
+LESSON_FORMAT = 2
 LESSON_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
         "explication": {"type": "string"},
-        "regle": {"type": "string"},
-        "erreurs_a_eviter": {"type": "array", "items": {"type": "string"}},
+        "donnees_suffisantes": {"type": "boolean"},
     },
-    "required": ["explication", "regle", "erreurs_a_eviter"],
+    "required": ["explication", "donnees_suffisantes"],
     "additionalProperties": False,
 }
+# Bornes de longueur de l'explication. En dessous, ce n'est pas une explication ;
+# au-delà, le modèle a ignoré la consigne — on redemande plutôt que de couper
+# le texte, ce qui le rendrait incomplet.
+LESSON_MIN_WORDS = 12
+LESSON_MAX_WORDS = 140
+# Une phrase complète se termine ainsi ; sinon la réponse a été tronquée.
+_SENTENCE_END = (".", "!", "?", "…", "»", ")", '"')
 
 SERIES_REPORT_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -164,11 +223,101 @@ def _correct_option(question: QuestionDB):
     return None, None
 
 
-def _model_tags() -> Dict[str, Optional[str]]:
+def _correct_options(question: QuestionDB) -> List[Dict[str, Any]]:
+    return [opt for opt in (question.options or []) if opt.get("is_correct")]
+
+
+def lesson_problem(question: QuestionDB, selected_option_id: str) -> Optional[str]:
+    """Raison pour laquelle cette erreur ne peut pas être expliquée de façon fiable.
+
+    Sans bonne réponse unique et identifiée, le modèle n'aurait aucune
+    référence : il inventerait, ou contredirait la correction. Mieux vaut le
+    dire à l'élève que lui servir une explication trompeuse.
+    """
+    correct = _correct_options(question)
+    if not correct:
+        return "La bonne réponse de cette question n'est pas renseignée."
+    if len(correct) > 1:
+        return "Cette question indique plusieurs bonnes réponses : sa correction est incohérente."
+    if not (correct[0].get("text") or "").strip():
+        return "Le texte de la bonne réponse de cette question est vide."
+    if not (question.text or "").strip():
+        return "L'énoncé de cette question est vide."
+    return None
+
+
+_MARKDOWN = [
+    (re.compile(r"^```[a-zA-Z]*\s*|\s*```$"), ""),            # bloc de code
+    (re.compile(r"\*\*(.+?)\*\*|__(.+?)__"), r"\1\2"),          # gras
+    (re.compile(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"), r"\1"),  # italique
+    (re.compile(r"^\s{0,3}#{1,6}\s*", re.M), ""),               # titres
+    (re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+", re.M), ""),         # puces
+    (re.compile(r"`([^`]*)`"), r"\1"),                          # code en ligne
+]
+_PREAMBLE = re.compile(r"^(?:explication|réponse|correction)\s*:\s*", re.I)
+
+
+def clean_explanation(text: str) -> str:
+    """Texte brut d'une explication : sans Markdown, en un seul paragraphe.
+
+    Ne retire que de la mise en forme (astérisques, dièses, puces, balises) :
+    aucun mot de l'explication n'est supprimé.
+    """
+    text = text.strip()
+    for pattern, repl in _MARKDOWN:
+        text = pattern.sub(repl, text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = _PREAMBLE.sub("", text.strip())
+    text = re.sub(r"\s*\n+\s*", " ", text)
+    text = re.sub(r"[ \t]{2,}", " ", text).strip()
+    if len(text) >= 2 and text[0] in "«\"" and text[-1] in "»\"" and text.count(text[0]) == 1:
+        text = text[1:-1].strip()  # réponse entière entre guillemets
+    return text
+
+
+def validate_lesson(raw: Any) -> Dict[str, Any]:
+    """Valide strictement la réponse du modèle et renvoie la leçon à mémoriser.
+
+    Lève `AITransientError` (donc une relance, dans le budget) si la réponse est
+    mal formée, vide, tronquée ou hors format : une telle réponse ne doit ni
+    s'afficher comme une explication valide, ni entrer dans le cache partagé.
+    """
+    if not isinstance(raw, dict):
+        raise AITransientError("Réponse du modèle mal formée (objet JSON attendu).")
+    text = raw.get("explication")
+    if not isinstance(text, str):
+        raise AITransientError("Réponse du modèle sans champ « explication ».")
+    text = clean_explanation(text)
+    sufficient = raw.get("donnees_suffisantes", True)
+    if not isinstance(sufficient, bool):
+        sufficient = str(sufficient).strip().lower() not in ("false", "0", "non", "no")
+    words = len(text.split())
+    if sufficient and words < LESSON_MIN_WORDS:
+        raise AITransientError(f"Explication trop courte ({words} mots).")
+    if not sufficient and words < 3:
+        raise AITransientError("Signalement de données insuffisantes vide.")
+    if words > LESSON_MAX_WORDS:
+        raise AITransientError(f"Explication trop longue ({words} mots).")
+    if not text.endswith(_SENTENCE_END):
+        raise AITransientError("Explication tronquée (phrase inachevée).")
+    return {"explication": text, "donnees_suffisantes": sufficient, "format": LESSON_FORMAT}
+
+
+def _usable(lesson: Any) -> Optional[Dict[str, Any]]:
+    """Leçon mémorisée encore servable (bon format, texte non vide), sinon None."""
+    if not isinstance(lesson, dict) or lesson.get("format") != LESSON_FORMAT:
+        return None
+    text = lesson.get("explication")
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return lesson
+
+
+def _model_tags(model: Optional[str] = None) -> Dict[str, Optional[str]]:
     """Fournisseur et modèle ayant produit un contenu — tracé dans le cache."""
     try:
         info = diagnostics()
-        return {"provider": info.get("provider"), "model": info.get("model")}
+        return {"provider": info.get("provider"), "model": model or info.get("model")}
     except Exception:  # pragma: no cover - le diagnostic ne doit jamais bloquer
         return {"provider": None, "model": None}
 
@@ -195,6 +344,7 @@ def _lesson_cache_key(question: QuestionDB, selected_option_id: str) -> str:
     """
     _, correct_text = _correct_option(question)
     return ai_cache.make_key("lesson", [
+        f"format-{LESSON_FORMAT}",
         question.id,
         selected_option_id,
         question.text,
@@ -219,7 +369,7 @@ def _legacy_lesson(db: Session, question_id: str, selected_option_id: str) -> Op
             .first()
         )
         if cached:
-            return json.loads(cached.lesson_json)
+            return _usable(json.loads(cached.lesson_json))
     except Exception as exc:
         logger.warning("Lecture de l'ancien cache de leçons impossible : %s", exc)
         try:
@@ -258,26 +408,21 @@ def _fallback_lesson(question: QuestionDB, selected_option_id: str) -> Optional[
         return None
 
     phrases: List[str] = []
-    if chosen_text:
-        phrases.append(f"Tu as répondu « {chosen_text} », et ce n'était pas la bonne réponse.")
     if correct_text:
-        phrases.append(f"La bonne réponse était « {correct_text} ».")
+        phrases.append(f"La bonne réponse est « {correct_text} ».")
+    if chosen_text:
+        phrases.append(f"Tu avais choisi « {chosen_text} ».")
     if explanation:
         phrases.append(explanation)
 
-    erreurs = []
-    if chosen_text:
-        erreurs.append(f"Ne plus choisir « {chosen_text} » sur ce type de question.")
-    erreurs.append("Relire l'énoncé en entier avant de répondre : un seul mot peut changer la règle.")
-
     return {
         "explication": " ".join(phrases),
-        "regle": explanation or (f"La réponse attendue est : {correct_text}." if correct_text else ""),
-        "erreurs_a_eviter": erreurs,
+        "donnees_suffisantes": True,
+        "format": LESSON_FORMAT,
         "cached": False,
         "source": "fallback",
-        # Le front peut proposer « redemander au prof » plus tard : cette
-        # explication est correcte mais plus sèche qu'une vraie leçon.
+        # Correction officielle, plus sèche qu'une vraie explication : le front
+        # le signale et va chercher la vraie dès qu'elle est prête.
         "degraded": True,
     }
 
@@ -296,33 +441,41 @@ def _generate_lesson(
     """
     _, correct_text = _correct_option(question)
     chosen_text = _option_text(question, selected_option_id) or "(réponse inconnue)"
+    letters = "ABCDEFGH"
     options_txt = "\n".join(
-        f"- {opt.get('text')}" + (" [BONNE RÉPONSE]" if opt.get("is_correct") else "")
-        for opt in (question.options or [])
+        f"{letters[i] if i < len(letters) else i + 1}. {opt.get('text')}"
+        + (" ← bonne réponse officielle" if opt.get("is_correct") else "")
+        + (" ← réponse choisie par l'élève" if opt.get("id") == selected_option_id else "")
+        for i, opt in enumerate(question.options or [])
     )
     user_content = (
-        f"Catégorie : {question.category or 'Général'}\n"
-        f"Question : {question.text}\n\n"
-        f"Options :\n{options_txt}\n\n"
-        f"Réponse choisie par l'élève (FAUSSE) : {chosen_text}\n"
-        f"Bonne réponse : {correct_text}\n"
+        f"Thème : {question.category or 'Général'}\n"
+        f"Énoncé : {question.text}\n\n"
+        f"Choix de réponses :\n{options_txt}\n\n"
+        f"Réponse choisie par l'élève (fausse) : {chosen_text}\n"
+        f"Bonne réponse officielle : {correct_text}\n"
     )
     if question.explanation:
-        user_content += f"\nExplication officielle : {question.explanation}\n"
+        user_content += f"Explication officielle : {question.explanation}\n"
+    if question.image_url:
+        user_content += ("La question est accompagnée d'une image (panneau ou situation "
+                         "de circulation) que tu ne vois pas.\n")
     user_content += (
-        "\nProduis une mini-leçon uniquement en texte : une explication claire, "
-        "un rappel de la règle, et les erreurs à éviter. N'inclus aucune image, "
-        "aucun schéma, aucun SVG."
+        "\nRédige l'explication de cette erreur (50 à 90 mots, un seul paragraphe)."
     )
 
-    return call_structured(
-        system=PROF_SYSTEM_PROMPT,
+    # Validée à chaque tentative (relance si mal formée) puis une dernière fois
+    # ici : rien de non conforme n'entre dans le cache partagé.
+    return validate_lesson(call_structured(
+        system=LESSON_SYSTEM_PROMPT,
         user_content=user_content,
         schema=LESSON_SCHEMA,
         max_tokens=LESSON_MAX_TOKENS,
         request_timeout_s=request_timeout_s,
         total_deadline_s=total_deadline_s,
-    )
+        validate=validate_lesson,
+        model=lesson_model(),
+    ))
 
 
 def lookup_lesson(db: Session, question: QuestionDB, selected_option_id: str) -> Optional[Dict[str, Any]]:
@@ -332,7 +485,7 @@ def lookup_lesson(db: Session, question: QuestionDB, selected_option_id: str) ->
     l'an dernier doit être resservie même si la clé API a expiré depuis.
     """
     key = _lesson_cache_key(question, selected_option_id)
-    cached = ai_cache.lookup(db, key)
+    cached = _usable(ai_cache.lookup(db, key))
     if cached is None:
         cached = _legacy_lesson(db, question.id, selected_option_id)
     if cached is None:
@@ -377,7 +530,7 @@ def _produce_lesson_offline(question_id: str, selected_option_id: str, cache_key
                 session, cache_key, "lesson", lesson,
                 subject_id=question.id,
                 prompt_preview=f"[{question.category or 'Général'}] {question.text}",
-                **_model_tags(),
+                **_model_tags(lesson_model()),
             )
             _store_legacy_lesson(session, question.id, selected_option_id, lesson)
         logger.info("Leçon produite en arrière-plan pour %s/%s", question_id, selected_option_id)
@@ -454,7 +607,7 @@ def get_or_create_lesson(
             db, key, "lesson", lesson,
             subject_id=question.id,
             prompt_preview=f"[{question.category or 'Général'}] {question.text}",
-            **_model_tags(),
+            **_model_tags(lesson_model()),
         )
         _store_legacy_lesson(db, question.id, selected_option_id, lesson)
 
@@ -724,6 +877,26 @@ def peek_lesson(
     return {"available": True, "lesson": lesson}
 
 
+def _check_selected_option(question: QuestionDB, selected_option_id: str) -> None:
+    """La réponse à expliquer doit exister et être fausse."""
+    option = next((o for o in (question.options or []) if o.get("id") == selected_option_id), None)
+    if option is None:
+        raise HTTPException(status_code=400, detail="Cette réponse n'appartient pas à la question.")
+    if option.get("is_correct"):
+        raise HTTPException(status_code=400, detail="Cette réponse est correcte : il n'y a pas d'erreur à expliquer.")
+
+
+def _insufficient_lesson(problem: str) -> Dict[str, Any]:
+    return {
+        "explication": (f"{problem} Impossible de t'expliquer cette erreur sans risquer "
+                        "de te tromper : demande la correction à ton moniteur."),
+        "donnees_suffisantes": False,
+        "format": LESSON_FORMAT,
+        "cached": False,
+        "source": "verification",
+    }
+
+
 @router.post("/lesson", dependencies=[Depends(require_subscription)])
 def generate_lesson(
     payload: dict,
@@ -739,6 +912,12 @@ def generate_lesson(
     question = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question introuvable")
+
+    _check_selected_option(question, selected_option_id)
+    problem = lesson_problem(question, selected_option_id)
+    if problem:
+        # Données insuffisantes : on le dit, sans appeler le modèle ni inventer.
+        return _insufficient_lesson(problem)
 
     # Le cache d'abord, toujours : c'est gratuit, instantané, et cela reste
     # valable même si le fournisseur d'IA est en panne ou plus configuré.
