@@ -140,6 +140,23 @@ export async function awaitBackgroundLesson(questionId, selectedOptionId, firstD
         const lesson = await prefetchLesson(questionId, selectedOptionId);
         if (signal?.aborted) return null;
         if (lesson) return lesson;
+ * quelques secondes plus tard — parfois jusqu'à une trentaine de secondes quand
+ * le modèle est lent. On repasse donc par `peek` (lecture gratuite) à plusieurs
+ * reprises plutôt qu'une seule fois, sans jamais redemander de génération.
+ * Renvoie null si elle n'est toujours pas prête au bout de `maxWaitMs` — ce
+ * n'est pas une erreur, l'élève garde la correction officielle sous les yeux.
+ */
+export async function awaitBackgroundLesson(
+    questionId, selectedOptionId, delayMs, signal, { intervalMs = 5000, maxWaitMs = 45000 } = {},
+) {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const start = Date.now();
+    await sleep(delayMs);
+    while (!signal?.aborted) {
+        const lesson = await prefetchLesson(questionId, selectedOptionId);
+        if (lesson) return lesson;
+        if (Date.now() - start + intervalMs > maxWaitMs) break;
+        await sleep(intervalMs);
     }
     return null;
 }
