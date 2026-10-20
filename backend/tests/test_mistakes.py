@@ -242,3 +242,17 @@ def test_one_failing_record_does_not_erase_the_others(db, monkeypatch):
     exam = _exam(db, {"q1": "b", "q2": "b", "q3": "b"}, ["q1", "q2", "q3"])
     assert client.post(f"/api/exam/{exam.id}/finish").status_code == 200
     assert _todo(db) == {"q1": 1, "q3": 1}
+
+
+def test_stats_summary_counts_recent_exam_errors(db):
+    """« Erreurs totales » et les catégories reflètent les derniers examens."""
+    db.add(QuestionDB(id="q3", text="Question 3", category="Croisements", options=_opts()))
+    exam = ExamSessionDB(id="ex-stats", user_id="user-1", status="completed",
+                         answers={"q1": "a", "q2": "b"}, question_ids=["q1", "q2", "q3"],
+                         completed_at=datetime.utcnow(), score=33)
+    db.add(exam)
+    db.commit()
+    body = client.get("/api/stats/summary").json()
+    assert body["total_errors"] == 2                 # q2 fausse + q3 sans réponse
+    assert body["best_category"] == "Priorités"      # 0 erreur sur 1
+    assert body["worst_category"] == "Croisements"   # 2 erreurs sur 2
