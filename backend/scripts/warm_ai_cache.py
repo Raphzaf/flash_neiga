@@ -55,6 +55,7 @@ import ai_cache  # noqa: E402
 from ai_client import AICoachUnavailable, ai_configured, diagnostics  # noqa: E402
 from routes.ai_coach import (  # noqa: E402
     _generate_lesson, _lesson_cache_key, _legacy_lesson, _model_tags, _store_legacy_lesson,
+    lesson_model,
 )
 
 logging.basicConfig(
@@ -181,7 +182,7 @@ def warm_one(session, pair: Pair, progress: Progress, delay: float) -> None:
         lesson,
         subject_id=question.id,
         prompt_preview=f"[{pair.category}] {question.text}",
-        **_model_tags(),
+        **_model_tags(lesson_model()),
     )
     _store_legacy_lesson(session, question.id, pair.option_id, lesson)
     progress.bump("done")

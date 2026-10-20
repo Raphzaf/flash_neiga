@@ -168,3 +168,77 @@ def test_exam_finish_records_mistakes(db):
 
     mistakes = {m.question_id for m in db.query(UserMistakeDB).filter_by(user_id="user-1").all()}
     assert mistakes == {"q2"}
+
+
+# ===== Toutes les erreurs doivent arriver dans « à retravailler » =====
+def _add_question(db, qid):
+    db.add(QuestionDB(id=qid, text=f"Question {qid}", category="Divers", options=_opts()))
+
+
+def _exam(db, answers, question_ids, status="in_progress", age=timedelta(0)):
+    exam = ExamSessionDB(id=f"ex-{len(answers)}-{status}", user_id="user-1", status=status,
+                         answers=answers, question_ids=question_ids,
+                         created_at=datetime.utcnow() - age)
+    db.add(exam)
+    db.commit()
+    return exam
+
+
+def _todo(db):
+    db.expire_all()
+    return {m.question_id: m.times_wrong for m in
+            db.query(UserMistakeDB).filter_by(user_id="user-1", mastered=False)}
+
+
+def test_exam_unanswered_questions_are_reported(db):
+    """Une question sans réponse compte fausse dans la note : elle est à retravailler."""
+    _add_question(db, "q3")
+    exam = _exam(db, {"q1": "a", "q2": "b"}, ["q1", "q2", "q3"])
+    res = client.post(f"/api/exam/{exam.id}/finish")
+    assert res.status_code == 200
+    assert _todo(db) == {"q2": 1, "q3": 1}
+
+
+def test_finishing_twice_does_not_count_twice(db):
+    exam = _exam(db, {"q1": "b"}, ["q1"])
+    client.post(f"/api/exam/{exam.id}/finish")
+    client.post(f"/api/exam/{exam.id}/finish")
+    assert _todo(db) == {"q1": 1}
+
+
+def test_abandoned_exam_reports_its_wrong_answers(db):
+    """Examen jamais terminé (onglet fermé) : ses réponses fausses ne sont pas perdues."""
+    _add_question(db, "q3")
+    exam = _exam(db, {"q1": "b", "q2": "a"}, ["q1", "q2", "q3"], age=timedelta(hours=3))
+    res = client.get("/api/mistakes/count")
+    assert res.json()["count"] == 1
+    assert _todo(db) == {"q1": 1}            # q3 jamais vue : pas comptée
+    db.refresh(exam)
+    assert exam.status == "abandoned"
+    client.get("/api/mistakes/count")       # une seule fois
+    assert _todo(db) == {"q1": 1}
+
+
+def test_recent_exam_in_progress_is_left_alone(db):
+    exam = _exam(db, {"q1": "b"}, ["q1"], age=timedelta(minutes=10))
+    client.get("/api/mistakes")
+    assert _todo(db) == {}
+    db.refresh(exam)
+    assert exam.status == "in_progress"
+
+
+def test_one_failing_record_does_not_erase_the_others(db, monkeypatch):
+    """Un incident sur une question n'efface plus les erreurs déjà notées de l'examen."""
+    import routes.mistakes as mistakes
+    real = mistakes._apply_mistake
+
+    def flaky(session, user_id, question_id):
+        if question_id == "q2":
+            raise RuntimeError("panne ponctuelle")
+        return real(session, user_id, question_id)
+
+    monkeypatch.setattr(mistakes, "_apply_mistake", flaky)
+    _add_question(db, "q3")
+    exam = _exam(db, {"q1": "b", "q2": "b", "q3": "b"}, ["q1", "q2", "q3"])
+    assert client.post(f"/api/exam/{exam.id}/finish").status_code == 200
+    assert _todo(db) == {"q1": 1, "q3": 1}

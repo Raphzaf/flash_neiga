@@ -101,7 +101,10 @@ export default function Exam() {
             const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
             return () => clearInterval(timer);
         } else if (timeLeft === 0 && !isFinished) {
-            finishExam();
+            // Temps écoulé : l'examen se termine sans demander confirmation —
+            // une fenêtre « Es-tu sûr ? » laissée sans réponse le bloquait, et
+            // ses erreurs n'étaient jamais reportées.
+            finishExam({ timeUp: true });
         }
     }, [loading, isFinished, timeLeft]);
 
@@ -151,13 +154,13 @@ export default function Exam() {
         }
     };
 
-    const finishExam = async () => {
+    const finishExam = async ({ timeUp = false } = {}) => {
         if (!examSession) return;
         
         const total = Array.isArray(examSession?. questions) ? examSession.questions. length : 0;
         const answered = Array.isArray(examSession?.answers) ? examSession.answers.length : 0;
         
-        if (answered < total) {
+        if (answered < total && !timeUp) {
             const confirmFinish = window.confirm(
                 `⚠️ Tu n'as répondu qu'à ${answered} questions sur ${total}.\n\n` +
                 `Es-tu sûr de vouloir terminer l'examen maintenant ?\n` +
@@ -350,7 +353,7 @@ export default function Exam() {
                         variant={allAnswered ? "default" : "ghost"}
                         size="sm"
                         className={`${allAnswered ? '' : 'text-slate-400 hover:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                        onClick={finishExam}
+                        onClick={() => finishExam()}
                         title={allAnswered ? 'Terminer l\'examen' : 'Vous pouvez terminer à tout moment'}
                     >
                         Terminer

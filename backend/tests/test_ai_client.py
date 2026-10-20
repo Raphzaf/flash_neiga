@@ -348,3 +348,36 @@ def test_timeout_transmis_au_sdk():
     assert ai_client._timeout_kwargs(12.0) == {"timeout": 12.0}
     assert ai_client._timeout_kwargs(None) == {}
     assert ai_client._timeout_kwargs(0) == {}
+
+
+def test_gemini_call_carries_its_own_timeout(monkeypatch):
+    """Un appel interactif doit être borné par SON délai, pas par celui du client (25 s)."""
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    client = _FakeGeminiClient(json.dumps({"ok": True}))
+    ai_client.call_structured("s", "u", {}, client=client, request_timeout_s=12.0, total_deadline_s=14.0)
+    cfg = client.models.captured["config"]
+    assert cfg.http_options is not None
+    assert cfg.http_options.timeout == 12000
+    # En dessous de 10 s, l'API Gemini refuse l'appel : le délai est relevé.
+    ai_client.call_structured("s", "u", {}, client=client, request_timeout_s=4.0, total_deadline_s=14.0)
+    assert client.models.captured["config"].http_options.timeout == 10000
+
+
+def test_validate_rejection_triggers_a_retry(monkeypatch):
+    """Une réponse jugée mal formée est redemandée, dans le budget."""
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setattr(ai_client.time, "sleep", lambda s: None)
+    ai_client.reset_breaker()
+    client = _FakeGeminiClient(json.dumps({"explication": ""}))
+    seen = {"n": 0}
+
+    def validate(result):
+        seen["n"] += 1
+        if seen["n"] < 2:
+            raise ai_client.AITransientError("vide")
+        return {"ok": True}
+
+    out = ai_client.call_structured("s", "u", {}, client=client, validate=validate,
+                                    request_timeout_s=5.0, total_deadline_s=30.0)
+    assert out == {"ok": True} and seen["n"] == 2
+    ai_client.reset_breaker()

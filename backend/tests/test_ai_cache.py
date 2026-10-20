@@ -59,9 +59,10 @@ def override_current_user():
 
 
 FAKE_LESSON = {
-    "explication": "Le panneau impose de céder le passage.",
-    "regle": "En Israël, un triangle pointe en bas signifie « cédez le passage ».",
-    "erreurs_a_eviter": ["Confondre avec le stop"],
+    "explication": ("Le triangle pointe en bas impose de céder le passage : tu dois laisser "
+                    "passer les véhicules de la route que tu abordes. Ce n'est pas un stop, "
+                    "l'arrêt n'est obligatoire que si quelqu'un arrive."),
+    "donnees_suffisantes": True,
 }
 
 
@@ -265,12 +266,12 @@ def test_lecon_invalidee_quand_l_enonce_change(db, monkeypatch):
 
     def fake_call(**kwargs):
         calls["n"] += 1
-        return {**FAKE_LESSON, "explication": f"version {calls['n']}"}
+        return {**FAKE_LESSON, "explication": f"{FAKE_LESSON['explication']} Version {calls['n']}."}
 
     monkeypatch.setattr(ai_coach, "call_structured", fake_call)
     body = {"question_id": "q1", "selected_option_id": "b"}
 
-    assert client.post("/api/ai-coach/lesson", json=body).json()["explication"] == "version 1"
+    assert client.post("/api/ai-coach/lesson", json=body).json()["explication"].endswith("Version 1.")
 
     question = db.query(QuestionDB).filter(QuestionDB.id == "q1").first()
     question.text = "Énoncé corrigé : que signifie ce panneau ?"
@@ -279,7 +280,7 @@ def test_lecon_invalidee_quand_l_enonce_change(db, monkeypatch):
     # l'admin via /cache/invalidate.
     client.post("/api/ai-coach/cache/invalidate", json={"question_id": "q1"})
 
-    assert client.post("/api/ai-coach/lesson", json=body).json()["explication"] == "version 2"
+    assert client.post("/api/ai-coach/lesson", json=body).json()["explication"].endswith("Version 2.")
 
 
 # ===== Rafale : un seul appel pour N élèves simultanés =====

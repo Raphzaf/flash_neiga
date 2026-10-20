@@ -18,12 +18,29 @@ import axios from 'axios';
 const lessons = new Map();   // clé -> leçon résolue
 const inflight = new Map();  // clé -> promesse en cours
 
-/** Délai au-delà duquel on considère que le prof ne répondra pas. */
-const REQUEST_TIMEOUT_MS = 45000;
+/**
+ * Délai au-delà duquel on considère que le prof ne répondra pas. Le proxy qui
+ * sert le site coupe toute requête à 26 s, et le serveur rend la main bien
+ * avant (explication ou correction officielle) : attendre davantage ne
+ * servirait qu'à laisser l'élève devant un sablier.
+ */
+const REQUEST_TIMEOUT_MS = 30000;
+/** Relectures de la leçon produite en arrière-plan après un repli (ms, cumulées). */
+const BACKGROUND_POLL_DELAYS_MS = [0, 5000, 8000, 12000];
 /** Délai court pour le préchargement : il ne doit jamais gêner la page. */
 const PEEK_TIMEOUT_MS = 8000;
 
 export const lessonKey = (questionId, selectedOptionId) => `${questionId}::${selectedOptionId}`;
+
+const filled = (value) => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * Une leçon affichable : un mini cours non vide, ou au moins la bonne réponse
+ * (correction de secours d'une question sans explication officielle).
+ */
+export function isValidLesson(lesson) {
+    return Boolean(lesson && (filled(lesson.explication) || filled(lesson.bonne_reponse)));
+}
 
 /** Leçon déjà connue pour ce couple (question, mauvaise réponse), ou null. */
 export function getCachedLesson(questionId, selectedOptionId) {
@@ -40,7 +57,7 @@ export function getCachedLesson(questionId, selectedOptionId) {
  * tout le reste de la session.
  */
 function remember(key, lesson) {
-    if (lesson && !lesson.degraded) lessons.set(key, lesson);
+    if (isValidLesson(lesson) && !lesson.degraded) lessons.set(key, lesson);
     return lesson;
 }
 
@@ -63,7 +80,7 @@ export async function prefetchLesson(questionId, selectedOptionId) {
             { question_id: questionId, selected_option_id: selectedOptionId },
             { timeout: PEEK_TIMEOUT_MS },
         );
-        if (res.data?.available && res.data.lesson) {
+        if (res.data?.available && isValidLesson(res.data.lesson)) {
             return remember(key, res.data.lesson);
         }
     } catch (e) {
@@ -92,9 +109,16 @@ export function fetchLesson(questionId, selectedOptionId) {
             { question_id: questionId, selected_option_id: selectedOptionId },
             { timeout: REQUEST_TIMEOUT_MS },
         )
-        .then((res) => remember(key, res.data))
+        .then((res) => {
+            // Une réponse sans explication n'est jamais présentée comme réussie.
+            if (!isValidLesson(res.data)) {
+                const error = new Error("Réponse du prof incomplète.");
+                error.malformed = true;
+                throw error;
+            }
+            return remember(key, res.data);
+        })
         .finally(() => inflight.delete(key));
-
 
     inflight.set(key, promise);
     return promise;
@@ -104,6 +128,18 @@ export function fetchLesson(questionId, selectedOptionId) {
  * Attend que la leçon produite en arrière-plan soit disponible, puis la renvoie.
  *
  * Après un repli, le serveur a mis la vraie leçon en file : elle arrive en base
+ * quelques secondes plus tard. On repasse par `peek` (lecture gratuite, jamais
+ * de génération) à quelques reprises, puis on abandonne. Renvoie null si elle
+ * n'est pas prête ou si `signal` a été annulé (l'élève est passé à autre chose).
+ */
+export async function awaitBackgroundLesson(questionId, selectedOptionId, firstDelayMs, signal) {
+    const delays = BACKGROUND_POLL_DELAYS_MS.map((extra, i) => (i === 0 ? firstDelayMs : extra));
+    for (const delay of delays) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        if (signal?.aborted) return null;
+        const lesson = await prefetchLesson(questionId, selectedOptionId);
+        if (signal?.aborted) return null;
+        if (lesson) return lesson;
  * quelques secondes plus tard — parfois jusqu'à une trentaine de secondes quand
  * le modèle est lent. On repasse donc par `peek` (lecture gratuite) à plusieurs
  * reprises plutôt qu'une seule fois, sans jamais redemander de génération.

@@ -584,11 +584,40 @@ def _to_gemini_schema(schema: Any) -> Any:
     return out
 
 
-def _gemini_config(system: str, max_tokens: int, with_thinking: bool, response_schema=None):
+# L'API Gemini refuse un délai par appel inférieur à 10 s (400 INVALID_ARGUMENT
+# « Minimum allowed deadline is 10s »).
+GEMINI_MIN_CALL_TIMEOUT = 10.0
+
+
+def _gemini_call_options(timeout: Optional[float]) -> Dict[str, Any]:
+    """Délai propre à CET appel Gemini, quand le SDK sait le porter.
+
+    Le client est construit avec le délai d'arrière-plan (25 s). Sans surcharge
+    par appel, une explication demandée par un élève pouvait donc attendre 25 s,
+    bien au-delà de son budget interactif : la requête dépassait la coupure du
+    proxy (26 s) et l'élève recevait une erreur au lieu de l'explication ou de
+    son repli. Les SDK OpenAI et Anthropic acceptent déjà `timeout` par requête.
+    """
+    if not timeout or timeout <= 0 or _genai_types is None or not hasattr(_genai_types, "HttpOptions"):
+        return {}
+    fields = getattr(_genai_types.GenerateContentConfig, "model_fields", {})
+    if "http_options" not in fields:
+        return {}
+    try:
+        # Le SDK google-genai attend des millisecondes.
+        timeout = max(timeout, GEMINI_MIN_CALL_TIMEOUT)
+        return {"http_options": _genai_types.HttpOptions(timeout=int(timeout * 1000))}
+    except Exception:  # pragma: no cover - dépend de la version du SDK
+        return {}
+
+
+def _gemini_config(system: str, max_tokens: int, with_thinking: bool, response_schema=None,
+                   timeout: Optional[float] = None):
     kwargs: Dict[str, Any] = dict(
         system_instruction=system,
         response_mime_type="application/json",
         max_output_tokens=max_tokens,
+        **_gemini_call_options(timeout),
     )
     if response_schema is not None:
         kwargs["response_schema"] = response_schema
@@ -629,7 +658,8 @@ def _empty_response_error(response) -> AICoachUnavailable:
     return AITransientError(f"Réponse du modèle vide ({detail}).")
 
 
-def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client) -> Dict[str, Any]:
+def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client,
+                 timeout: Optional[float] = None, model: Optional[str] = None) -> Dict[str, Any]:
     # JSON mode + schéma décrit dans le prompt : robuste quelle que soit la
     # version du SDK, sans dépendre du format de response_schema propre à Gemini.
     prompt = (
@@ -643,9 +673,9 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
 
     def _do(with_thinking: bool, response_schema):
         return client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model or GEMINI_MODEL,
             contents=prompt,
-            config=_gemini_config(system, max_tokens, with_thinking, response_schema),
+            config=_gemini_config(system, max_tokens, with_thinking, response_schema, timeout),
         )
 
     # Ordre des tentatives : JSON structuré natif (fiable) → sans thinking_config
@@ -679,10 +709,11 @@ def _call_gemini(system: str, user_content: str, schema: Dict[str, Any], max_tok
     return _parse_json(text)
 
 
-def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client, timeout: Optional[float] = None) -> Dict[str, Any]:
+def _call_claude(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client,
+                 timeout: Optional[float] = None, model: Optional[str] = None) -> Dict[str, Any]:
     try:
         response = client.messages.create(
-            model=CLAUDE_MODEL,
+            model=model or CLAUDE_MODEL,
             max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user_content}],
@@ -753,7 +784,8 @@ def _moonshot_text(response) -> str:
     return content.strip()
 
 
-def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client, timeout: Optional[float] = None) -> Dict[str, Any]:
+def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_tokens: int, client,
+                   timeout: Optional[float] = None, model: Optional[str] = None) -> Dict[str, Any]:
     prompt = (
         f"{user_content}\n\n"
         "Réponds UNIQUEMENT avec un objet JSON valide (aucun texte autour, pas de balise Markdown) "
@@ -762,7 +794,7 @@ def _call_moonshot(system: str, user_content: str, schema: Dict[str, Any], max_t
     )
     try:
         response = client.chat.completions.create(
-            model=MOONSHOT_MODEL,
+            model=model or MOONSHOT_MODEL,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -841,7 +873,7 @@ def _parse_json(text: str) -> Dict[str, Any]:
     raise AITransientError("Réponse du modèle sans JSON exploitable.")
 
 
-def _chat_gemini(system: str, history: list, max_tokens: int, client) -> str:
+def _chat_gemini(system: str, history: list, max_tokens: int, client, timeout: Optional[float] = None) -> str:
     contents = []
     for msg in history:
         role = "model" if msg.get("role") == "assistant" else "user"
@@ -853,7 +885,9 @@ def _chat_gemini(system: str, history: list, max_tokens: int, client) -> str:
         raise AICoachUnavailable("Message vide.")
 
     def _cfg(with_thinking: bool):
-        kwargs: Dict[str, Any] = dict(system_instruction=system, max_output_tokens=max_tokens)
+        kwargs: Dict[str, Any] = dict(
+            system_instruction=system, max_output_tokens=max_tokens, **_gemini_call_options(timeout),
+        )
         if with_thinking and hasattr(_genai_types, "ThinkingConfig"):
             kwargs["thinking_config"] = _genai_types.ThinkingConfig(thinking_budget=_thinking_budget())
         return _genai_types.GenerateContentConfig(**kwargs)
@@ -929,7 +963,7 @@ def call_chat(
             return _chat_claude(system, history, max_tokens, cli, timeout)
         if provider == "moonshot":
             return _chat_moonshot(system, history, max_tokens, cli, timeout)
-        return _chat_gemini(system, history, max_tokens, cli)
+        return _chat_gemini(system, history, max_tokens, cli, timeout)
 
     return _with_retries(provider, "chat", _run, request_timeout_s, total_deadline_s)
 
@@ -942,8 +976,16 @@ def call_structured(
     client=None,
     request_timeout_s: Optional[float] = None,
     total_deadline_s: Optional[float] = None,
+    validate: Optional[Callable[[Any], Dict[str, Any]]] = None,
+    model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Appelle le modèle en mode JSON structuré et renvoie le dict parsé.
+
+    `validate`, s'il est fourni, contrôle (et normalise) la réponse à chaque
+    tentative : en levant `AITransientError` sur une réponse mal formée, il
+    déclenche une relance dans le budget au lieu de laisser passer un contenu
+    inexploitable. `model` remplace, pour cet appel seulement, le modèle du
+    fournisseur configuré (ex. un modèle rapide pour les explications courtes).
 
     Interface stable pour toutes les routes IA (indépendante du fournisseur).
     Relance automatiquement les incidents passagers (429, 5xx, JSON tronqué) avec
@@ -959,9 +1001,11 @@ def call_structured(
 
     def _run(timeout: float) -> Dict[str, Any]:
         if provider == "claude":
-            return _call_claude(system, user_content, schema, max_tokens, cli, timeout)
-        if provider == "moonshot":
-            return _call_moonshot(system, user_content, schema, max_tokens, cli, timeout)
-        return _call_gemini(system, user_content, schema, max_tokens, cli)
+            result = _call_claude(system, user_content, schema, max_tokens, cli, timeout, model)
+        elif provider == "moonshot":
+            result = _call_moonshot(system, user_content, schema, max_tokens, cli, timeout, model)
+        else:
+            result = _call_gemini(system, user_content, schema, max_tokens, cli, timeout, model)
+        return validate(result) if validate else result
 
     return _with_retries(provider, "structured", _run, request_timeout_s, total_deadline_s)

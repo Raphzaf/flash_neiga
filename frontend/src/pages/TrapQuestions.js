@@ -21,6 +21,11 @@ function TrapCard({ item, rank }) {
         if (answered) return;
         setSelected(optId);
         setAnswered(true);
+        // La correction s'affiche tout de suite (côté navigateur), mais la
+        // réponse passe aussi par le serveur : une erreur ici doit rejoindre
+        // « Mes questions à retravailler », comme à l'entraînement.
+        axios.post('/api/training/check', { question_id: q.id, selected_option_id: optId })
+            .catch(() => { /* hors ligne : la correction reste affichée */ });
     };
 
     const isWrong = answered && selected !== correctId;

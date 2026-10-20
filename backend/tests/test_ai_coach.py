@@ -58,10 +58,10 @@ def _opts():
 
 
 FAKE_LESSON = {
-    "explication": "Tu t'es trompé parce que…",
-    "regle": "En Israël, la règle dit que…",
-    "erreurs_a_eviter": ["Ne pas confondre X et Y", "Vérifier le panneau"],
-    "schema_svg": None,
+    "explication": ("La bonne réponse est la première : à une intersection sans signalisation, "
+                    "tu cèdes le passage au véhicule qui vient de ta droite. Celui qui vient de "
+                    "ta gauche doit te laisser passer. Retiens la priorité à droite."),
+    "donnees_suffisantes": True,
 }
 
 FAKE_REPORT = {
@@ -124,6 +124,8 @@ def test_lesson_generated_then_cached(db, monkeypatch):
     assert r1.status_code == 200
     body = r1.json()
     assert body["explication"] == FAKE_LESSON["explication"]
+    assert body["mauvaise_reponse"] == "Mauvaise réponse"
+    assert body["bonne_reponse"] == "Bonne réponse"
     assert body["cached"] is False
     assert calls["n"] == 1
 
@@ -145,14 +147,18 @@ def test_lesson_falls_back_to_official_correction_when_ai_down(db, monkeypatch):
     assert body["source"] == "fallback"
     assert body["degraded"] is True
     # La correction officielle et la bonne réponse sont bien restituées.
-    assert "Explication officielle q1" in body["explication"]
-    assert "Bonne réponse" in body["explication"]
-    assert body["erreurs_a_eviter"]
+    # Mini cours = la correction officielle seule, sans redite des réponses…
+    assert body["explication"] == "Explication officielle q1"
+    # …qui s'affichent à part, lues en base.
+    assert body["bonne_reponse"] == "Bonne réponse"
+    assert body["mauvaise_reponse"] == "Mauvaise réponse"
 
 
-def test_lesson_503_when_ai_down_and_question_has_no_material(db, monkeypatch):
-    """Sans correction ni bonne réponse, mieux vaut un 503 honnête qu'un texte vide."""
-    monkeypatch.setattr(ai_coach, "ai_configured", lambda: False)
+def test_lesson_without_correct_answer_says_so_without_calling_ai(db, monkeypatch):
+    """Sans bonne réponse identifiée, on le dit au lieu d'inventer une explication."""
+    def boom(**kwargs):
+        raise AssertionError("le modèle ne doit pas être appelé")
+    monkeypatch.setattr(ai_coach, "call_structured", boom)
     db.add(QuestionDB(
         id="q-vide", text="Question sans correction", category="Divers",
         options=[{"id": "a", "text": "Une option", "is_correct": False}],
@@ -160,8 +166,77 @@ def test_lesson_503_when_ai_down_and_question_has_no_material(db, monkeypatch):
     ))
     db.commit()
     r = client.post("/api/ai-coach/lesson", json={"question_id": "q-vide", "selected_option_id": "a"})
-    assert r.status_code == 503
-    assert "prof" in r.json()["detail"].lower()
+    assert r.status_code == 200
+    body = r.json()
+    assert body["donnees_suffisantes"] is False
+    assert body["source"] == "verification"
+    assert "bonne réponse" in body["explication"]
+
+
+def test_lesson_with_several_correct_answers_is_flagged(db, monkeypatch):
+    monkeypatch.setattr(ai_coach, "call_structured", lambda **kw: dict(FAKE_LESSON))
+    db.add(QuestionDB(
+        id="q-double", text="Question incohérente", category="Divers",
+        options=[{"id": "a", "text": "Un", "is_correct": True},
+                 {"id": "b", "text": "Deux", "is_correct": True},
+                 {"id": "c", "text": "Trois", "is_correct": False}],
+    ))
+    db.commit()
+    body = client.post("/api/ai-coach/lesson",
+                       json={"question_id": "q-double", "selected_option_id": "c"}).json()
+    assert body["donnees_suffisantes"] is False
+    assert "plusieurs bonnes réponses" in body["explication"]
+
+
+def test_lesson_refuses_correct_or_unknown_option(db, monkeypatch):
+    monkeypatch.setattr(ai_coach, "call_structured", lambda **kw: dict(FAKE_LESSON))
+    ok = client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "a"})
+    assert ok.status_code == 400 and "correcte" in ok.json()["detail"]
+    unknown = client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "zz"})
+    assert unknown.status_code == 400
+
+
+def test_lesson_prompt_carries_question_choices_and_official_answer(db, monkeypatch):
+    captured = {}
+
+    def fake_call(**kwargs):
+        captured.update(kwargs)
+        return dict(FAKE_LESSON)
+
+    monkeypatch.setattr(ai_coach, "call_structured", fake_call)
+    client.post("/api/ai-coach/lesson", json={"question_id": "q1", "selected_option_id": "b"})
+    content = captured["user_content"]
+    assert "Énoncé : Question 1" in content
+    assert "A. Bonne réponse ← bonne réponse officielle" in content
+    assert "B. Mauvaise réponse ← réponse choisie par l'élève" in content
+    assert "Explication officielle : Explication officielle q1" in content
+    assert captured["validate"] is ai_coach.validate_lesson
+    assert "israélien" in captured["system"]
+    assert "ne les recopie pas" in captured["system"]
+
+
+def test_insufficient_verdict_from_model_is_returned_as_such(db, monkeypatch):
+    monkeypatch.setattr(ai_coach, "call_structured", lambda **kw: {
+        "explication": "La correction officielle ne correspond pas à l'énoncé.",
+        "donnees_suffisantes": False,
+    })
+    body = client.post("/api/ai-coach/lesson",
+                       json={"question_id": "q2", "selected_option_id": "b"}).json()
+    assert body["donnees_suffisantes"] is False
+    assert body["source"] == "ai"
+
+
+def test_malformed_model_answer_is_never_cached_and_falls_back(db, monkeypatch):
+    """Réponse vide ou tronquée : jamais servie comme une explication valide."""
+    monkeypatch.setattr(ai_coach, "call_structured",
+                        lambda **kw: {"explication": "", "donnees_suffisantes": True})
+    monkeypatch.setattr(ai_coach, "schedule_lesson", lambda *a, **k: False)
+    body = client.post("/api/ai-coach/lesson",
+                       json={"question_id": "q1", "selected_option_id": "b"}).json()
+    assert body["source"] == "fallback" and body["degraded"] is True
+    assert "Explication officielle q1" in body["explication"]
+    from models import AIAnswerCacheDB
+    assert db.query(AIAnswerCacheDB).count() == 0
 
 
 def test_lesson_missing_question(db):

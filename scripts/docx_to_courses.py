@@ -24,12 +24,14 @@ adouci ne sert qu'au sommaire (attribut title).
 """
 from __future__ import annotations
 
+import difflib
 import html
 import io
 import json
 import re
 import sys
 import zipfile
+from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -166,6 +168,31 @@ def parse_rpr(rpr) -> dict:
     return props
 
 
+def parse_spacing(element) -> dict:
+    """Espacements d'un w:spacing : avant / après (twips) et interligne (240 = simple)."""
+    out: dict = {}
+    if element is None:
+        return out
+    for attr in ("before", "after"):
+        if element.get(W + attr) is not None:
+            out[attr] = int(element.get(W + attr))
+    if element.get(W + "line") is not None and element.get(W + "lineRule") in (None, "auto"):
+        out["line"] = int(element.get(W + "line"))
+    return out
+
+
+# Valeurs par défaut du document (docDefaults) : 8 pt après, interligne 1,16.
+# Elles vivent dans la feuille de style (.course-book) ; seuls les écarts sont
+# écrits dans le HTML.
+DEFAULT_AFTER = 160
+DEFAULT_LINE = 278
+
+# Interligne « simple » du lecteur, en multiple de la taille du texte : la
+# hauteur de ligne naturelle d'Aptos et des polices système qui remplacent les
+# polices du document hors de Windows (≈ 1,21).
+SINGLE_LINE = 1.21
+
+
 class Converter:
     def __init__(self, docx_path: Path):
         self.zip = zipfile.ZipFile(docx_path)
@@ -188,7 +215,10 @@ class Converter:
         self.default_rpr = parse_rpr(root.find(f"{W}docDefaults/{W}rPrDefault/{W}rPr"))
         self.default_rpr.setdefault("sz", 22)
         self.default_rpr.setdefault("font", THEME_FONTS["minor"])
+        default_spacing = root.find(f"{W}docDefaults/{W}pPrDefault/{W}pPr/{W}spacing")
+        self.default_spacing = parse_spacing(default_spacing)
         self.styles: dict[str, tuple[str | None, dict, int | None]] = {}
+        self.style_spacing: dict[str, dict] = {}
         for style in root.findall(W + "style"):
             based = style.find(W + "basedOn")
             ind = style.find(f"{W}pPr/{W}ind")
@@ -197,6 +227,10 @@ class Converter:
                 parse_rpr(style.find(W + "rPr")),
                 int(ind.get(W + "left")) if ind is not None and ind.get(W + "left") else None,
             )
+            spacing = parse_spacing(style.find(f"{W}pPr/{W}spacing"))
+            if style.find(f"{W}pPr/{W}contextualSpacing") is not None:
+                spacing["contextual"] = True
+            self.style_spacing[style.get(W + "styleId")] = spacing
 
     def _style_chain(self, style_id):
         chain = []
@@ -341,7 +375,7 @@ class Converter:
                 if child.tag == W + "t":
                     text = html.escape(child.text or "", quote=False)
                 elif child.tag == W + "tab":
-                    text = " "
+                    text = "\t"
                 elif child.tag == W + "br" and child.get(W + "type") in (None, "textWrapping"):
                     text = "<br>"
                 elif child.tag == W + "drawing":
@@ -377,7 +411,7 @@ class Converter:
                 out.append(text)
                 continue
             bold, italic, underline, strike, vert, (font_class, css) = key
-            if not text.strip(" <br>"):
+            if text in ("", "<br>"):
                 out.append(text)
                 continue
             if bold:
@@ -396,11 +430,70 @@ class Converter:
                 attrs = (f' class="{font_class}"' if font_class else "") + (f' style="{css}"' if css else "")
                 text = f"<span{attrs}>{text}</span>"
             out.append(text)
-        joined = re.sub(r"[ \t\r\n]+", " ", "".join(out)).strip()
-        return joined, floats
+        # Le texte est rendu tel quel (espaces, tabulations) : white-space: pre-wrap.
+        return "".join(out), floats
 
     def paragraph_text(self, paragraph) -> str:
         return _norm("".join(t.text or "" for r in self._content(paragraph) for t in r.iter(W + "t")))
+
+    def spacing(self, paragraph) -> dict:
+        """Espacements effectifs : défauts du document < style (et ses parents) < paragraphe."""
+        ppr = paragraph.find(W + "pPr")
+        style_el = ppr.find(W + "pStyle") if ppr is not None else None
+        result = {"before": 0, "after": 0, "line": 240, "contextual": False}
+        result.update(self.default_spacing)
+        chain_id = style_el.get(W + "val") if style_el is not None else "Normal"
+        ids = []
+        while chain_id and chain_id in self.styles and len(ids) < 10:
+            ids.append(chain_id)
+            chain_id = self.styles[chain_id][0]
+        for style_id in reversed(ids):
+            result.update(self.style_spacing.get(style_id, {}))
+        if ppr is not None:
+            result.update(parse_spacing(ppr.find(W + "spacing")))
+            if ppr.find(W + "contextualSpacing") is not None:
+                result["contextual"] = True
+        return result
+
+    def block_attrs(self, paragraph, extra_css: str = "", classes: tuple = ()) -> str:
+        """class/style d'un bloc : seuls les écarts aux valeurs par défaut sont écrits."""
+        sp = self.spacing(paragraph)
+        css = [extra_css] if extra_css else []
+        if sp["before"]:
+            css.append(f"margin-top:{_em(sp['before'] / 20 / 14)}")
+        if sp["after"] != DEFAULT_AFTER:
+            css.append(f"margin-bottom:{_em(sp['after'] / 20 / 14)}")
+        if sp["line"] != DEFAULT_LINE:
+            css.append(f"line-height:{sp['line'] / 240 * SINGLE_LINE:.3f}")
+        cls = list(classes) + (["ctx"] if sp["contextual"] else [])
+        out = f' class="{" ".join(cls)}"' if cls else ""
+        return out + (f' style="{";".join(css)}"' if css else "")
+
+    def mark_size(self, paragraph) -> int:
+        """Taille de la marque de paragraphe : hauteur d'une ligne vide dans Word."""
+        ppr = paragraph.find(W + "pPr")
+        style_el = ppr.find(W + "pStyle") if ppr is not None else None
+        props = self.style_rpr(style_el.get(W + "val") if style_el is not None else "Normal")
+        props.update(parse_rpr(ppr.find(W + "rPr") if ppr is not None else None))
+        return props.get("sz", BASE_HALF_POINTS)
+
+    def empty_html(self, paragraph) -> str:
+        size = self.mark_size(paragraph)
+        span_css = f' style="font-size:{_em(size / BASE_HALF_POINTS)}"' if size != BASE_HALF_POINTS else ""
+        return f'<p{self.block_attrs(paragraph, classes=("vide",))}><span{span_css}><br></span></p>'
+
+    def raw_text(self, paragraph) -> str:
+        """Texte exact du paragraphe tel que Word le stocke (référence de la vérification)."""
+        out = []
+        for run in self._content(paragraph):
+            for child in run:
+                if child.tag == W + "t":
+                    out.append(child.text or "")
+                elif child.tag == W + "tab":
+                    out.append("\t")
+                elif child.tag == W + "br" and child.get(W + "type") in (None, "textWrapping"):
+                    out.append("\n")
+        return "".join(out)
 
     def indent(self, paragraph) -> int:
         ppr = paragraph.find(W + "pPr")
@@ -444,14 +537,16 @@ class Converter:
             if text in starts or (_is_heading(text) and not level and len(text) <= MAX_HEADING_LENGTH):
                 close_list()
                 content, floats = self.runs_html(element)
+                left = self.indent(element)
+                head_attrs = self.block_attrs(element, extra_css=f"padding-left:{_em(left / 20 / 14)}" if left else "")
                 if text in starts:
                     self.chapters_found.append(text)
                     number = len(self.chapters_found)
                     title = html.escape(starts[text])
-                    parts.append(f'<h2 id="partie-{number}" title="{title}">{content}</h2>')
+                    parts.append(f'<h2 id="partie-{number}" title="{title}"{head_attrs}>{content}</h2>')
                 else:
                     title = html.escape(_heading_text(text))
-                    parts.append(f'<h3 title="{title}">{content}</h3>')
+                    parts.append(f'<h3 title="{title}"{head_attrs}>{content}</h3>')
                 parts.extend(f"<p>{img}</p>" for img in floats)
                 continue
 
@@ -460,7 +555,7 @@ class Converter:
                                 or level.get("color") or "000000")
                 content, floats = self.runs_html(element, inherited_color=marker_color)
                 if not content and not floats:
-                    continue
+                    content = "<br>"  # puce sans texte : Word affiche quand même la ligne
                 ordered = level["fmt"] in NUMBER_FORMATS
                 list_tag = "ol" if ordered else "ul"
                 if open_list != (num_id, level_id, list_tag):
@@ -471,12 +566,13 @@ class Converter:
                     else:
                         list_style = BULLETS.get(level["text"], f"'{level['text']} '" if level["text"] else "disc")
                     css = f"list-style-type:{list_style};padding-left:{_em(left / 20 / 14)}"
+                    list_attrs = self.block_attrs(element, extra_css=css)
                     start = ""
                     if ordered:
                         counter_key = f"{num_id}:{level_id}"
                         first = self.list_counters.get(counter_key, level["start"])
                         start = f' start="{first}"' if first != 1 else ""
-                    parts.append(f'<{list_tag}{start} style="{css}">')
+                    parts.append(f'<{list_tag}{start}{list_attrs}>')
                     open_list = (num_id, level_id, list_tag)
                 if level["fmt"] in NUMBER_FORMATS:
                     key = f"{num_id}:{level_id}"
@@ -488,6 +584,9 @@ class Converter:
 
             content, floats = self.runs_html(element)
             if not content and not floats:
+                # Ligne vide du Word : conservée, à la hauteur de sa marque de paragraphe.
+                close_list()
+                parts.append(self.empty_html(element))
                 continue
             # Un paragraphe en retrait poursuit la liste qui le précède.
             left = self.indent(element)
@@ -496,11 +595,11 @@ class Converter:
             for img in floats:
                 parts.append(f"<p>{img}</p>")
             if content:
-                css = f' style="padding-left:{_em(left / 20 / 14)}"' if left and not open_list else ""
                 if open_list:
                     parts.append(f'<li class="suite">{content}</li>')
                 else:
-                    parts.append(f"<p{css}>{content}</p>")
+                    indent_css = f"padding-left:{_em(left / 20 / 14)}" if left else ""
+                    parts.append(f"<p{self.block_attrs(element, extra_css=indent_css)}>{content}</p>")
         close_list()
 
         first_image = re.search(r'<img src="([^"]+)"', "".join(parts))
@@ -527,6 +626,68 @@ class Converter:
         return "<table>" + "".join(rows) + "</table>"
 
 
+class _BlockText(HTMLParser):
+    """Texte affiché par chaque bloc du HTML produit (p, li, titres, cellules)."""
+    BLOCKS = {"p", "li", "h2", "h3", "td", "th"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.blocks: list[tuple[str, str]] = []  # (classes, texte)
+        self._stack: list[list] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.BLOCKS:
+            self._stack.append([dict(attrs).get("class") or "", []])
+        elif tag == "br" and self._stack:
+            self._stack[-1][1].append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self.BLOCKS and self._stack:
+            classes, text = self._stack.pop()
+            self.blocks.append((classes, "".join(text)))
+
+    def handle_data(self, data):
+        if self._stack:
+            self._stack[-1][1].append(data)
+
+
+def verify_text(converter: "Converter", content: str) -> list[str]:
+    """Compare le texte du Word et celui du cours, bloc par bloc, caractère par caractère.
+
+    Renvoie la liste des écarts (vide si le texte est intact). Les lignes vides
+    sont comptées à part ; les blocs ne portant qu'une illustration sont ignorés.
+    """
+    body = ET.fromstring(converter.zip.read("word/document.xml")).find(W + "body")
+    expected: list[str] = []
+    expected_empty = 0
+    for element in body:
+        if element.tag == W + "p":
+            text = converter.raw_text(element)
+            if text:
+                expected.append(text)
+            elif next(element.iter(A + "blip"), None) is None:
+                expected_empty += 1
+        elif element.tag == W + "tbl":
+            for cell in element.iter(W + "tc"):
+                texts = [converter.raw_text(p) for p in cell.iter(W + "p")]
+                expected.append("\n".join(t for t in texts if t))
+
+    parser = _BlockText()
+    parser.feed(content)
+    actual = [text for classes, text in parser.blocks if "vide" not in classes.split() and text]
+    actual_empty = sum(1 for classes, _ in parser.blocks if "vide" in classes.split())
+
+    problems: list[str] = []
+    matcher = difflib.SequenceMatcher(None, expected, actual, autojunk=False)
+    for op, a1, a2, b1, b2 in matcher.get_opcodes():
+        if op != "equal":
+            problems.append(f"{op} : Word {expected[a1:a2]!r} ≠ cours {actual[b1:b2]!r}")
+    if expected_empty != actual_empty:
+        problems.append(f"lignes vides : {expected_empty} dans le Word, {actual_empty} dans le cours")
+    converter.verified = (len(expected), sum(len(t) for t in expected), expected_empty)
+    return problems
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -538,6 +699,14 @@ def main() -> int:
     if len(converter.chapters_found) != len(CHAPTERS):
         print(f"⚠️  {len(converter.chapters_found)} parties trouvées sur {len(CHAPTERS)} attendues", file=sys.stderr)
         return 2
+    problems = verify_text(converter, course["content"])
+    blocks, chars, empties = converter.verified
+    if problems:
+        print(f"⚠️  Texte modifié par la conversion ({len(problems)} écart(s)) :", file=sys.stderr)
+        for problem in problems[:20]:
+            print("   ", problem[:300], file=sys.stderr)
+        return 3
+    print(f"Texte vérifié : {blocks} paragraphes, {chars} caractères et {empties} lignes vides identiques au Word.")
     OUT_JSON.write_text(json.dumps([course], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"1 cours ({len(CHAPTERS)} parties) → {OUT_JSON.relative_to(ROOT)}")
     print(f"{len(converter.images)} images → {OUT_MEDIA.relative_to(ROOT)}/")
