@@ -72,9 +72,13 @@ try:
 except ImportError:
     from backend.routes.admin_migration import router as admin_migration_router
 try:
-    from routes.mistakes import router as mistakes_router, record_mistake
+    from routes.mistakes import (
+        router as mistakes_router, record_mistake, record_exam_mistakes, sweep_abandoned_exams,
+    )
 except ImportError:
-    from backend.routes.mistakes import router as mistakes_router, record_mistake
+    from backend.routes.mistakes import (
+        router as mistakes_router, record_mistake, record_exam_mistakes, sweep_abandoned_exams,
+    )
 try:
     from routes.ai_coach import router as ai_coach_router
 except ImportError:
@@ -1386,6 +1390,10 @@ async def start_exam(
         except Exception:
             pass
 
+    # Un examen précédent jamais terminé : ses erreurs rejoignent la liste à retravailler.
+    if current_user is not None:
+        sweep_abandoned_exams(db, current_user.id)
+
     selected_pool = playable if len(playable) > 0 else all_questions
     selected_count = min(30, len(selected_pool))
     selected = random.sample(selected_pool, selected_count) if selected_count > 0 else []
@@ -1480,19 +1488,24 @@ async def finish_exam(
             total_count = len(exam.question_ids)
     except Exception:
         pass
-    
-    for question_id, selected_option_id in exam.answers.items():
+
+    for question_id, selected_option_id in (exam.answers or {}).items():
         question = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
-        if question:
-            answered_correct = False
-            for opt in question.options:
-                if opt["id"] == selected_option_id and opt["is_correct"]:
-                    answered_correct = True
-                    correct_count += 1
-                    break
-            # Mémoire des erreurs : toute réponse fausse en examen est enregistrée.
-            if not answered_correct and exam.user_id:
-                record_mistake(db, exam.user_id, question_id, commit=False)
+        if question and any(
+            opt.get("id") == selected_option_id and opt.get("is_correct")
+            for opt in (question.options or [])
+        ):
+            correct_count += 1
+
+    # Mémoire des erreurs : réponses fausses ET questions sans réponse (comptées
+    # fausses dans la note). Une seule fois par examen : un second appel à
+    # /finish (double clic, nouvel essai réseau) ne les compte pas deux fois.
+    if exam.status == "in_progress" and exam.user_id:
+        record_exam_mistakes(db, exam, include_unanswered=True)
+    elif exam.status == "abandoned" and exam.user_id:
+        # Ses réponses fausses ont déjà été reportées : restent les questions
+        # laissées sans réponse, désormais comptées fausses.
+        record_exam_mistakes(db, exam, include_unanswered=True, only_unanswered=True)
 
     score = int((correct_count / total_count) * 100)
     passed = correct_count >= 25  # 25/30 minimum
@@ -1586,10 +1599,10 @@ async def check_training_answer(
     is_correct = False
     correct_option_id = None
 
-    for opt in question.options:
-        if opt["is_correct"]:
-            correct_option_id = opt["id"]
-            if opt["id"] == answer.selected_option_id:
+    for opt in (question.options or []):
+        if opt.get("is_correct"):
+            correct_option_id = opt.get("id")
+            if correct_option_id == answer.selected_option_id:
                 is_correct = True
             break
 
