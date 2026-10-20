@@ -25,8 +25,6 @@ const inflight = new Map();  // clé -> promesse en cours
  * servirait qu'à laisser l'élève devant un sablier.
  */
 const REQUEST_TIMEOUT_MS = 30000;
-/** Relectures de la leçon produite en arrière-plan après un repli (ms, cumulées). */
-const BACKGROUND_POLL_DELAYS_MS = [0, 5000, 8000, 12000];
 /** Délai court pour le préchargement : il ne doit jamais gêner la page. */
 const PEEK_TIMEOUT_MS = 8000;
 
@@ -128,23 +126,12 @@ export function fetchLesson(questionId, selectedOptionId) {
  * Attend que la leçon produite en arrière-plan soit disponible, puis la renvoie.
  *
  * Après un repli, le serveur a mis la vraie leçon en file : elle arrive en base
- * quelques secondes plus tard. On repasse par `peek` (lecture gratuite, jamais
- * de génération) à quelques reprises, puis on abandonne. Renvoie null si elle
- * n'est pas prête ou si `signal` a été annulé (l'élève est passé à autre chose).
- */
-export async function awaitBackgroundLesson(questionId, selectedOptionId, firstDelayMs, signal) {
-    const delays = BACKGROUND_POLL_DELAYS_MS.map((extra, i) => (i === 0 ? firstDelayMs : extra));
-    for (const delay of delays) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        if (signal?.aborted) return null;
-        const lesson = await prefetchLesson(questionId, selectedOptionId);
-        if (signal?.aborted) return null;
-        if (lesson) return lesson;
  * quelques secondes plus tard — parfois jusqu'à une trentaine de secondes quand
- * le modèle est lent. On repasse donc par `peek` (lecture gratuite) à plusieurs
- * reprises plutôt qu'une seule fois, sans jamais redemander de génération.
- * Renvoie null si elle n'est toujours pas prête au bout de `maxWaitMs` — ce
- * n'est pas une erreur, l'élève garde la correction officielle sous les yeux.
+ * le modèle est lent. On repasse donc par `peek` (lecture gratuite, jamais de
+ * génération) à intervalle régulier. Renvoie null si elle n'est toujours pas
+ * prête au bout de `maxWaitMs`, ou si `signal` a été annulé (l'élève est passé
+ * à autre chose) — ce n'est pas une erreur, la correction officielle reste
+ * affichée.
  */
 export async function awaitBackgroundLesson(
     questionId, selectedOptionId, delayMs, signal, { intervalMs = 5000, maxWaitMs = 45000 } = {},
@@ -154,6 +141,7 @@ export async function awaitBackgroundLesson(
     await sleep(delayMs);
     while (!signal?.aborted) {
         const lesson = await prefetchLesson(questionId, selectedOptionId);
+        if (signal?.aborted) return null;
         if (lesson) return lesson;
         if (Date.now() - start + intervalMs > maxWaitMs) break;
         await sleep(intervalMs);
