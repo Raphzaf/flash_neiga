@@ -1632,6 +1632,12 @@ async def get_stats_summary(
             ExamSessionDB.status == "completed"
         )
     ).order_by(ExamSessionDB.completed_at.desc()).limit(5).all()
+    total_exams = db.query(ExamSessionDB).filter(
+        and_(
+            ExamSessionDB.user_id == user_id,
+            ExamSessionDB.status == "completed"
+        )
+    ).count()
     
     # Erreurs des derniers examens, par catégorie. Une question laissée sans
     # réponse compte fausse, comme dans la note. (L'ancienne boucle vérifiait
@@ -1677,6 +1683,7 @@ async def get_stats_summary(
                 "completed_at": e.completed_at
             } for e in exams
         ],
+        "total_exams": total_exams,
         "total_errors": total_errors,
         "best_category": best_category,
         "worst_category": worst_category
@@ -1696,15 +1703,22 @@ async def get_stats_details(
             ExamSessionDB.user_id == user_id,
             ExamSessionDB.status == "completed"
         )
-    ).order_by(ExamSessionDB.completed_at.desc()).limit(5).all()
+    ).order_by(ExamSessionDB.completed_at.desc()).all()
 
+    question_ids = {
+        qid for exam in exams for qid in (exam.question_ids or [])
+    }
+    questions = {
+        question.id: question
+        for question in db.query(QuestionDB).filter(QuestionDB.id.in_(question_ids)).all()
+    } if question_ids else {}
     exams_detail = []
     for e in exams:
         total_q = len(e.question_ids or []) or 30
         correct = 0
         q_details = []
         for qid in (e.question_ids or []):
-            q = db.query(QuestionDB).filter(QuestionDB.id == qid).first()
+            q = questions.get(qid)
             if not q:
                 continue
             selected = (e.answers or {}).get(qid)

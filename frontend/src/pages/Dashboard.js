@@ -135,8 +135,8 @@ export default function Dashboard() {
                                     <div className="font-medium truncate max-w-[140px] text-slate-900 dark:text-white">{stats?.worst_category ?? '—'}</div>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <div className="text-sm text-slate-600 dark:text-slate-300">Derniers examens</div>
-                                    <div className="font-medium text-slate-900 dark:text-white">{stats?.last_exams?.length ?? 0}/5</div>
+                                    <div className="text-sm text-slate-600 dark:text-slate-300">Examens blancs réalisés</div>
+                                    <div className="font-medium text-slate-900 dark:text-white">{stats?.total_exams ?? 0}</div>
                                 </div>
                                 <div className="text-xs text-sky-600 dark:text-sky-400">Cliquez pour voir les statistiques détaillées</div>
                             </CardContent>

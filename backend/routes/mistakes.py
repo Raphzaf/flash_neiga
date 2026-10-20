@@ -196,24 +196,34 @@ def sweep_abandoned_exams(db: Session, user_id: str) -> int:
 async def list_mistakes(
     limit: int = 50,
     offset: int = 0,
+    include_mastered: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Liste paginée des questions non maîtrisées de l'élève, groupées par catégorie."""
+    """Liste paginée des erreurs de l'élève, groupées par catégorie."""
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     sweep_abandoned_exams(db, current_user.id)
 
-    base_query = (
+    base_query = db.query(UserMistakeDB).filter(UserMistakeDB.user_id == current_user.id)
+    if not include_mastered:
+        base_query = base_query.filter(UserMistakeDB.mastered == False)  # noqa: E712
+    base_query = base_query.order_by(UserMistakeDB.last_wrong_at.desc())
+    total = base_query.count()
+    entries = base_query.offset(offset).limit(limit).all()
+    pending_total = (
         db.query(UserMistakeDB)
         .filter(
             UserMistakeDB.user_id == current_user.id,
             UserMistakeDB.mastered == False,  # noqa: E712
         )
-        .order_by(UserMistakeDB.last_wrong_at.desc())
+        .count()
     )
-    total = base_query.count()
-    entries = base_query.offset(offset).limit(limit).all()
+    history_total = (
+        db.query(UserMistakeDB)
+        .filter(UserMistakeDB.user_id == current_user.id)
+        .count()
+    )
 
     items = []
     for entry in entries:
@@ -234,6 +244,7 @@ async def list_mistakes(
                 "times_correct_since": entry.times_correct_since,
                 "last_wrong_at": entry.last_wrong_at,
                 "first_wrong_at": entry.first_wrong_at,
+                "mastered": bool(entry.mastered),
             },
         })
 
@@ -249,6 +260,8 @@ async def list_mistakes(
 
     return {
         "total": total,
+        "pending_total": pending_total,
+        "history_total": history_total,
         "count": len(items),
         "items": items,
         "categories": grouped,

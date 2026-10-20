@@ -40,7 +40,7 @@ export default function Stats() {
         fetchData();
     }, []);
 
-    // Calculate pass rate from last 5 exams
+    // The summary intentionally uses the five most recent exams.
     const passRate = summary?.last_exams 
         ? Math.round((summary.last_exams.filter(e => e?.score >= 83).length / (summary.last_exams.length || 1)) * 100) || 0
         : 0;

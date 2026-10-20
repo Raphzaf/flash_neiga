@@ -11,7 +11,7 @@ import { ExplanationWithLinks } from '../components/ExplanationWithLinks';
 import AiLesson from '../components/AiLesson';
 
 // Carte d'une question à retravailler, rejouable sur place.
-function MistakeCard({ item, onMastered }) {
+function MistakeCard({ item, onStatusChange }) {
     const q = item.question;
     const [selected, setSelected] = useState(null);
     const [feedback, setFeedback] = useState(null); // { is_correct, correct_option_id, explanation, mastered, times_correct_since }
@@ -27,10 +27,13 @@ function MistakeCard({ item, onMastered }) {
                 selected_option_id: optionId,
             });
             setFeedback(res.data);
+            onStatusChange(
+                q.id,
+                res.data.mastered || (item.stats.mastered && res.data.is_correct),
+                !res.data.is_correct
+            );
             if (res.data.mastered) {
                 toast.success('Question maîtrisée ✅');
-                // Laisse le temps de voir le feedback avant de retirer la carte
-                setTimeout(() => onMastered(q.id), 1200);
             }
         } catch (e) {
             toast.error('Erreur lors de la vérification');
@@ -55,9 +58,14 @@ function MistakeCard({ item, onMastered }) {
             <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3 mb-4">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-white">{q.text}</h3>
-                    <Badge variant="destructive" className="shrink-0">
-                        raté {item.stats.times_wrong}×
-                    </Badge>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge variant={item.stats.mastered ? 'secondary' : 'destructive'}>
+                            {item.stats.mastered ? 'Maîtrisée' : 'À revoir'}
+                        </Badge>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                            ratée {item.stats.times_wrong}×
+                        </span>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
@@ -141,14 +149,39 @@ function MistakeCard({ item, onMastered }) {
 export default function Mistakes() {
     const [loading, setLoading] = useState(true);
     const [categories, setCategories] = useState([]);
-    const [total, setTotal] = useState(0);
+    const [historyTotal, setHistoryTotal] = useState(0);
+    const pendingTotal = categories.reduce(
+        (count, category) => count + category.questions.filter((item) => !item.stats.mastered).length,
+        0
+    );
 
     const fetchMistakes = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await axios.get('/api/mistakes?limit=200');
-            setCategories(res.data.categories || []);
-            setTotal(res.data.total || 0);
+            const firstPage = await axios.get('/api/mistakes', {
+                params: { limit: 200, include_mastered: true },
+            });
+            const pages = [firstPage.data];
+            for (let offset = 200; offset < firstPage.data.history_total; offset += 200) {
+                const res = await axios.get('/api/mistakes', {
+                    params: { limit: 200, offset, include_mastered: true },
+                });
+                pages.push(res.data);
+            }
+            const items = pages.flatMap((page) => page.items || []);
+            const grouped = items.reduce((groups, item) => {
+                const category = item.question.category || 'Autre';
+                const group = groups.get(category) || [];
+                group.push(item);
+                groups.set(category, group);
+                return groups;
+            }, new Map());
+            setCategories(
+                [...grouped.entries()]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([category, questions]) => ({ category, questions }))
+            );
+            setHistoryTotal(firstPage.data.history_total || 0);
         } catch (e) {
             toast.error('Impossible de charger tes questions à retravailler');
         } finally {
@@ -160,17 +193,24 @@ export default function Mistakes() {
         fetchMistakes();
     }, [fetchMistakes]);
 
-    // Retire une question maîtrisée de la liste sans recharger toute la page.
-    const handleMastered = (questionId) => {
+    const updateMistakeStatus = (questionId, mastered, wasWrong) => {
         setCategories((prev) =>
-            prev
-                .map((cat) => ({
-                    ...cat,
-                    questions: cat.questions.filter((it) => it.question.id !== questionId),
-                }))
-                .filter((cat) => cat.questions.length > 0)
+            prev.map((category) => ({
+                ...category,
+                questions: category.questions.map((item) =>
+                    item.question.id === questionId
+                        ? {
+                              ...item,
+                              stats: {
+                                  ...item.stats,
+                                  mastered,
+                                  times_wrong: (item.stats.times_wrong || 0) + (wasWrong ? 1 : 0),
+                              },
+                          }
+                        : item
+                ),
+            }))
         );
-        setTotal((t) => Math.max(0, t - 1));
     };
 
     return (
@@ -182,17 +222,17 @@ export default function Mistakes() {
                             <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
                         </Link>
                         <h1 className="text-xl font-heading font-bold text-slate-900 dark:text-white">
-                            Mes questions à retravailler
+                            Historique de mes erreurs
                         </h1>
                     </div>
-                    <Badge variant="secondary">{total} en attente</Badge>
+                    <Badge variant="secondary">{pendingTotal} à revoir · {historyTotal} au total</Badge>
                 </div>
             </header>
 
             <main className="max-w-4xl mx-auto p-4 mt-4">
                 {loading ? (
                     <div className="text-center p-12 text-slate-600 dark:text-slate-300">Chargement…</div>
-                ) : total === 0 ? (
+                ) : historyTotal === 0 ? (
                     <div className="text-center p-12 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl">
                         <Trophy className="h-10 w-10 mx-auto mb-4 text-emerald-500" />
                         <p className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
@@ -206,33 +246,38 @@ export default function Mistakes() {
                         </Link>
                     </div>
                 ) : (
-                    <Accordion type="multiple" defaultValue={categories.map((c) => c.category)} className="space-y-3">
-                        {categories.map((cat) => (
-                            <AccordionItem
-                                key={cat.category}
-                                value={cat.category}
-                                className="border border-slate-200 dark:border-slate-700 rounded-xl bg-white/50 dark:bg-slate-800/50 px-4"
-                            >
-                                <AccordionTrigger className="hover:no-underline">
-                                    <span className="flex items-center gap-2 text-slate-900 dark:text-white font-semibold">
-                                        {cat.category}
-                                        <Badge variant="outline">{cat.questions.length}</Badge>
-                                    </span>
-                                </AccordionTrigger>
-                                <AccordionContent>
-                                    <div className="grid grid-cols-1 gap-4 pb-2">
-                                        {cat.questions.map((item) => (
-                                            <MistakeCard
-                                                key={item.question.id}
-                                                item={item}
-                                                onMastered={handleMastered}
-                                            />
-                                        ))}
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                        ))}
-                    </Accordion>
+                    <>
+                        <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+                            Retrouve toutes les questions ratées pendant les entraînements et les examens, y compris celles déjà maîtrisées.
+                        </p>
+                        <Accordion type="multiple" defaultValue={categories.map((c) => c.category)} className="space-y-3">
+                            {categories.map((cat) => (
+                                <AccordionItem
+                                    key={cat.category}
+                                    value={cat.category}
+                                    className="border border-slate-200 dark:border-slate-700 rounded-xl bg-white/50 dark:bg-slate-800/50 px-4"
+                                >
+                                    <AccordionTrigger className="hover:no-underline">
+                                        <span className="flex items-center gap-2 text-slate-900 dark:text-white font-semibold">
+                                            {cat.category}
+                                            <Badge variant="outline">{cat.questions.length}</Badge>
+                                        </span>
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="grid grid-cols-1 gap-4 pb-2">
+                                            {cat.questions.map((item) => (
+                                                <MistakeCard
+                                                    key={item.question.id}
+                                                    item={item}
+                                                    onStatusChange={updateMistakeStatus}
+                                                />
+                                            ))}
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                    </>
                 )}
             </main>
         </div>

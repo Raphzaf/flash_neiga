@@ -256,3 +256,39 @@ def test_stats_summary_counts_recent_exam_errors(db):
     assert body["total_errors"] == 2                 # q2 fausse + q3 sans réponse
     assert body["best_category"] == "Priorités"      # 0 erreur sur 1
     assert body["worst_category"] == "Croisements"   # 2 erreurs sur 2
+    assert body["total_exams"] == 1
+
+
+def test_mistakes_history_includes_mastered_questions(db):
+    client.post("/api/training/check", json={"question_id": "q1", "selected_option_id": "b"})
+    entry = db.query(UserMistakeDB).filter_by(user_id="user-1", question_id="q1").first()
+    entry.mastered = True
+    db.commit()
+
+    body = client.get("/api/mistakes", params={"include_mastered": "true"}).json()
+
+    assert body["total"] == 1
+    assert body["pending_total"] == 0
+    assert body["history_total"] == 1
+    assert body["items"][0]["stats"]["mastered"] is True
+    assert client.get("/api/mistakes").json()["total"] == 0
+
+
+def test_stats_details_returns_all_completed_exams(db):
+    for index in range(7):
+        db.add(ExamSessionDB(
+            id=f"ex-history-{index}",
+            user_id="user-1",
+            status="completed",
+            answers={"q1": "a"},
+            question_ids=["q1"],
+            completed_at=datetime.utcnow() + timedelta(seconds=index),
+            score=100,
+            passed=True,
+        ))
+    db.commit()
+
+    body = client.get("/api/stats/details").json()
+
+    assert len(body["exams"]) == 7
+    assert body["exams"][0]["id"] == "ex-history-6"

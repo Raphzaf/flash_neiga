@@ -129,6 +129,11 @@ export default function Training() {
                         </Button>
                     </Link>
                     <h1 className="text-xl font-heading font-bold text-slate-900 dark:text-white">Entraînement</h1>
+                    <Link to="/mistakes" className="ml-auto">
+                        <Button variant="outline" size="sm">
+                            <BookOpen className="mr-2 h-4 w-4" /> Mes erreurs
+                        </Button>
+                    </Link>
                 </div>
             </header>
 
