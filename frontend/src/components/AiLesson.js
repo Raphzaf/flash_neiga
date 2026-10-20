@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import { GraduationCap, Lightbulb, Loader2, WifiOff, AlertTriangle, RotateCcw } from 'lucide-react';
+import { GraduationCap, BookOpen, Loader2, AlertTriangle, RotateCcw, XCircle, CheckCircle2 } from 'lucide-react';
 import InlineChat from './InlineChat';
 import {
     getCachedLesson, prefetchLesson, fetchLesson, awaitBackgroundLesson, isValidLesson, lessonKey,
@@ -149,7 +149,7 @@ export default function AiLesson({ questionId, selectedOptionId, label, prefetch
                     {(loading || view.status === 'idle') && (
                         <div className="py-10 flex flex-col items-center justify-center gap-3 text-slate-600 dark:text-slate-300" role="status">
                             <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
-                            <p>Ton prof prépare ton explication…</p>
+                            <p>Ton prof prépare ton mini cours…</p>
                         </div>
                     )}
 
@@ -165,47 +165,65 @@ export default function AiLesson({ questionId, selectedOptionId, label, prefetch
 
                     {view.status === 'ready' && isValidLesson(lesson) && (
                         <div className="space-y-4">
-                            {/* Repli : la correction officielle, en attendant l'explication du prof */}
-                            {lesson.degraded && (
-                                <div className="flex items-start gap-2 text-xs p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
-                                    <WifiOff className="h-4 w-4 shrink-0 mt-0.5" />
-                                    <span className="flex-1">
-                                        {view.waiting
-                                            ? "Voici la correction officielle. Ton prof rédige son explication : elle remplacera ce texte dès qu'elle sera prête."
-                                            : "Voici la correction officielle. Ton prof n'a pas pu répondre à temps."}
-                                    </span>
-                                    {view.waiting ? (
-                                        <Loader2 className="h-4 w-4 shrink-0 mt-0.5 animate-spin" />
-                                    ) : (
-                                        <button type="button" onClick={load} className="shrink-0 font-medium underline">
-                                            Réessayer
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                            {/* Les deux réponses, telles qu'en base : l'élève voit son erreur d'un coup d'œil */}
+                            <dl className="space-y-2 text-[15px]">
+                                {lesson.mauvaise_reponse && (
+                                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-900 dark:text-red-100">
+                                        <XCircle className="h-5 w-5 shrink-0 mt-0.5 text-red-500" />
+                                        <div>
+                                            <dt className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-300">Mauvaise réponse</dt>
+                                            <dd>{lesson.mauvaise_reponse}</dd>
+                                        </div>
+                                    </div>
+                                )}
+                                {lesson.bonne_reponse && (
+                                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100">
+                                        <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600" />
+                                        <div>
+                                            <dt className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Bonne réponse</dt>
+                                            <dd>{lesson.bonne_reponse}</dd>
+                                        </div>
+                                    </div>
+                                )}
+                            </dl>
 
-                            {/* Données de la question insuffisantes : on le dit, sans inventer */}
-                            {lesson.donnees_suffisantes === false && (
-                                <p className="flex items-start gap-2 text-xs p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                            {lesson.donnees_suffisantes === false ? (
+                                <p className="flex items-start gap-2 text-sm p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
                                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                                    <span>Cette question ne peut pas être expliquée de façon fiable.</span>
+                                    <span>{lesson.explication}</span>
                                 </p>
+                            ) : (
+                                <section>
+                                    <h4 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white mb-1.5">
+                                        <BookOpen className="h-4 w-4 text-sky-600 dark:text-sky-400" /> Mini cours de code
+                                    </h4>
+                                    {lesson.explication && (
+                                        <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line">
+                                            {lesson.explication}
+                                        </p>
+                                    )}
+                                    {/* Correction de secours : le mini cours du prof la remplace dès qu'il est prêt */}
+                                    {lesson.degraded && (view.waiting ? (
+                                        <p className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Ton prof finalise le mini cours…
+                                        </p>
+                                    ) : (
+                                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                            {lesson.explication ? 'Correction officielle. ' : 'Le mini cours n\'est pas encore prêt. '}
+                                            <button type="button" onClick={load} className="font-medium underline">
+                                                Réessayer
+                                            </button>
+                                        </p>
+                                    ))}
+                                </section>
                             )}
-
-                            <section>
-                                <h4 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white mb-1.5">
-                                    <Lightbulb className="h-4 w-4 text-amber-500" /> Explication
-                                </h4>
-                                <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                                    {lesson.explication}
-                                </p>
-                            </section>
 
                             {/* Discussion contextuelle : l'élève peut approfondir avec le prof */}
                             <section className="pt-1">
                                 <InlineChat
-                                    context={`Explication de l'erreur de l'élève : ${lesson.explication}`}
-                                    title="💬 Poser une question sur cette explication"
+                                    context={`Erreur de l'élève. Mauvaise réponse : ${lesson.mauvaise_reponse || '?'}. `
+                                        + `Bonne réponse : ${lesson.bonne_reponse || '?'}. Mini cours : ${lesson.explication || ''}`}
+                                    title="💬 Poser une question sur ce mini cours"
                                 />
                             </section>
                         </div>

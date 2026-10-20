@@ -20,7 +20,7 @@ GOOD = ("En règle générale, à une intersection sans signalisation particuli�
 
 def test_valid_explanation_is_kept_word_for_word():
     lesson = validate_lesson({"explication": GOOD, "donnees_suffisantes": True})
-    assert lesson == {"explication": GOOD, "donnees_suffisantes": True, "format": 2}
+    assert lesson == {"explication": GOOD, "donnees_suffisantes": True, "format": 3}
 
 
 def test_markdown_and_preamble_are_removed_without_losing_words():

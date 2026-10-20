@@ -32,9 +32,14 @@ const PEEK_TIMEOUT_MS = 8000;
 
 export const lessonKey = (questionId, selectedOptionId) => `${questionId}::${selectedOptionId}`;
 
-/** Une leçon affichable : un texte d'explication non vide. Rien d'autre ne s'affiche. */
+const filled = (value) => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * Une leçon affichable : un mini cours non vide, ou au moins la bonne réponse
+ * (correction de secours d'une question sans explication officielle).
+ */
 export function isValidLesson(lesson) {
-    return Boolean(lesson && typeof lesson.explication === 'string' && lesson.explication.trim());
+    return Boolean(lesson && (filled(lesson.explication) || filled(lesson.bonne_reponse)));
 }
 
 /** Leçon déjà connue pour ce couple (question, mauvaise réponse), ou null. */

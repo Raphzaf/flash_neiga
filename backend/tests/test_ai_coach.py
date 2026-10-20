@@ -124,6 +124,8 @@ def test_lesson_generated_then_cached(db, monkeypatch):
     assert r1.status_code == 200
     body = r1.json()
     assert body["explication"] == FAKE_LESSON["explication"]
+    assert body["mauvaise_reponse"] == "Mauvaise réponse"
+    assert body["bonne_reponse"] == "Bonne réponse"
     assert body["cached"] is False
     assert calls["n"] == 1
 
@@ -145,8 +147,11 @@ def test_lesson_falls_back_to_official_correction_when_ai_down(db, monkeypatch):
     assert body["source"] == "fallback"
     assert body["degraded"] is True
     # La correction officielle et la bonne réponse sont bien restituées.
-    assert "Explication officielle q1" in body["explication"]
-    assert "Bonne réponse" in body["explication"]
+    # Mini cours = la correction officielle seule, sans redite des réponses…
+    assert body["explication"] == "Explication officielle q1"
+    # …qui s'affichent à part, lues en base.
+    assert body["bonne_reponse"] == "Bonne réponse"
+    assert body["mauvaise_reponse"] == "Mauvaise réponse"
 
 
 def test_lesson_without_correct_answer_says_so_without_calling_ai(db, monkeypatch):
@@ -207,6 +212,7 @@ def test_lesson_prompt_carries_question_choices_and_official_answer(db, monkeypa
     assert "Explication officielle : Explication officielle q1" in content
     assert captured["validate"] is ai_coach.validate_lesson
     assert "israélien" in captured["system"]
+    assert "ne les recopie pas" in captured["system"]
 
 
 def test_insufficient_verdict_from_model_is_returned_as_such(db, monkeypatch):

@@ -75,16 +75,19 @@ LESSON_SYSTEM_PROMPT = (
     "français des élèves francophones à l'examen théorique en Israël. Ton rôle "
     "est d'expliquer l'erreur d'un candidat de manière courte, précise et "
     "pédagogique. Tu tutoies l'élève.\n\n"
-    "À partir de l'énoncé, des choix de réponses, de la réponse choisie et de la "
-    "bonne réponse officielle, rédige une explication personnalisée de 4 à 5 "
-    "lignes environ (50 à 90 mots, jamais plus de 110).\n\n"
-    "Commence directement par l'explication. Identifie la bonne réponse, "
-    "explique la règle applicable, puis montre pourquoi la réponse choisie ne "
-    "convient pas lorsque c'est pertinent. Termine par la règle à retenir.\n\n"
+    "L'élève voit déjà, juste au-dessus de ton texte, sa mauvaise réponse et la "
+    "bonne réponse : ne les recopie pas, ne commence pas par « La bonne réponse "
+    "est… » ni par « Tu as répondu… ». Écris uniquement un mini cours de code "
+    "sur le sujet de la question, en 2 à 4 phrases (35 à 70 mots, jamais plus "
+    "de 90) : la règle du code qui s'applique, pourquoi elle mène à la bonne "
+    "réponse, et, si c'est utile, en quelques mots ce qui rend la réponse "
+    "choisie fausse. Va droit au but, comme un moniteur qui explique en deux "
+    "phrases au bord de la route. Pas de liste d'« erreurs à éviter », pas de "
+    "conseil général du type « relis bien l'énoncé ».\n\n"
     "Utilise un français naturel, simple et rigoureux, compréhensible par un "
     "débutant, avec les termes exacts du code de la route. Un seul paragraphe : "
     "pas de titre, pas de liste, pas de Markdown, pas de guillemets autour de "
-    "toute la réponse. Évite les introductions, les répétitions et le hors-sujet.\n\n"
+    "toute la réponse. Aucune introduction, aucune répétition, aucun hors-sujet.\n\n"
     "La bonne réponse officielle fait foi : ne la modifie jamais et ne la "
     "conteste pas. Si une explication officielle est fournie, appuie-toi dessus "
     "en priorité. N'invente aucune règle, aucun chiffre, aucune sanction, aucune "
@@ -99,7 +102,7 @@ LESSON_SYSTEM_PROMPT = (
     "donnees_suffisantes à false et écris dans explication, en "
     "une ou deux phrases, ce qui empêche de l'expliquer — sans fabriquer "
     "d'explication.\n\n"
-    "Retourne uniquement le JSON demandé : l'explication destinée à l'élève, "
+    "Retourne uniquement le JSON demandé : le mini cours destiné à l'élève, "
     "sans commentaire sur ton rôle, sans préambule et sans texte technique. Ne "
     "mentionne jamais que tu es une IA."
 )
@@ -154,7 +157,8 @@ SERIES_REPORT_MAX_TOKENS = 4000
 # ===== Schémas structured outputs =====
 # Format 2 : une seule explication courte. Les leçons du format 1 (explication,
 # règle, erreurs à éviter) étaient trop longues ; elles ne sont plus resservies.
-LESSON_FORMAT = 2
+# Format 3 : le mini cours ne recopie plus les réponses, affichées à part.
+LESSON_FORMAT = 3
 LESSON_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -168,7 +172,7 @@ LESSON_SCHEMA: Dict[str, Any] = {
 # au-delà, le modèle a ignoré la consigne — on redemande plutôt que de couper
 # le texte, ce qui le rendrait incomplet.
 LESSON_MIN_WORDS = 12
-LESSON_MAX_WORDS = 140
+LESSON_MAX_WORDS = 110
 # Une phrase complète se termine ainsi ; sinon la réponse a été tronquée.
 _SENTENCE_END = (".", "!", "?", "…", "»", ")", '"')
 
@@ -401,22 +405,15 @@ def _fallback_lesson(question: QuestionDB, selected_option_id: str) -> Optional[
     auquel cas mieux vaut un message d'indisponibilité honnête.
     """
     _, correct_text = _correct_option(question)
-    chosen_text = _option_text(question, selected_option_id)
     explanation = (question.explanation or "").strip()
 
     if not explanation and not correct_text:
         return None
 
-    phrases: List[str] = []
-    if correct_text:
-        phrases.append(f"La bonne réponse est « {correct_text} ».")
-    if chosen_text:
-        phrases.append(f"Tu avais choisi « {chosen_text} ».")
-    if explanation:
-        phrases.append(explanation)
-
+    # Les deux réponses s'affichent déjà au-dessus (voir with_answers) : le
+    # mini cours de secours est la seule explication officielle, sans redite.
     return {
-        "explication": " ".join(phrases),
+        "explication": explanation,
         "donnees_suffisantes": True,
         "format": LESSON_FORMAT,
         "cached": False,
@@ -461,7 +458,8 @@ def _generate_lesson(
         user_content += ("La question est accompagnée d'une image (panneau ou situation "
                          "de circulation) que tu ne vois pas.\n")
     user_content += (
-        "\nRédige l'explication de cette erreur (50 à 90 mots, un seul paragraphe)."
+        "\nRédige le mini cours sur cette erreur (35 à 70 mots, un seul paragraphe, "
+        "sans recopier les réponses)."
     )
 
     # Validée à chaque tentative (relance si mal formée) puis une dernière fois
@@ -874,7 +872,17 @@ def peek_lesson(
     if lesson is None:
         return {"available": False}
 
-    return {"available": True, "lesson": lesson}
+    return {"available": True, "lesson": with_answers(question, selected_option_id, lesson)}
+
+
+def with_answers(question: QuestionDB, selected_option_id: str, lesson: Dict[str, Any]) -> Dict[str, Any]:
+    """Ajoute la mauvaise et la bonne réponse, lues en base (jamais écrites par l'IA)."""
+    _, correct_text = _correct_option(question)
+    return {
+        **lesson,
+        "mauvaise_reponse": _option_text(question, selected_option_id),
+        "bonne_reponse": correct_text,
+    }
 
 
 def _check_selected_option(question: QuestionDB, selected_option_id: str) -> None:
@@ -888,8 +896,7 @@ def _check_selected_option(question: QuestionDB, selected_option_id: str) -> Non
 
 def _insufficient_lesson(problem: str) -> Dict[str, Any]:
     return {
-        "explication": (f"{problem} Impossible de t'expliquer cette erreur sans risquer "
-                        "de te tromper : demande la correction à ton moniteur."),
+        "explication": f"{problem} Demande la correction à ton moniteur.",
         "donnees_suffisantes": False,
         "format": LESSON_FORMAT,
         "cached": False,
@@ -917,13 +924,13 @@ def generate_lesson(
     problem = lesson_problem(question, selected_option_id)
     if problem:
         # Données insuffisantes : on le dit, sans appeler le modèle ni inventer.
-        return _insufficient_lesson(problem)
+        return with_answers(question, selected_option_id, _insufficient_lesson(problem))
 
     # Le cache d'abord, toujours : c'est gratuit, instantané, et cela reste
     # valable même si le fournisseur d'IA est en panne ou plus configuré.
     cached = lookup_lesson(db, question, selected_option_id)
     if cached is not None:
-        return cached
+        return with_answers(question, selected_option_id, cached)
 
     reason: Optional[str] = None
     if ai_configured():
@@ -931,11 +938,11 @@ def generate_lesson(
             # Attente BORNÉE : si le modèle répond vite, l'élève a sa vraie leçon
             # tout de suite. Sinon on renonce assez tôt pour que le repli lui
             # parvienne — le proxy qui sert le site coupe la requête à 26 s.
-            return get_or_create_lesson(
+            return with_answers(question, selected_option_id, get_or_create_lesson(
                 db, question, selected_option_id,
                 request_timeout_s=LESSON_INTERACTIVE_TIMEOUT,
                 total_deadline_s=LESSON_INTERACTIVE_DEADLINE,
-            )
+            ))
         except AICoachUnavailable as exc:
             reason = str(exc)[:300]
             logger.warning("Leçon indisponible pour la question %s : %s", question_id, reason)
@@ -956,7 +963,7 @@ def generate_lesson(
         if schedule_lesson(question, selected_option_id, cache_key):
             fallback["retry_after_s"] = 8
 
-    return fallback
+    return with_answers(question, selected_option_id, fallback)
 
 
 @router.post("/series-report", dependencies=[Depends(require_subscription)])
