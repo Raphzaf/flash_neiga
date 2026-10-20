@@ -12,34 +12,26 @@ export default function Stats() {
     const [activity, setActivity] = useState([]);
     const [summary, setSummary] = useState(null);
     const [failedQuestions, setFailedQuestions] = useState([]);
+    const [failedTotal, setFailedTotal] = useState(0);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [sumRes, detailRes] = await Promise.all([
+                const [sumRes, detailRes, mistakesRes] = await Promise.all([
                     axios.get(`/api/stats/summary`),
-                    axios.get(`/api/stats/details`)
+                    axios.get(`/api/stats/details`),
+                    // Même liste que « Mes questions à retravailler » : une seule
+                    // source, donc le même nombre partout.
+                    axios.get(`/api/mistakes`, { params: { limit: 200 } }).catch(() => null),
                 ]);
                 setSummary(sumRes.data);
                 setActivity(detailRes.data?.exams || []);
-                
-                // Extract failed questions from all exams
-                const failed = [];
-                const questionsSeen = new Set();
-                
-                (detailRes.data?.exams || []).forEach(exam => {
-                    (exam.questions || []).forEach(q => {
-                        if (!q.is_correct && !questionsSeen.has(q.question_id)) {
-                            failed.push({
-                                ...q,
-                                exam_id: exam.id,
-                                exam_date: exam.completed_at
-                            });
-                            questionsSeen.add(q.question_id);
-                        }
-                    });
-                });
-                
+                const failed = (mistakesRes?.data?.items || []).map((item) => ({
+                    ...item.question,
+                    times_wrong: item.stats?.times_wrong,
+                    last_wrong_at: item.stats?.last_wrong_at,
+                }));
+                setFailedTotal(mistakesRes?.data?.total ?? failed.length);
                 setFailedQuestions(failed);
             } catch (e) {
                 console.error(e);
@@ -113,7 +105,7 @@ export default function Stats() {
                     </TabsTrigger>
                     <TabsTrigger value="to-work-on" className="flex items-center gap-2">
                         <BookOpen className="h-4 w-4" />
-                        À Travailler ({failedQuestions.length})
+                        À Travailler ({failedTotal})
                     </TabsTrigger>
                 </TabsList>
 
@@ -191,18 +183,16 @@ export default function Stats() {
                                 <BookOpen className="mr-2 h-5 w-5 text-slate-500 dark:text-slate-400" /> Questions à Travailler
                             </h2>
                             {failedQuestions.length > 0 && (
-                                <Link to="/training">
-                                    <button className="text-sm text-sky-600 dark:text-sky-400 hover:underline font-medium">
-                                        Réviser maintenant
-                                    </button>
+                                <Link to="/mistakes" className="text-sm text-sky-600 dark:text-sky-400 hover:underline font-medium">
+                                    Réviser maintenant
                                 </Link>
                             )}
                         </div>
                         
                         {failedQuestions.length > 0 ? (
                             <div className="grid grid-cols-1 gap-4">
-                                {failedQuestions.map((q, idx) => (
-                                    <Card key={idx} className="bg-white dark:bg-slate-800 border-red-200 dark:border-red-900/30">
+                                {failedQuestions.map((q) => (
+                                    <Card key={q.id} className="bg-white dark:bg-slate-800 border-red-200 dark:border-red-900/30">
                                         <CardContent className="p-4">
                                             <div className="flex items-start gap-3">
                                                 <div className="p-2 rounded-full bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 shrink-0">
@@ -216,7 +206,7 @@ export default function Stats() {
                                                         </span>
                                                     </div>
                                                     <div className="text-sm text-slate-600 dark:text-slate-400">
-                                                        Échoué le {q.exam_date ? new Date(q.exam_date).toLocaleDateString() : '—'}
+                                                        Raté {q.times_wrong || 1}× · dernière erreur le {q.last_wrong_at ? new Date(q.last_wrong_at).toLocaleDateString() : '—'}
                                                     </div>
                                                 </div>
                                             </div>

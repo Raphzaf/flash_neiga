@@ -1633,23 +1633,40 @@ async def get_stats_summary(
         )
     ).order_by(ExamSessionDB.completed_at.desc()).limit(5).all()
     
-    total_errors = 0
-    best_category = None
-    worst_category = None
-    category_errors = {}
-    
-    for exam in exams:
-        for question_id, selected_option_id in exam.answers.items():
-            question = db.query(QuestionDB).filter(QuestionDB.id == question_id).first()
-            if question:
-                is_correct = False
-                for opt in question.options:
-                    if opt["id"] == selected_option_id and opt["is_correct"]:
-                        is_correct = True
+    # Erreurs des derniers examens, par catégorie. Une question laissée sans
+    # réponse compte fausse, comme dans la note. (L'ancienne boucle vérifiait
+    # chaque réponse sans jamais rien compter : la page affichait toujours
+    # « 0 erreur » et aucune catégorie.)
+    question_ids = {qid for e in exams for qid in (e.question_ids or list((e.answers or {}).keys()))}
+    questions = {
+        q.id: q for q in db.query(QuestionDB).filter(QuestionDB.id.in_(question_ids)).all()
+    } if question_ids else {}
 
-    if category_errors:
-        best_category = min(category_errors, key=lambda k: category_errors[k])
-        worst_category = max(category_errors, key=lambda k: category_errors[k])
+    total_errors = 0
+    category_seen: Dict[str, int] = {}
+    category_errors: Dict[str, int] = {}
+    for exam in exams:
+        answers = exam.answers or {}
+        for qid in (exam.question_ids or list(answers.keys())):
+            question = questions.get(qid)
+            if question is None:
+                continue
+            category = question.category or "Autre"
+            selected = answers.get(qid)
+            is_correct = bool(selected) and any(
+                opt.get("id") == selected and opt.get("is_correct") for opt in (question.options or [])
+            )
+            category_seen[category] = category_seen.get(category, 0) + 1
+            if not is_correct:
+                total_errors += 1
+                category_errors[category] = category_errors.get(category, 0) + 1
+
+    # Meilleure catégorie : le plus faible taux d'erreur ; à travailler : le plus
+    # fort (seulement s'il y a au moins une erreur).
+    rates = {c: category_errors.get(c, 0) / n for c, n in category_seen.items() if n}
+    best_category = min(rates, key=lambda c: (rates[c], -category_seen[c])) if rates else None
+    worst_category = (max(rates, key=lambda c: (rates[c], category_seen[c]))
+                      if any(category_errors.values()) else None)
 
     return {
         "last_exams": [
