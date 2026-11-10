@@ -151,8 +151,8 @@ else:
         "https://appflashneiga.netlify.app",
     ]
 
-# Support Netlify wildcard via regex (Starlette doesn't support '*' in allow_origins)
-allow_origin_regex = r"https://.*\.netlify\.app$"
+# Wildcard des hébergeurs du front via regex (Starlette ne gère pas '*' dans allow_origins)
+allow_origin_regex = r"https://.*\.(vercel|netlify)\.app$"
 
 app.add_middleware(
     CORSMiddleware,

@@ -11,7 +11,7 @@ function Refund() {
           <h2 className="font-medium mb-1 text-slate-800 dark:text-slate-100">1. Champ d’application</h2>
           <p>
             La présente politique de remboursement s’applique à tous les achats d’abonnements et de contenus numériques
-            effectués sur la plateforme Flash Neiga (https://appflashneiga.netlify.app/).
+            effectués sur la plateforme Flash Neiga (https://app.flash-neiga.com/).
           </p>
           <p className="mt-2">Elle concerne notamment :</p>
           <ul className="list-disc pl-6 mt-2 space-y-1">
